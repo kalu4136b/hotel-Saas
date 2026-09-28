@@ -10,6 +10,7 @@ import {
 export enum PaymentMethod {
   CASH = 'CASH',
   CARD = 'CARD',
+  ROOM_CHARGE = 'ROOM_CHARGE',
 }
 
 export enum PaymentStatus {
@@ -64,6 +65,10 @@ export class Payment {
 
   @Column({ type: 'varchar', length: 100, nullable: true })
   transactionRef: string;
+
+  @Index()
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  roomId: string;
 
   @Index()
   @Column({ type: 'varchar', length: 36 })

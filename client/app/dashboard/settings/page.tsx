@@ -229,7 +229,7 @@ export default function SettingsPage() {
         <div className="flex border-b border-[#E2E8F0] gap-2">
           <button
             onClick={() => setActiveTab('property')}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition -mb-[2px] ${
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition mb-[-2px] ${
               activeTab === 'property'
                 ? 'border-[#00C48C] text-[#00C48C]'
                 : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
@@ -240,7 +240,7 @@ export default function SettingsPage() {
           </button>
           <button
             onClick={() => setActiveTab('staff')}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition -mb-[2px] ${
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition mb-[-2px] ${
               activeTab === 'staff'
                 ? 'border-[#00C48C] text-[#00C48C]'
                 : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
@@ -251,7 +251,7 @@ export default function SettingsPage() {
           </button>
           <button
             onClick={() => setActiveTab('audit')}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition -mb-[2px] ${
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition mb-[-2px] ${
               activeTab === 'audit'
                 ? 'border-[#00C48C] text-[#00C48C]'
                 : 'border-transparent text-[#64748B] hover:text-[#0F172A]'

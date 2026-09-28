@@ -201,6 +201,7 @@ export class PosController {
       amountPaid: number;
       cardLast4?: string;
       transactionRef?: string;
+      roomId?: string;
     },
   ) {
     return this.posService.settlePayment(

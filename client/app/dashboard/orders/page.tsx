@@ -1,5 +1,6 @@
 'use client';
 
+// Orders management & kitchen coordination
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { posApi } from '@/lib/api';

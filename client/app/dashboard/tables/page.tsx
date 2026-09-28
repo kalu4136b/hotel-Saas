@@ -1,5 +1,6 @@
 'use client';
 
+// Floor plan & dining tables management
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { posApi } from '@/lib/api';

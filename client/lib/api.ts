@@ -298,10 +298,11 @@ export const posApi = {
   async settlePayment(
     orderId: string,
     data: {
-      paymentMethod: 'CASH' | 'CARD';
+      paymentMethod: 'CASH' | 'CARD' | 'ROOM_CHARGE';
       amountPaid: number;
       cardLast4?: string;
       transactionRef?: string;
+      roomId?: string;
     },
   ) {
     return apiRequest(`/api/pos/orders/${orderId}/payment`, {

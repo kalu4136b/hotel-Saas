@@ -1,5 +1,6 @@
 'use client';
 
+// Main application shell layout
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';

@@ -1,5 +1,6 @@
 'use client';
 
+// Menu catalog & product management
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { posApi } from '@/lib/api';

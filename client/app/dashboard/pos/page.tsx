@@ -1,8 +1,9 @@
 'use client';
 
+// Point of Sale (POS) active terminal
 import React, { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { posApi, authStorage } from '@/lib/api';
+import { posApi, pmsApi, authStorage } from '@/lib/api';
 import {
   UtensilsCrossed,
   Search,
@@ -13,6 +14,8 @@ import {
   Receipt,
   CreditCard,
   Banknote,
+  Hotel,
+  Key,
   CheckCircle2,
   AlertCircle,
   Printer,
@@ -52,9 +55,12 @@ export default function POSTerminalPage() {
   const [settledPayment, setSettledPayment] = useState<any>(null);
 
   // Payment Form State
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'ROOM_CHARGE'>('CASH');
   const [amountTendered, setAmountTendered] = useState<string>('');
   const [cardLast4, setCardLast4] = useState('');
+  const [occupiedRooms, setOccupiedRooms] = useState<any[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [loadingRooms, setLoadingRooms] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -228,7 +234,25 @@ export default function POSTerminalPage() {
     }
   };
 
-  // 4. Settle Payment
+  // 4. Open Payment Modal with In-House Guests
+  const openPaymentModal = async () => {
+    setPaymentModalOpen(true);
+    setLoadingRooms(true);
+    try {
+      const inHouseReservations = await pmsApi.getReservations('CHECKED_IN');
+      const valid = inHouseReservations || [];
+      setOccupiedRooms(valid);
+      if (valid.length > 0 && valid[0].roomId) {
+        setSelectedRoomId(valid[0].roomId);
+      }
+    } catch (err) {
+      console.error('Failed to load in-house guests for room charge:', err);
+    } finally {
+      setLoadingRooms(false);
+    }
+  };
+
+  // 5. Settle Payment
   const handleSettlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeOrder) return;
@@ -240,6 +264,7 @@ export default function POSTerminalPage() {
         paymentMethod,
         amountPaid: Number(amountTendered) || total,
         cardLast4: paymentMethod === 'CARD' ? cardLast4 || '4242' : undefined,
+        roomId: paymentMethod === 'ROOM_CHARGE' ? selectedRoomId : undefined,
       });
 
       setSettledPayment(result.payment);
@@ -248,7 +273,10 @@ export default function POSTerminalPage() {
       setReceiptModalOpen(true);
       setFeedbackMsg({
         type: 'success',
-        text: `Payment settled successfully! Receipt ${result.payment.receiptNumber} generated.`,
+        text:
+          paymentMethod === 'ROOM_CHARGE'
+            ? `Order billed directly to guest room folio! Receipt ${result.payment.receiptNumber} generated.`
+            : `Payment settled successfully! Receipt ${result.payment.receiptNumber} generated.`,
       });
       // Refresh tables to show freed table
       posApi.getTables().then(setTables);
@@ -570,7 +598,7 @@ export default function POSTerminalPage() {
                     type="button"
                     onClick={() => {
                       if (!activeBill) handleGenerateBill();
-                      setPaymentModalOpen(true);
+                      openPaymentModal();
                     }}
                     disabled={processing || activeOrder.status === 'PAID'}
                     className="py-2.5 px-3 rounded-xl bg-[#00C48C] hover:bg-[#00A877] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5"
@@ -621,7 +649,7 @@ export default function POSTerminalPage() {
 
             <form onSubmit={handleSettlePayment} className="space-y-4">
               {/* Tender Selector */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('CASH')}
@@ -645,11 +673,24 @@ export default function POSTerminalPage() {
                   }`}
                 >
                   <CreditCard className="w-5 h-5" />
-                  <span className="text-xs">Credit/Debit Card</span>
+                  <span className="text-xs">Card</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('ROOM_CHARGE')}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                    paymentMethod === 'ROOM_CHARGE'
+                      ? 'border-[#0284C7] bg-[#F0F9FF] text-[#0369A1] font-bold shadow-xs'
+                      : 'border-[#E2E8F0] text-[#64748B]'
+                  }`}
+                >
+                  <Hotel className="w-5 h-5" />
+                  <span className="text-xs">Room Folio</span>
                 </button>
               </div>
 
-              {paymentMethod === 'CASH' ? (
+              {paymentMethod === 'CASH' && (
                 <div>
                   <label className="block text-xs font-semibold text-[#0F172A] mb-1">
                     Amount Tendered ($)
@@ -668,7 +709,9 @@ export default function POSTerminalPage() {
                     </div>
                   )}
                 </div>
-              ) : (
+              )}
+
+              {paymentMethod === 'CARD' && (
                 <div>
                   <label className="block text-xs font-semibold text-[#0F172A] mb-1">
                     Card Last 4 Digits
@@ -681,6 +724,42 @@ export default function POSTerminalPage() {
                     onChange={(e) => setCardLast4(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs font-bold text-[#0F172A] outline-none"
                   />
+                </div>
+              )}
+
+              {paymentMethod === 'ROOM_CHARGE' && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-[#0F172A]">
+                    Select Occupied Guest Room
+                  </label>
+                  {loadingRooms ? (
+                    <div className="p-3 text-xs text-[#64748B] text-center">Loading in-house rooms...</div>
+                  ) : occupiedRooms.length > 0 ? (
+                    <div>
+                      <select
+                        required
+                        value={selectedRoomId}
+                        onChange={(e) => setSelectedRoomId(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs font-bold text-[#0F172A] outline-none"
+                      >
+                        {occupiedRooms.map((res: any) => (
+                          <option key={res.id} value={res.roomId}>
+                            Room {res.room?.roomNumber || 'N/A'} — {res.guest?.fullName} ({res.roomType?.name || 'Standard'})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-[11px] text-blue-800 flex items-start gap-2">
+                        <Key className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
+                        <div>
+                          <strong>Folio Charge Routing:</strong> ${total.toFixed(2)} will be posted directly to this guest folio and billed at checkout.
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                      No active checked-in guests found. Please check in a guest via the PMS Front Desk first.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -711,17 +790,17 @@ export default function POSTerminalPage() {
           <div className="w-full max-w-sm bg-white rounded-3xl border border-[#E2E8F0] p-6 shadow-xl animate-fade-scale text-center">
             {/* Printable Receipt Area */}
             <div id="thermalReceipt" className="p-4 bg-white text-[#0F172A] font-mono text-xs">
-              <div className="font-extrabold text-base mb-1">
-                NOVOTEL PHUKET CITY GRAND
+              <div className="font-extrabold text-base mb-1 uppercase tracking-wider">
+                {authStorage.getProperty()?.name || 'GRAND HORIZON RESORT & SPA'}
               </div>
               <div className="text-[10px] text-[#64748B] mb-3">
                 TAX INVOICE / RECEIPT
               </div>
-              <div className="text-[11px] border-b border-dashed border-[#E2E8F0] pb-2 text-left">
+              <div className="text-[11px] border-b border-dashed border-[#E2E8F0] pb-2 text-left space-y-0.5">
                 <div>Receipt: {settledPayment.receiptNumber}</div>
                 <div>Order: {activeOrder?.orderNumber}</div>
                 <div>
-                  Table:{' '}
+                  Table / Area:{' '}
                   {activeOrder?.tableNumber || activeOrder?.orderType}
                 </div>
                 <div>Date: {new Date().toLocaleString()}</div>
@@ -753,8 +832,17 @@ export default function POSTerminalPage() {
                 </div>
                 <div className="flex justify-between text-[11px] text-[#64748B]">
                   <span>Method:</span>
-                  <span>{settledPayment.paymentMethod}</span>
+                  <span className="font-bold">
+                    {settledPayment.paymentMethod === 'ROOM_CHARGE'
+                      ? 'CHARGED TO ROOM FOLIO'
+                      : settledPayment.paymentMethod}
+                  </span>
                 </div>
+                {settledPayment.transactionRef && (
+                  <div className="text-[10px] text-[#0284C7] pt-1 border-t border-dashed border-[#E2E8F0]">
+                    <span>Routing: {settledPayment.transactionRef}</span>
+                  </div>
+                )}
                 {settledPayment.changeGiven > 0 && (
                   <div className="flex justify-between text-[11px] text-[#00C48C]">
                     <span>Change Given:</span>

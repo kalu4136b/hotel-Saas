@@ -19,6 +19,10 @@ import { Bill, BillStatus } from '../entities/bill.entity';
 import { Payment, PaymentMethod, PaymentStatus } from '../entities/payment.entity';
 import { Property } from '../entities/property.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import { Reservation, ReservationStatus } from '../entities/reservation.entity';
+import { GuestFolio, FolioStatus } from '../entities/guest-folio.entity';
+import { FolioItem, FolioChargeType } from '../entities/folio-item.entity';
+import { Room } from '../entities/room.entity';
 
 @Injectable()
 export class PosService {
@@ -609,6 +613,7 @@ export class PosService {
       amountPaid: number;
       cardLast4?: string;
       transactionRef?: string;
+      roomId?: string;
     },
     userId: string,
     tenantId: string,
@@ -667,6 +672,52 @@ export class PosService {
       }
 
       const changeGiven = dto.paymentMethod === PaymentMethod.CASH ? Number((paid - totalDue).toFixed(2)) : 0;
+      let transactionRef = dto.transactionRef;
+
+      // Handle Charge to Room Folio
+      if (dto.paymentMethod === PaymentMethod.ROOM_CHARGE) {
+        if (!dto.roomId) {
+          throw new BadRequestException('Please select an active guest room to charge this order to.');
+        }
+
+        const reservation = await queryRunner.manager.findOne(Reservation, {
+          where: {
+            propertyId,
+            roomId: dto.roomId,
+            status: ReservationStatus.CHECKED_IN,
+          },
+          relations: { guest: true, room: true },
+        });
+
+        if (!reservation) {
+          throw new BadRequestException('No active checked-in guest found in the selected room.');
+        }
+
+        const folio = await queryRunner.manager.findOne(GuestFolio, {
+          where: { reservationId: reservation.id, status: FolioStatus.OPEN },
+        });
+
+        if (!folio) {
+          throw new BadRequestException(`No open folio exists for Room ${reservation.room?.roomNumber || dto.roomId}.`);
+        }
+
+        // Post charge to folio items
+        const folioItem = queryRunner.manager.create(FolioItem, {
+          folioId: folio.id,
+          chargeType: FolioChargeType.RESTAURANT_POS,
+          description: `Restaurant Order #${order.orderNumber} (${order.tableNumber ? 'Table ' + order.tableNumber : 'Takeaway'})`,
+          amount: totalDue,
+          referenceId: order.orderNumber,
+        });
+        await queryRunner.manager.save(folioItem);
+
+        // Update folio totals
+        folio.totalCharges = Number((Number(folio.totalCharges) + totalDue).toFixed(2));
+        folio.balanceDue = Number((Number(folio.balanceDue) + totalDue).toFixed(2));
+        await queryRunner.manager.save(folio);
+
+        transactionRef = `Folio #${folio.id.substring(0, 8).toUpperCase()} - Room ${reservation.room?.roomNumber || ''} (${reservation.guest?.fullName || 'Guest'})`;
+      }
 
       const paymentCount = await queryRunner.manager.count(Payment, { where: { tenantId } });
       const receiptNumber = `RCP-${String(paymentCount + 1).padStart(5, '0')}`;
@@ -679,10 +730,11 @@ export class PosService {
         billId: bill.id,
         shiftId: activeShift ? activeShift.id : undefined,
         paymentMethod: dto.paymentMethod,
-        amountPaid: totalDue, // record the exact bill amount settled
+        amountPaid: totalDue,
         changeGiven,
         cardLast4: dto.cardLast4 || undefined,
-        transactionRef: dto.transactionRef || undefined,
+        transactionRef,
+        roomId: dto.roomId || undefined,
         processedByUserId: userId,
         status: PaymentStatus.COMPLETED,
       });

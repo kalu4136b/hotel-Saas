@@ -1,5 +1,6 @@
 'use client';
 
+// Multi-step authentication & tenant registration card
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
