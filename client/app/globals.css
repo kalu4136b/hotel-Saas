@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+:root {
+  --primary: #00C48C;
+  --primary-hover: #00A877;
+  --primary-active: #008F65;
+  --primary-soft: #ECFDF5;
+  --primary-ring: rgba(0, 196, 140, 0.25);
+  
+  --hero-grad-start: #064E3B;
+  --hero-grad-mid: #0D9488;
+  --hero-grad-end: #0284C7;
+  
+  --bg-page: #F8FAFC;
+  --surface-card: #FFFFFF;
+  --text-main: #0F172A;
+  --text-muted: #64748B;
+  --text-light: #94A3B8;
+  --border-color: #E2E8F0;
+  --border-focus: #00C48C;
+  --input-bg: #F8FAFC;
+  
+  --radius-hero: 32px;
+  --radius-card: 20px;
+  --radius-input: 14px;
+  --radius-btn: 14px;
+
+  --accent: #00C48C;
+  --accent-hover: #00A877;
+  --accent-soft: #ECFDF5;
+  --accent-text: #065F46;
+
+  --cyan: #0284C7;
+  --cyan-soft: #F0F9FF;
+  --amber: #D97706;
+  --amber-soft: #FFFBEB;
+  --coral: #E11D48;
+  --coral-soft: #FFF1F2;
+  --purple: #7C3AED;
+  --purple-soft: #F5F3FF;
+}
+
+body {
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--font-mono), monospace;
+  font-feature-settings: "tnum";
+}
+
+@keyframes fadeScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-fade-scale {
+  animation: fadeScaleIn 0.4s ease-out forwards;
+}
+
+@keyframes floatGlow {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translate(-10px, 15px) scale(1.08);
+    opacity: 0.65;
+  }
+}
+
+.animate-glow {
+  animation: floatGlow 12s ease-in-out infinite alternate;
+}

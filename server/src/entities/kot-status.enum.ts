@@ -1,0 +1,7 @@
+export enum KOTStatus {
+  PENDING = 'PENDING',
+  IN_PREPARATION = 'IN_PREPARATION',
+  READY = 'READY',
+  SERVED = 'SERVED',
+  CANCELLED = 'CANCELLED',
+}
