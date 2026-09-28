@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antigravity Hotel SaaS — Hospitality Management & Booking Platform</title>
+
+<!-- Bootstrap 5.3 -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<!-- Font Awesome 6.5.1 -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ==========================================================================
+   CLEAN WHITE THEME WITH CRISP EMERALD ACCENTS (NO NEON GLOWS)
+   Directly matched with 1st UI Screenshot (White Surfaces, Clean Emerald #00C48C)
+   ========================================================================== */
+:root {
+    --bg-canvas: #F8FAFC;
+    --surface-1: #FFFFFF;
+    --surface-2: #F1F5F9;
+    --surface-3: #E2E8F0;
+    --surface-border: #E2E8F0;
+    --surface-border-soft: #EDF2F7;
+    
+    --ink: #0F172A;
+    --text: #1E293B;
+    --muted: #64748B;
+    --muted-2: #94A3B8;
+    
+    /* 1st UI Primary Emerald / Mint Colors (Flat, Clean, No Neon) */
+    --accent: #00C48C;
+    --accent-hover: #00A877;
+    --accent-soft: #ECFDF5;
+    --accent-text: #065F46;
+    
+    /* Clean secondary tones */
+    --cyan: #0284C7;
+    --cyan-soft: #F0F9FF;
+    --amber: #D97706;
+    --amber-soft: #FFFBEB;
+    --coral: #E11D48;
+    --coral-soft: #FFF1F2;
+    --purple: #7C3AED;
+    --purple-soft: #F5F3FF;
+    
+    --radius: 16px;
+    --radius-sm: 12px;
+    --radius-xs: 8px;
+    --shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+    --shadow-sm: 0 2px 8px -2px rgba(15, 23, 42, 0.06);
+    --sidebar-w: 250px;
+    --font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:var(--font);
+  background:var(--bg-canvas);
+  color:var(--text);
+  margin:0;
+  -webkit-font-smoothing:antialiased;
+  font-size:13px;
+}
+h1,h2,h3,h4,h5,h6{font-weight:700;letter-spacing:-.015em;margin:0;color:var(--ink)}
+a{text-decoration:none;color:inherit}
+.mono{font-family:var(--mono);font-feature-settings:"tnum"}
+.muted{color:var(--muted)}
+::selection{background:var(--accent-soft);color:var(--accent-text)}
+
+/* ============ LAYOUT ============ */
+.app{min-height:100vh;display:flex;flex-direction:column}
+.sidebar{
+  position:fixed;inset:0 auto 0 0;
+  width:var(--sidebar-w);
+  background:var(--surface-1);
+  border-right:1px solid var(--surface-border);
+  padding:18px 14px;
+  display:flex;flex-direction:column;
+  z-index:1050;
+  transform:translateX(-100%);
+  transition:transform .28s cubic-bezier(.4,0,.2,1);
+  overflow-y:auto;
+}
+.sidebar.open{transform:translateX(0)}
+.backdrop{
+  position:fixed;inset:0;background:rgba(15, 23, 42, 0.35);
+  backdrop-filter:blur(2px);
+  opacity:0;visibility:hidden;transition:.28s;z-index:1040;
+}
+.backdrop.show{opacity:1;visibility:visible}
+
+.main{padding:16px;min-width:0;flex:1}
+
+@media (min-width:992px){
+  .sidebar{transform:none;box-shadow:none}
+  .backdrop{display:none}
+  .main{margin-left:var(--sidebar-w);padding:20px 24px 36px}
+  .menu-btn{display:none!important}
+}
+
+/* ============ SIDEBAR ============ */
+.user-profile-header{
+  display:flex;align-items:center;gap:11px;
+  padding:10px 12px;border-radius:14px;
+  background:var(--surface-2);border:1px solid var(--surface-border-soft);
+  margin-bottom:20px;
+}
+.user-avatar-wrap{position:relative}
+.user-avatar{
+  width:40px;height:40px;border-radius:12px;
+  object-fit:cover;border:2px solid var(--accent);
+}
+.online-dot{
+  position:absolute;bottom:-2px;right:-2px;
+  width:10px;height:10px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--surface-1);
+}
+.user-name{font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.2}
+.user-role{font-size:11px;color:var(--muted);margin-top:2px}
+
+.brand-section{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding:0 6px}
+.brand-mark{
+  width:34px;height:34px;border-radius:10px;
+  background:var(--accent);
+  color:#FFFFFF;display:grid;place-items:center;font-size:14px;font-weight:900;
+}
+.brand-name{font-size:16px;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
+
+.nav-label{
+  font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted-2);padding:0 12px;margin:16px 0 6px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:11px;
+  padding:9px 12px;border-radius:12px;
+  color:var(--muted);font-weight:600;font-size:12.5px;
+  cursor:pointer;transition:.18s;margin-bottom:2px;
+}
+.nav-item i{width:16px;text-align:center;font-size:13px}
+.nav-item .count{margin-left:auto;font-size:10px;font-weight:700;
+  background:var(--surface-2);color:var(--muted);padding:2px 7px;border-radius:20px}
+.nav-item:hover{background:var(--surface-2);color:var(--ink)}
+.nav-item.active{
+  background:var(--accent);
+  color:#FFFFFF;
+}
+.nav-item.active i{color:#FFFFFF}
+.nav-item.active .count{background:rgba(255,255,255,0.25);color:#FFFFFF}
+
+/* Sidebar hotel room previews */
+.room-mini-row{
+  display:flex;align-items:center;gap:10px;padding:7px 10px;
+  border-radius:10px;transition:.15s;cursor:pointer;margin-bottom:2px;
+}
+.room-mini-row:hover{background:var(--surface-2)}
+.room-thumb{
+  width:32px;height:32px;border-radius:8px;
+  display:grid;place-items:center;font-size:12px;flex:0 0 auto;
+}
+.room-meta{min-width:0;flex:1}
+.room-title{font-size:11.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.room-status{font-size:10.5px;color:var(--accent-text);font-weight:600}
+
+.sidebar-foot{margin-top:auto;padding-top:16px}
+.upgrade-box{
+  background:var(--surface-2);
+  border:1px solid var(--surface-border);
+  border-radius:14px;padding:14px;position:relative;
+}
+.upgrade-box h6{font-size:12.5px;font-weight:700;color:var(--ink)}
+.upgrade-box p{font-size:11px;color:var(--muted);margin:4px 0 10px;line-height:1.4}
+.upgrade-box .btn-mini{
+  background:var(--accent);color:#FFFFFF;font-size:11px;font-weight:700;
+  border-radius:8px;padding:7px 12px;border:0;width:100%;cursor:pointer;
+  transition:background .15s;
+}
+.upgrade-box .btn-mini:hover{background:var(--accent-hover)}
+
+/* ============ TOPBAR ============ */
+.topbar{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.menu-btn{width:38px;height:38px;border-radius:10px;border:1px solid var(--surface-border);
+  background:var(--surface-1);color:var(--ink);font-size:14px;flex:0 0 auto}
+.search-box{flex:1;position:relative;max-width:440px;min-width:240px}
+.search-box i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted-2);font-size:13px}
+.search-box input{
+  width:100%;border:1px solid var(--surface-border);background:var(--surface-1);
+  border-radius:12px;padding:9px 14px 9px 38px;font-size:13px;font-family:var(--font);
+  color:var(--ink);transition:.18s;
+}
+.search-box input::placeholder{color:var(--muted-2)}
+.search-box input:focus{outline:none;border-color:var(--accent)}
+
+.property-badge{
+  display:none;align-items:center;gap:8px;background:var(--surface-1);
+  border:1px solid var(--surface-border);border-radius:12px;padding:6px 14px;
+}
+@media (min-width:992px){.property-badge{display:inline-flex}}
+.property-dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.property-name{font-size:12.5px;font-weight:700;color:var(--ink)}
+
+.top-actions{display:flex;align-items:center;gap:10px;margin-left:auto}
+.icon-btn{
+  width:38px;height:38px;border-radius:11px;border:1px solid var(--surface-border);
+  background:var(--surface-1);color:var(--muted);font-size:13.5px;position:relative;
+  display:grid;place-items:center;cursor:pointer;transition:.15s;
+}
+.icon-btn:hover{background:var(--surface-2);color:var(--ink)}
+.icon-btn .dot{
+  position:absolute;top:8px;right:8px;width:7px;height:7px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--surface-1);
+}
+
+/* ============ PAGE HEADER ============ */
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+.page-head h1{font-size:22px;font-weight:800;color:var(--ink)}
+.page-head p{color:var(--muted);font-size:12.5px;margin:3px 0 0}
+.head-actions{display:flex;gap:8px}
+
+/* ============ CARDS ============ */
+.card-x{
+  background:var(--surface-1);border:1px solid var(--surface-border);
+  border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);height:100%;
+  position:relative;
+}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px}
+.card-head h3{font-size:14px;font-weight:700;color:var(--ink)}
+.card-head .sub{font-size:11.5px;color:var(--muted)}
+
+/* Stat cards */
+.stat{display:flex;align-items:center;gap:14px}
+.stat-ico{
+  width:48px;height:48px;border-radius:14px;
+  display:grid;place-items:center;font-size:18px;flex:0 0 auto;
+}
+.stat-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.stat-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.stat-val{font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.1;color:var(--ink)}
+.trend{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;font-family:var(--mono)}
+.trend.up{color:var(--accent-text)}.trend.down{color:var(--coral)}
+.trend-label{font-size:11px;color:var(--muted-2);margin-left:3px}
+
+/* Clean Palette Fills (No neon, soft pastels) */
+.f-emerald{background:var(--accent-soft);color:var(--accent-text);border:1px solid #D1FAE5}
+.f-cyan{background:var(--cyan-soft);color:var(--cyan);border:1px solid #E0F2FE}
+.f-amber{background:var(--amber-soft);color:var(--amber);border:1px solid #FEF3C7}
+.f-coral{background:var(--coral-soft);color:var(--coral);border:1px solid #FFE4E6}
+.f-purple{background:var(--purple-soft);color:var(--purple);border:1px solid #EDE9FE}
+
+/* Tabs & Segmented */
+.tabs{display:inline-flex;background:var(--surface-2);border-radius:10px;padding:3px;gap:2px}
+.tabs button{
+  border:0;background:transparent;font-family:var(--font);font-weight:600;font-size:11.5px;
+  color:var(--muted);padding:5px 12px;border-radius:8px;cursor:pointer;transition:.15s;
+}
+.tabs button.on{background:var(--surface-1);color:var(--ink);font-weight:700;box-shadow:var(--shadow-sm)}
+
+/* ============ TABLE & TOOLBAR ============ */
+.tbl-toolbar{
+  display:flex;flex-direction:column;gap:12px;margin-bottom:16px;
+  background:var(--surface-2);border:1px solid var(--surface-border);border-radius:14px;padding:14px;
+}
+.tbl-filter-row{display:flex;gap:10px;flex-wrap:wrap}
+.tbl-filter-group{display:flex;flex-direction:column;gap:5px;flex:1;min-width:130px}
+.tbl-filter-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.tbl-select{
+  width:100%;border:1px solid var(--surface-border);background:var(--surface-1);border-radius:10px;
+  padding:8px 12px;font-family:var(--font);font-size:12.5px;color:var(--ink);cursor:pointer;outline:none;
+}
+.tbl-select:focus{border-color:var(--accent)}
+
+.tbl-search-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tbl-search-wrap{
+  display:flex;align-items:center;gap:8px;flex:1;min-width:0;
+  border:1px solid var(--surface-border);border-radius:10px;padding:8px 12px;background:var(--surface-1);
+}
+.tbl-search-wrap i{color:var(--muted-2);font-size:13px}
+.tbl-search-wrap input{
+  flex:1;border:none;background:transparent;font-family:var(--font);
+  font-size:13px;color:var(--ink);outline:none;min-width:0;
+}
+.tbl-search-wrap input::placeholder{color:var(--muted-2)}
+
+.tbl-chips-row{display:flex;flex-wrap:wrap;gap:6px}
+.filter-chip{
+  display:inline-flex;align-items:center;gap:6px;padding:3px 10px;
+  background:var(--accent-soft);color:var(--accent-text);border-radius:20px;
+  font-size:11.5px;font-weight:600;border:1px solid #D1FAE5;
+}
+.filter-chip button{border:none;background:transparent;color:var(--accent-text);cursor:pointer;font-size:13px;line-height:1}
+
+.table-wrap{overflow-x:auto;margin:0 -4px}
+table.tbl{width:100%;border-collapse:separate;border-spacing:0 4px;min-width:700px}
+table.tbl thead th{
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted-2);
+  font-weight:700;text-align:left;padding:8px 14px;white-space:nowrap;
+}
+table.tbl tbody td{
+  padding:12px 14px;font-size:12.5px;background:var(--surface-1);
+  border-top:1px solid var(--surface-border-soft);border-bottom:1px solid var(--surface-border-soft);
+  vertical-align:middle;white-space:nowrap;
+}
+table.tbl tbody tr:hover td{background:var(--surface-2)}
+table.tbl tbody tr td:first-child{border-radius:10px 0 0 10px;border-left:1px solid var(--surface-border-soft)}
+table.tbl tbody tr td:last-child{border-radius:0 10px 10px 0;border-right:1px solid var(--surface-border-soft)}
+
+.cell-guest{display:flex;align-items:center;gap:10px}
+.cell-avatar{width:32px;height:32px;border-radius:9px;object-fit:cover;border:1px solid var(--surface-border)}
+.guest-name{font-weight:700;color:var(--ink);font-size:12.5px}
+.guest-sub{font-size:10.5px;color:var(--muted)}
+
+.badge-status{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;
+}
+.b-checkedin{background:var(--accent-soft);color:var(--accent-text);border:1px solid #A7F3D0}
+.b-confirmed{background:var(--cyan-soft);color:var(--cyan);border:1px solid #BAE6FD}
+.b-pending{background:var(--amber-soft);color:var(--amber);border:1px solid #FDE68A}
+.b-checkout{background:var(--surface-2);color:var(--muted);border:1px solid var(--surface-border)}
+.b-cancel{background:var(--coral-soft);color:var(--coral);border:1px solid #FECDD3}
+
+/* Pagination */
+.tbl-pagination{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  gap:10px;margin-top:16px;padding-top:12px;border-top:1px solid var(--surface-border);
+}
+.pg-btns{display:flex;align-items:center;gap:4px}
+.pg-btns button{
+  min-width:32px;height:32px;border-radius:8px;border:1px solid var(--surface-border);
+  background:var(--surface-1);color:var(--muted);font-size:12px;font-weight:600;
+  cursor:pointer;display:grid;place-items:center;transition:.15s;
+}
+.pg-btns button:hover:not(:disabled){background:var(--surface-2);color:var(--ink)}
+.pg-btns button.active{background:var(--accent);color:#FFFFFF;font-weight:700;border-color:var(--accent)}
+.pg-btns button:disabled{opacity:.4;cursor:default}
+
+/* Buttons (Solid, Clean, No Neon Halos) */
+.btn-x{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;
+  cursor:pointer;font-family:var(--font);font-weight:700;font-size:12.5px;
+  border-radius:10px;padding:8px 16px;transition:background .15s, transform .1s;
+}
+.btn-primary-x{background:var(--accent);color:#FFFFFF}
+.btn-primary-x:hover{background:var(--accent-hover)}
+.btn-ghost{background:var(--surface-1);color:var(--text);border:1px solid var(--surface-border)}
+.btn-ghost:hover{background:var(--surface-2)}
+
+/* Hotel Inspector Sidebar Card */
+.inspector-card{
+  background:var(--surface-1);border:1px solid var(--surface-border);border-radius:18px;
+  overflow:hidden;box-shadow:var(--shadow-sm);
+}
+.hotel-hero-img{
+  width:100%;height:160px;object-fit:cover;
+  position:relative;
+}
+.gallery-strip{display:flex;gap:6px;padding:10px 14px;background:var(--surface-2)}
+.gallery-thumb{
+  flex:1;height:52px;border-radius:8px;object-fit:cover;
+  border:1px solid var(--surface-border);cursor:pointer;
+}
+
+/* Calendar widget */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;font-size:11px}
+.cal-day-head{font-weight:700;color:var(--muted-2);padding:4px 0}
+.cal-day{
+  padding:6px 0;border-radius:8px;color:var(--muted);cursor:pointer;
+  font-family:var(--mono);font-size:11.5px;
+}
+.cal-day:hover{background:var(--surface-2);color:var(--ink)}
+.cal-day.active{background:var(--accent);color:#FFFFFF;font-weight:800}
+.cal-day.range{background:var(--accent-soft);color:var(--accent-text)}
+
+/* Gauge Center */
+.gauge-wrap{position:relative;max-width:240px;margin:10px auto 0}
+.gauge-center{position:absolute;left:0;right:0;bottom:10px;text-align:center}
+.gauge-center .g-val{font-size:30px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+.gauge-center .g-lab{font-size:11px;color:var(--muted);font-weight:600}
+</style>
+<script src="/_aistudio-iframe.js?v=2c34bde1"></script></head>
+<body>
+
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="user-profile-header">
+      <div class="user-avatar-wrap">
+        <img class="user-avatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" alt="Avatar">
+        <span class="online-dot"></span>
+      </div>
+      <div>
+        <div class="user-name">Indica Watson</div>
+        <div class="user-role">General Director · SHA+</div>
+      </div>
+    </div>
+
+    <div class="brand-section">
+      <div class="brand-mark"><i class="fa-solid fa-hotel"></i></div>
+      <span class="brand-name">Antigravity PMS</span>
+    </div>
+
+    <nav>
+      <div class="nav-label">Core Operations</div>
+      <div class="nav-item active"><i class="fa-solid fa-chart-pie"></i> Dashboard</div>
+      <div class="nav-item"><i class="fa-solid fa-bell-concierge"></i> Guest Check-Ins <span class="count">38</span></div>
+      <div class="nav-item"><i class="fa-solid fa-door-open"></i> Room Statuses <span class="count">94%</span></div>
+      <div class="nav-item"><i class="fa-solid fa-calendar-check"></i> Bookings &amp; Rates</div>
+
+      <div class="nav-label">Hospitality Analytics</div>
+      <div class="nav-item"><i class="fa-solid fa-coins"></i> Real-Time Revenue</div>
+      <div class="nav-item"><i class="fa-solid fa-broom"></i> Housekeeping <span class="count">6</span></div>
+      <div class="nav-item"><i class="fa-solid fa-map-location-dot"></i> Property Overview</div>
+    </nav>
+
+    <div class="nav-label">Live Suites</div>
+    <div>
+      <div class="room-mini-row">
+        <div class="room-thumb f-emerald"><i class="fa-solid fa-umbrella-beach"></i></div>
+        <div class="room-meta">
+          <div class="room-title">Novotel Ocean #304</div>
+          <div class="room-status">Occupied · Checked-In</div>
+        </div>
+      </div>
+      <div class="room-mini-row">
+        <div class="room-thumb f-cyan"><i class="fa-solid fa-water-ladder"></i></div>
+        <div class="room-meta">
+          <div class="room-title">Pool Villa Deluxe #102</div>
+          <div class="room-status">Reserved · Arrival 14:00</div>
+        </div>
+      </div>
+      <div class="room-mini-row">
+        <div class="room-thumb f-amber"><i class="fa-solid fa-mountain-sun"></i></div>
+        <div class="room-meta">
+          <div class="room-title">Mountain Loft SHA+ #205</div>
+          <div class="room-status" style="color:var(--amber)">Cleaning In Progress</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-foot">
+      <div class="upgrade-box">
+        <h6>Antigravity Cloud Pro</h6>
+        <p>Real-time channel manager synced with Booking.com &amp; Agoda.</p>
+        <button class="btn-mini"><i class="fa-solid fa-bolt"></i> Live Channel Sync</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="backdrop" id="backdrop"></div>
+
+  <!-- ============ MAIN CONTENT ============ -->
+  <main class="main">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <button class="menu-btn" id="menuBtn" aria-label="Open menu"><i class="fa-solid fa-bars"></i></button>
+
+      <div class="search-box">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="topSearch" placeholder="Search reservation #, guest name, passport, room…">
+      </div>
+
+      <div class="property-badge">
+        <span class="property-dot"></span>
+        <span class="property-name">Novotel Phuket City Grand Resort</span>
+      </div>
+
+      <div class="top-actions">
+        <button class="icon-btn" aria-label="Notifications"><i class="fa-regular fa-bell"></i><span class="dot"></span></button>
+        <button class="btn-x btn-primary-x" id="btnNewBooking"><i class="fa-solid fa-plus"></i> New Reservation</button>
+      </div>
+    </div>
+
+    <!-- Page Header -->
+    <div class="page-head">
+      <div>
+        <h1>Hospitality Executive Overview</h1>
+        <p>Real-time telemetry, guest check-ins, room statuses and revenue yield tracking.</p>
+      </div>
+      <div class="head-actions">
+        <button class="btn-x btn-ghost" id="exportBtn"><i class="fa-solid fa-file-arrow-down"></i> Export Report</button>
+      </div>
+    </div>
+
+    <!-- ===== STAT CARDS ===== -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-xl">
+        <div class="card-x stat">
+          <div class="stat-ico f-emerald"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Total Revenue</div>
+            <div class="stat-val mono">$48,920</div>
+            <div><span class="trend up"><i class="fa-solid fa-arrow-up"></i>12.4%</span><span class="trend-label">vs last week</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-xl">
+        <div class="card-x stat">
+          <div class="stat-ico f-cyan"><i class="fa-solid fa-bed"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Occupancy Rate</div>
+            <div class="stat-val mono">84.6%</div>
+            <div><span class="trend up"><i class="fa-solid fa-arrow-up"></i>3.2%</span><span class="trend-label">target 80%</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-xl">
+        <div class="card-x stat">
+          <div class="stat-ico f-purple"><i class="fa-solid fa-passport"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Check-Ins Today</div>
+            <div class="stat-val mono">38 / 42</div>
+            <div><span class="trend up"><i class="fa-solid fa-arrow-up"></i>90%</span><span class="trend-label">checked in</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-xl">
+        <div class="card-x stat">
+          <div class="stat-ico f-amber"><i class="fa-solid fa-money-bill-trend-up"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">RevPAR</div>
+            <div class="stat-val mono">$186.50</div>
+            <div><span class="trend up"><i class="fa-solid fa-arrow-up"></i>8.7%</span><span class="trend-label">per room night</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-xl">
+        <div class="card-x stat">
+          <div class="stat-ico f-coral"><i class="fa-solid fa-clock-rotate-left"></i></div>
+          <div class="stat-body">
+            <div class="stat-label">Pending Departures</div>
+            <div class="stat-val mono">14</div>
+            <div><span class="trend down"><i class="fa-solid fa-arrow-down"></i>4</span><span class="trend-label">express check-out</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== REVENUE & OCCUPANCY CHARTS ===== -->
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-xl-8">
+        <div class="card-x">
+          <div class="card-head">
+            <div>
+              <h3>Real-Time Revenue &amp; Cashflow Yield</h3>
+              <div class="sub">Dynamic nightly rate performance and room yield</div>
+            </div>
+            <div class="tabs" id="revTabs">
+              <button class="on" data-type="gross">Gross Revenue</button>
+              <button data-type="net">Net Room Yield</button>
+            </div>
+          </div>
+          <div style="height:250px"><canvas id="revChart"></canvas></div>
+        </div>
+      </div>
+      <div class="col-12 col-xl-4">
+        <div class="card-x">
+          <div class="card-head">
+            <h3>Occupancy Target &amp; ADR</h3>
+            <div class="tabs"><button class="on">Monthly</button><button>Q1 2026</button></div>
+          </div>
+          <div class="gauge-wrap">
+            <canvas id="gauge" height="150"></canvas>
+            <div class="gauge-center">
+              <div class="g-val mono">84%</div>
+              <div class="g-lab">Target Attained</div>
+            </div>
+          </div>
+          <div class="d-flex justify-content-center gap-4 mt-3" style="font-size:12px">
+            <span style="color:var(--accent-text)"><i class="fa-solid fa-circle me-1" style="font-size:8px"></i> Occupied (84%)</span>
+            <span style="color:var(--muted-2)"><i class="fa-solid fa-circle me-1" style="font-size:8px"></i> Vacant (16%)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== GUEST CHECK-INS & BOOKINGS TABLE ===== -->
+    <div class="row g-3">
+      <div class="col-12 col-xl-8">
+        <div class="card-x">
+          <div class="card-head">
+            <div>
+              <h3>Guest Check-Ins &amp; Active Bookings</h3>
+              <div class="sub">Filter guests, assign room keys, and manage arrival folios</div>
+            </div>
+            <div class="tabs" id="quickCategoryTabs">
+              <button class="on" data-cat="">All Suites</button>
+              <button data-cat="Ocean Villa">Ocean Villa</button>
+              <button data-cat="Deluxe Suite">Deluxe Suite</button>
+              <button data-cat="Mountain Loft">Mountain Loft</button>
+            </div>
+          </div>
+
+          <!-- Table Toolbar -->
+          <div class="tbl-toolbar">
+            <div class="tbl-filter-row">
+              <div class="tbl-filter-group">
+                <label class="tbl-filter-label">Check-In Status</label>
+                <select id="filterStatus" class="tbl-select">
+                  <option value="">All Statuses</option>
+                  <option value="Checked-in">Checked-In</option>
+                  <option value="Confirmed">Confirmed Arrival</option>
+                  <option value="Pending">Pending Deposit</option>
+                  <option value="Checked-out">Checked-Out</option>
+                </select>
+              </div>
+              <div class="tbl-filter-group">
+                <label class="tbl-filter-label">Suite Type</label>
+                <select id="filterType" class="tbl-select">
+                  <option value="">All Suite Categories</option>
+                  <option value="Ocean Villa">Ocean Villa</option>
+                  <option value="Deluxe Suite">Deluxe Suite</option>
+                  <option value="Mountain Loft">Mountain Loft SHA+</option>
+                  <option value="Garden Bungalow">Garden Bungalow</option>
+                </select>
+              </div>
+              <div class="tbl-filter-group">
+                <label class="tbl-filter-label">Stay Window</label>
+                <select id="filterDate" class="tbl-select">
+                  <option value="">All Timeframes</option>
+                  <option value="today">Today</option>
+                  <option value="week">This Week</option>
+                  <option value="month">This Month</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="tbl-search-row">
+              <div class="tbl-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="orderSearch" placeholder="Search by Guest Name, Booking #, Room Number, Country…">
+              </div>
+              <button id="orderSearchBtn" class="btn-x btn-primary-x"><i class="fa-solid fa-filter"></i> Apply Filter</button>
+              <button id="clearFilters" class="btn-x btn-ghost"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+            </div>
+
+            <div class="tbl-chips-row" id="activeChips"></div>
+          </div>
+
+          <!-- Table Info & Spinner -->
+          <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+            <span id="tblCount" class="text-secondary small font-monospace"></span>
+            <span id="tblSpinner" class="text-success small" style="display:none"><i class="fa-solid fa-circle-notch fa-spin"></i> Filtering records…</span>
+          </div>
+
+          <!-- Table -->
+          <div class="table-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Booking ID</th>
+                  <th>Guest Profile</th>
+                  <th>Suite Assigned</th>
+                  <th>Stay Period</th>
+                  <th>Total Amount</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <!-- Pagination -->
+          <div class="tbl-pagination" id="tblPagination"></div>
+        </div>
+      </div>
+
+      <!-- Right Column: Inspector matching 1st UI image (Novotel Phuket City preview) -->
+      <div class="col-12 col-xl-4">
+        <div class="inspector-card">
+          <img class="hotel-hero-img" src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=600&q=80" alt="Novotel Phuket">
+          
+          <div class="gallery-strip">
+            <img class="gallery-thumb" src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=200&q=80" alt="1">
+            <img class="gallery-thumb" src="https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=200&q=80" alt="2">
+            <img class="gallery-thumb" src="https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=200&q=80" alt="3">
+          </div>
+
+          <div class="p-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h4 style="font-size:15px;color:var(--ink)">Novotel Phuket City Grand</h4>
+              <span class="badge-status b-checkedin"><i class="fa-solid fa-star text-warning"></i> 4.6 (320 reviews)</span>
+            </div>
+            <p class="text-secondary small mb-3" style="line-height:1.4">
+              Choose between 18 premier ocean suites, each featuring private plunge pools, floor-to-ceiling glass, and high-speed digital keyless access.
+            </p>
+
+            <div class="card-x p-2 mb-3" style="background:var(--surface-2)">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small font-monospace text-secondary"><i class="fa-solid fa-location-dot text-success me-1"></i> Peak Check-In Traffic</span>
+                <span class="small text-dark font-monospace fw-bold">1.8h avg. wait: 0 min</span>
+              </div>
+              <div style="height:55px"><canvas id="miniCurveChart"></canvas></div>
+            </div>
+
+            <!-- February 2026 Calendar widget matching 1st UI -->
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-bold small text-dark">February 2026</span>
+              <div>
+                <button class="btn btn-sm btn-light py-0 px-2 text-secondary"><i class="fa-solid fa-chevron-left"></i></button>
+                <button class="btn btn-sm btn-light py-0 px-2 text-secondary"><i class="fa-solid fa-chevron-right"></i></button>
+              </div>
+            </div>
+
+            <div class="cal-grid mb-3">
+              <div class="cal-day-head">Sun</div>
+              <div class="cal-day-head">Mon</div>
+              <div class="cal-day-head">Tue</div>
+              <div class="cal-day-head">Wed</div>
+              <div class="cal-day-head">Thu</div>
+              <div class="cal-day-head">Fri</div>
+              <div class="cal-day-head">Sat</div>
+
+              <div class="cal-day text-secondary">1</div>
+              <div class="cal-day text-secondary">2</div>
+              <div class="cal-day text-secondary">3</div>
+              <div class="cal-day text-secondary">4</div>
+              <div class="cal-day text-secondary">5</div>
+              <div class="cal-day text-secondary">6</div>
+              <div class="cal-day text-secondary">7</div>
+              <div class="cal-day text-secondary">8</div>
+              <div class="cal-day text-secondary">9</div>
+              <div class="cal-day text-secondary">10</div>
+              <div class="cal-day text-secondary">11</div>
+              <div class="cal-day range">12</div>
+              <div class="cal-day range">13</div>
+              <div class="cal-day range">14</div>
+              <div class="cal-day active">15</div>
+              <div class="cal-day text-secondary">16</div>
+              <div class="cal-day text-secondary">17</div>
+              <div class="cal-day text-secondary">18</div>
+              <div class="cal-day text-secondary">19</div>
+              <div class="cal-day text-secondary">20</div>
+              <div class="cal-day text-secondary">21</div>
+            </div>
+
+            <button class="btn-x btn-primary-x w-100" onclick="alert('Digital Master Key Card issued to Suite 304 via NFC/Bluetooth.')">
+              <i class="fa-solid fa-key"></i> Issue Digital Key
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ============ SCRIPTS ============ -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+$(function(){
+  // Mobile sidebar toggle
+  const $sb=$('#sidebar'), $bd=$('#backdrop');
+  function openSb(){$sb.addClass('open');$bd.addClass('show');}
+  function closeSb(){$sb.removeClass('open');$bd.removeClass('show');}
+  $('#menuBtn').on('click',openSb);
+  $bd.on('click',closeSb);
+  $('.nav-item').on('click',function(){
+    $('.nav-item').removeClass('active');$(this).addClass('active');
+    if(window.innerWidth<992) closeSb();
+  });
+
+  // Simulated Hotel Guest Bookings Database
+  var DB_BOOKINGS = [
+    {id:'#BK-9041', guest:'Angela Vance', avatar:'32', room:'Ocean Villa #304', type:'Ocean Villa', nights:'4 Nights', price:'$1,360', date:'today', status:'Checked-in', statusCls:'b-checkedin'},
+    {id:'#BK-9042', guest:'James Miller', avatar:'11', room:'Deluxe Suite #108', type:'Deluxe Suite', nights:'2 Nights', price:'$580', date:'today', status:'Confirmed', statusCls:'b-confirmed'},
+    {id:'#BK-9043', guest:'Pamela Beesly', avatar:'12', room:'Mountain Loft #205', type:'Mountain Loft', nights:'3 Nights', price:'$690', date:'week', status:'Checked-in', statusCls:'b-checkedin'},
+    {id:'#BK-9044', guest:'Michael Scott', avatar:'45', room:'Presidential Penthouse', type:'Ocean Villa', nights:'5 Nights', price:'$2,450', date:'today', status:'Pending', statusCls:'b-pending'},
+    {id:'#BK-9045', guest:'Dwight Schrute', avatar:'8', room:'Garden Bungalow #12', type:'Garden Bungalow', nights:'1 Night', price:'$180', date:'week', status:'Checked-out', statusCls:'b-checkout'},
+    {id:'#BK-9046', guest:'Oscar Martinez', avatar:'20', room:'Ocean Villa #308', type:'Ocean Villa', nights:'6 Nights', price:'$2,100', date:'month', status:'Checked-in', statusCls:'b-checkedin'},
+    {id:'#BK-9047', guest:'Meredith Palmer', avatar:'22', room:'Deluxe Suite #102', type:'Deluxe Suite', nights:'2 Nights', price:'$520', date:'week', status:'Confirmed', statusCls:'b-confirmed'},
+    {id:'#BK-9048', guest:'Kevin Malone', avatar:'10', room:'Mountain Loft #204', type:'Mountain Loft', nights:'3 Nights', price:'$630', date:'today', status:'Checked-in', statusCls:'b-checkedin'},
+    {id:'#BK-9049', guest:'Stanley Hudson', avatar:'18', room:'Ocean Villa #302', type:'Ocean Villa', nights:'7 Nights', price:'$2,800', date:'month', status:'Checked-in', statusCls:'b-checkedin'},
+    {id:'#BK-9050', guest:'Phyllis Vance', avatar:'24', room:'Garden Bungalow #14', type:'Garden Bungalow', nights:'2 Nights', price:'$360', date:'month', status:'Confirmed', statusCls:'b-confirmed'},
+    {id:'#BK-9051', guest:'Ryan Howard', avatar:'16', room:'Deluxe Suite #104', type:'Deluxe Suite', nights:'4 Nights', price:'$1,120', date:'week', status:'Pending', statusCls:'b-pending'},
+    {id:'#BK-9052', guest:'Kelly Kapoor', avatar:'28', room:'Ocean Villa #301', type:'Ocean Villa', nights:'3 Nights', price:'$1,050', date:'today', status:'Checked-in', statusCls:'b-checkedin'},
+  ];
+
+  var PER_PAGE = 5;
+  var currentPage = 1;
+  var displayData = DB_BOOKINGS.slice();
+
+  function rowHTML(b){
+    return '<tr>'+
+      '<td class="mono fw-bold" style="color:var(--accent-text)">'+b.id+'</td>'+
+      '<td><div class="cell-guest"><img class="cell-avatar" src="https://i.pravatar.cc/80?img='+b.avatar+'"><div><div class="guest-name">'+b.guest+'</div><div class="guest-sub">'+b.nights+'</div></div></div></td>'+
+      '<td><span class="text-dark fw-semibold">'+b.room+'</span><div class="small text-secondary">'+b.type+'</div></td>'+
+      '<td class="mono small text-secondary">'+b.date.toUpperCase()+'</td>'+
+      '<td class="mono fw-bold text-dark">'+b.price+'</td>'+
+      '<td><span class="badge-status '+b.statusCls+'">'+b.status+'</span></td>'+
+      '<td><button class="btn btn-sm btn-outline-success py-1 px-2" onclick="alert(\'Managing guest '+b.guest+' for '+b.room+'\')"><i class="fa-solid fa-key"></i> Key</button></td>'+
+    '</tr>';
+  }
+
+  function renderTable(){
+    var start = (currentPage-1)*PER_PAGE;
+    var page = displayData.slice(start, start+PER_PAGE);
+    var $tbody = $('table.tbl tbody');
+    if(page.length === 0){
+      $tbody.html('<tr><td colspan="7" class="text-center py-4 text-secondary"><i class="fa-solid fa-folder-open mb-2 fs-3 d-block"></i>No hotel bookings match your filter criteria.</td></tr>');
+    } else {
+      $tbody.html(page.map(rowHTML).join(''));
+    }
+    var total = displayData.length;
+    var from = total === 0 ? 0 : start + 1;
+    var to = Math.min(start + PER_PAGE, total);
+    $('#tblCount').text('Showing ' + from + '–' + to + ' of ' + total + ' bookings');
+    renderPagination(total);
+  }
+
+  function renderPagination(total){
+    var pages = Math.ceil(total/PER_PAGE);
+    var $pg = $('#tblPagination');
+    if(pages <= 1){ $pg.html(''); return; }
+    var html = '<span class="small text-secondary">Page ' + currentPage + ' of ' + pages + '</span><div class="pg-btns">';
+    html += '<button id="pgPrev"'+(currentPage===1?' disabled':'')+'><i class="fa-solid fa-chevron-left"></i></button>';
+    for(var i=1; i<=pages; i++){
+      html += '<button class="pg-num'+(i===currentPage?' active':'')+'" data-pg="'+i+'">'+i+'</button>';
+    }
+    html += '<button id="pgNext"'+(currentPage===pages?' disabled':'')+'><i class="fa-solid fa-chevron-right"></i></button></div>';
+    $pg.html(html);
+  }
+
+  function applyFilters(){
+    var status = $('#filterStatus').val();
+    var type = $('#filterType').val();
+    var date = $('#filterDate').val();
+    var q = $('#orderSearch').val().toLowerCase().trim();
+
+    $('#tblSpinner').show();
+    setTimeout(function(){
+      displayData = DB_BOOKINGS.filter(function(b){
+        var matchQ = !q || b.id.toLowerCase().includes(q) || b.guest.toLowerCase().includes(q) || b.room.toLowerCase().includes(q);
+        var matchStatus = !status || b.status === status;
+        var matchType = !type || b.type === type;
+        var matchDate = !date || b.date === date;
+        return matchQ && matchStatus && matchType && matchDate;
+      });
+      currentPage = 1;
+      $('#tblSpinner').hide();
+      renderTable();
+      renderChips({status: status, type: type, date: date, q: q});
+    }, 200);
+  }
+
+  function renderChips(p){
+    var html = '';
+    if(p.status) html += '<span class="filter-chip">Status: '+p.status+' <button onclick="$(\'#filterStatus\').val(\'\');$(\'#orderSearchBtn\').click();">&times;</button></span>';
+    if(p.type) html += '<span class="filter-chip">Suite: '+p.type+' <button onclick="$(\'#filterType\').val(\'\');$(\'#orderSearchBtn\').click();">&times;</button></span>';
+    if(p.date) html += '<span class="filter-chip">Window: '+p.date+' <button onclick="$(\'#filterDate\').val(\'\');$(\'#orderSearchBtn\').click();">&times;</button></span>';
+    if(p.q) html += '<span class="filter-chip">Query: '+p.q+' <button onclick="$(\'#orderSearch\').val(\'\');$(\'#orderSearchBtn\').click();">&times;</button></span>';
+    $('#activeChips').html(html);
+  }
+
+  $('#orderSearchBtn').on('click', applyFilters);
+  $('#orderSearch').on('keydown', function(e){ if(e.key === 'Enter') applyFilters(); });
+  $('#filterStatus, #filterType, #filterDate').on('change', applyFilters);
+  $('#clearFilters').on('click', function(){
+    $('#filterStatus, #filterType, #filterDate').val('');
+    $('#orderSearch').val('');
+    applyFilters();
+  });
+
+  $('#quickCategoryTabs button').on('click', function(){
+    $(this).siblings().removeClass('on'); $(this).addClass('on');
+    var cat = $(this).data('cat');
+    $('#filterType').val(cat);
+    applyFilters();
+  });
+
+  $(document).on('click','#pgPrev', function(){ if(currentPage>1){ currentPage--; renderTable(); }});
+  $(document).on('click','#pgNext', function(){ currentPage++; renderTable(); });
+  $(document).on('click','.pg-num', function(){ currentPage = $(this).data('pg'); renderTable(); });
+
+  // Initial table render
+  renderTable();
+
+  // CHARTS
+  Chart.defaults.font.family="'Plus Jakarta Sans',sans-serif";
+  Chart.defaults.color="#64748B";
+
+  // 1. Revenue Chart
+  const rc = document.getElementById('revChart').getContext('2d');
+  const grad = rc.createLinearGradient(0,0,0,240);
+  grad.addColorStop(0, 'rgba(0, 196, 140, 0.25)');
+  grad.addColorStop(1, 'rgba(0, 196, 140, 0.0)');
+  new Chart(rc, {
+    type: 'line',
+    data: {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      datasets: [{
+        label: 'Gross Rev',
+        data: [5800, 6400, 7200, 6800, 9400, 11200, 8900],
+        borderColor: '#00C48C',
+        borderWidth: 2.5,
+        tension: 0.4,
+        fill: true,
+        backgroundColor: grad,
+        pointBackgroundColor: '#00C48C',
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { grid: { color: '#F1F5F9' }, ticks: { callback: v => '$' + v } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // 2. Occupancy Gauge
+  const gc = document.getElementById('gauge').getContext('2d');
+  new Chart(gc, {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [84, 16],
+        backgroundColor: ['#00C48C', '#E2E8F0'],
+        borderWidth: 0,
+        circumference: 180,
+        rotation: 270
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '76%',
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  // 3. Mini Curve Chart (matching 1st UI image)
+  const mc = document.getElementById('miniCurveChart').getContext('2d');
+  new Chart(mc, {
+    type: 'line',
+    data: {
+      labels: ['10:00', '12:00', '14:00', '16:00', '18:00', '20:00'],
+      datasets: [{
+        data: [15, 45, 90, 60, 40, 20],
+        borderColor: '#00C48C',
+        borderWidth: 2,
+        tension: 0.45,
+        pointBackgroundColor: ['#00C48C', '#00C48C', '#F97316', '#00C48C', '#00C48C', '#00C48C'],
+        pointRadius: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { display: false }, y: { display: false } }
+    }
+  });
+
+  $('#btnNewBooking').on('click', function(){
+    alert('Opening New Reservation Flow for Novotel Phuket City...');
+  });
+  $('#exportBtn').on('click', function(){
+    alert('Exporting Hotel PMS Daily Occupancy & Revenue Report (PDF/Excel)...');
+  });
+});
+</script>
+</body>
+</html>

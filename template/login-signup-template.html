@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antigravity &amp; Ninth — Modern Auth UI Template</title>
+
+<!-- Fonts: Plus Jakarta Sans -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Font Awesome 6.5.1 -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+<style>
+/* ==========================================================================
+   CLEAN AUTH TEMPLATE - SPLIT SCREEN DESIGN SYSTEM
+   Directly matched with provided UI screenshot ("ninth" / Antigravity)
+   Includes smooth state transitions, step progress, validation & theme toggle
+   ========================================================================== */
+:root {
+  /* Default Palette: Emerald Hotel SaaS Theme (Matches Dashboard) */
+  --primary: #00C48C;
+  --primary-hover: #00A877;
+  --primary-active: #008F65;
+  --primary-soft: #ECFDF5;
+  --primary-ring: rgba(0, 196, 140, 0.25);
+  
+  /* Hero card gradient (Emerald to Cyan Lagoon) */
+  --hero-grad-start: #064E3B;
+  --hero-grad-mid: #0D9488;
+  --hero-grad-end: #0284C7;
+  
+  --bg-page: #F8FAFC;
+  --surface-card: #FFFFFF;
+  --text-main: #0F172A;
+  --text-muted: #64748B;
+  --text-light: #94A3B8;
+  --border-color: #E2E8F0;
+  --border-focus: #00C48C;
+  --input-bg: #F8FAFC;
+  
+  --radius-hero: 32px;
+  --radius-card: 20px;
+  --radius-input: 14px;
+  --radius-btn: 14px;
+  
+  --font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Alternate Theme: Royal Blue (exact 1:1 match to screenshot) */
+[data-theme="blue"] {
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-active: #1E40AF;
+  --primary-soft: #EFF6FF;
+  --primary-ring: rgba(37, 99, 235, 0.25);
+  --hero-grad-start: #1E3A8A;
+  --hero-grad-mid: #2563EB;
+  --hero-grad-end: #38BDF8;
+  --border-focus: #2563EB;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font);
+  background:var(--bg-page);
+  color:var(--text-main);
+  -webkit-font-smoothing:antialiased;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:100vh;
+  padding:20px;
+}
+
+/* ============ PAGE CONTAINER ============ */
+.auth-wrapper{
+  width:100%;
+  max-width:1200px;
+  background:#FFFFFF;
+  border-radius:var(--radius-hero);
+  border:1px solid var(--border-color);
+  box-shadow:0 20px 50px -15px rgba(15, 23, 42, 0.08);
+  display:grid;
+  grid-template-columns:1.05fr 1fr;
+  padding:16px;
+  gap:24px;
+  overflow:hidden;
+  position:relative;
+  animation:fadeScaleIn 0.5s ease-out;
+}
+
+@keyframes fadeScaleIn {
+  from{opacity:0;transform:scale(0.98) translateY(8px)}
+  to{opacity:1;transform:scale(1) translateY(0)}
+}
+
+/* Top bar controls (Theme toggle & View switch) */
+.floating-bar{
+  position:absolute;
+  top:24px;
+  right:24px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  z-index:20;
+}
+.theme-switch-btn{
+  background:#FFFFFF;
+  border:1px solid var(--border-color);
+  padding:6px 12px;
+  border-radius:20px;
+  font-size:11.5px;
+  font-weight:700;
+  color:var(--text-main);
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  transition:var(--transition);
+  box-shadow:0 2px 6px rgba(0,0,0,0.04);
+}
+.theme-switch-btn:hover{background:var(--bg-page)}
+.theme-color-dot{
+  width:10px;height:10px;border-radius:50%;background:var(--primary);
+}
+
+/* ============ LEFT HERO PANEL ============ */
+.hero-panel{
+  border-radius:calc(var(--radius-hero) - 8px);
+  background:linear-gradient(135deg, var(--hero-grad-start) 0%, var(--hero-grad-mid) 50%, var(--hero-grad-end) 100%);
+  color:#FFFFFF;
+  padding:44px 38px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  position:relative;
+  overflow:hidden;
+  min-height:640px;
+  transition:background 0.5s ease;
+}
+
+/* Ambient animated backdrop glow mesh */
+.hero-glow-1{
+  position:absolute;
+  top:-10%;right:-10%;
+  width:340px;height:340px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 70%);
+  filter:blur(30px);
+  pointer-events:none;
+  animation:drift 8s infinite alternate ease-in-out;
+}
+.hero-glow-2{
+  position:absolute;
+  bottom:5%;left:-10%;
+  width:380px;height:380px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 70%);
+  filter:blur(40px);
+  pointer-events:none;
+  animation:drift 10s infinite alternate-reverse ease-in-out;
+}
+@keyframes drift {
+  from{transform:translate(0, 0)}
+  to{transform:translate(30px, -20px)}
+}
+
+/* Logo header */
+.hero-logo{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-size:20px;
+  font-weight:800;
+  letter-spacing:-0.03em;
+  position:relative;
+  z-index:2;
+}
+.hero-logo-icon{
+  width:26px;
+  height:26px;
+  display:grid;
+  place-items:center;
+}
+.hero-logo-icon svg{
+  width:100%;height:100%;fill:none;stroke:#FFFFFF;stroke-width:2.4;
+}
+
+/* Hero Content Area */
+.hero-content{
+  position:relative;
+  z-index:2;
+  margin-top:auto;
+  margin-bottom:34px;
+}
+.hero-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 14px;
+  border-radius:30px;
+  background:rgba(255, 255, 255, 0.16);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(255, 255, 255, 0.25);
+  font-size:12.5px;
+  font-weight:600;
+  color:#FFFFFF;
+  margin-bottom:16px;
+}
+.hero-title{
+  font-size:38px;
+  font-weight:800;
+  line-height:1.15;
+  letter-spacing:-0.03em;
+  margin-bottom:10px;
+}
+.hero-subtitle{
+  font-size:14.5px;
+  color:rgba(255,255,255,0.85);
+  font-weight:500;
+  max-width:380px;
+  line-height:1.45;
+}
+
+/* Step progression cards (3 cards matching screenshot) */
+.hero-steps{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:12px;
+  position:relative;
+  z-index:2;
+}
+.step-card{
+  border-radius:18px;
+  padding:16px 14px;
+  min-height:130px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  cursor:pointer;
+  transition:var(--transition);
+}
+
+/* Step 1: Active Card (Solid White with Blue/Emerald Circle) */
+.step-card.active{
+  background:#FFFFFF;
+  color:var(--text-main);
+  box-shadow:0 12px 24px -8px rgba(0,0,0,0.15);
+  transform:translateY(-2px);
+}
+.step-card.active .step-num{
+  background:var(--primary);
+  color:#FFFFFF;
+}
+.step-card.active .step-desc{
+  color:var(--text-main);
+  font-weight:700;
+}
+
+/* Step 2 & 3: Inactive Cards (Frosted Glass Translucent) */
+.step-card.inactive{
+  background:rgba(255, 255, 255, 0.12);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(255, 255, 255, 0.2);
+  color:#FFFFFF;
+}
+.step-card.inactive:hover{
+  background:rgba(255, 255, 255, 0.18);
+}
+.step-card.inactive .step-num{
+  background:rgba(255, 255, 255, 0.2);
+  color:#FFFFFF;
+}
+.step-card.inactive .step-desc{
+  color:rgba(255, 255, 255, 0.85);
+  font-weight:500;
+}
+
+.step-num{
+  width:26px;
+  height:26px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  font-size:12px;
+  font-weight:800;
+  font-family:'JetBrains Mono', monospace;
+  margin-bottom:12px;
+  transition:var(--transition);
+}
+.step-desc{
+  font-size:12px;
+  line-height:1.35;
+}
+
+/* ============ RIGHT FORM PANEL ============ */
+.form-panel{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  padding:36px 36px 36px 16px;
+  position:relative;
+}
+
+/* Mode Switch Tabs (Sign Up / Log In) */
+.auth-mode-nav{
+  display:flex;
+  justify-content:center;
+  margin-bottom:28px;
+}
+.auth-heading{
+  font-size:30px;
+  font-weight:800;
+  color:var(--text-main);
+  letter-spacing:-0.03em;
+  text-align:center;
+}
+
+/* Form Container with animated tab transitions */
+.form-container{
+  width:100%;
+  max-width:440px;
+  margin:0 auto;
+}
+.auth-form{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.auth-form.hidden{
+  display:none;
+}
+
+/* Form Fields */
+.field-group{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.field-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.field-label{
+  font-size:12px;
+  font-weight:700;
+  color:var(--text-main);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.field-label a{
+  color:var(--primary);
+  font-weight:600;
+  font-size:11.5px;
+}
+.field-label a:hover{text-decoration:underline}
+
+/* Input Wrappers */
+.input-wrap{
+  position:relative;
+  display:flex;
+  align-items:center;
+}
+.input-ctl{
+  width:100%;
+  background:var(--input-bg);
+  border:1px solid transparent;
+  border-radius:var(--radius-input);
+  padding:12px 14px;
+  font-family:var(--font);
+  font-size:13.5px;
+  font-weight:500;
+  color:var(--text-main);
+  outline:none;
+  transition:var(--transition);
+}
+.input-ctl::placeholder{
+  color:var(--text-light);
+}
+.input-ctl:focus{
+  background:#FFFFFF;
+  border-color:var(--border-focus);
+  box-shadow:0 0 0 3px var(--primary-ring);
+}
+
+/* Phone input with country badge */
+.phone-wrap{
+  display:flex;
+  align-items:center;
+  background:var(--input-bg);
+  border-radius:var(--radius-input);
+  border:1px solid transparent;
+  transition:var(--transition);
+  padding:0 12px;
+}
+.phone-wrap:focus-within{
+  background:#FFFFFF;
+  border-color:var(--border-focus);
+  box-shadow:0 0 0 3px var(--primary-ring);
+}
+.flag-badge{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:13px;
+  font-weight:600;
+  color:var(--text-muted);
+  cursor:pointer;
+  padding-right:8px;
+  border-right:1px solid var(--border-color);
+  user-select:none;
+}
+.phone-wrap input{
+  background:transparent;
+  border:none;
+  padding:12px 10px;
+  font-family:var(--font);
+  font-size:13.5px;
+  color:var(--text-main);
+  outline:none;
+  flex:1;
+  font-variant-numeric:tabular-nums;
+}
+
+/* Verified Checkmark & Password Eye */
+.input-action{
+  position:absolute;
+  right:12px;
+  background:transparent;
+  border:none;
+  color:var(--text-light);
+  cursor:pointer;
+  font-size:13px;
+  display:grid;
+  place-items:center;
+  transition:var(--transition);
+}
+.input-action:hover{color:var(--text-main)}
+.input-action.valid-check{
+  color:#10B981;
+  cursor:default;
+}
+
+/* Password Helper Text */
+.helper-text{
+  font-size:11px;
+  color:var(--text-muted);
+  line-height:1.45;
+  margin-top:2px;
+}
+
+/* Primary Button (Clean, Solid, No Neon Halos) */
+.btn-submit{
+  width:100%;
+  padding:14px;
+  border-radius:var(--radius-btn);
+  background:var(--primary);
+  color:#FFFFFF;
+  font-family:var(--font);
+  font-size:14px;
+  font-weight:700;
+  border:none;
+  cursor:pointer;
+  transition:var(--transition);
+  margin-top:6px;
+  box-shadow:0 2px 8px -2px rgba(15, 23, 42, 0.08);
+}
+.btn-submit:hover{
+  background:var(--primary-hover);
+  transform:translateY(-1px);
+}
+.btn-submit:active{
+  background:var(--primary-active);
+  transform:translateY(0);
+}
+
+/* Switch Mode Prompt (Already have account?) */
+.auth-switch{
+  text-align:center;
+  font-size:12.5px;
+  color:var(--text-muted);
+  font-weight:500;
+}
+.auth-switch button{
+  background:none;
+  border:none;
+  color:var(--primary);
+  font-weight:700;
+  font-family:var(--font);
+  cursor:pointer;
+  padding:0 4px;
+  text-decoration:none;
+}
+.auth-switch button:hover{text-decoration:underline}
+
+/* Or Divider */
+.divider{
+  display:flex;
+  align-items:center;
+  text-align:center;
+  color:var(--text-light);
+  font-size:12px;
+  font-weight:600;
+  margin:4px 0;
+}
+.divider::before, .divider::after{
+  content:'';
+  flex:1;
+  border-bottom:1px solid var(--border-color);
+}
+.divider:not(:empty)::before{margin-right:12px}
+.divider:not(:empty)::after{margin-left:12px}
+
+/* Google Sign-in Button */
+.btn-google{
+  width:100%;
+  padding:12px 14px;
+  border-radius:var(--radius-btn);
+  background:#FFFFFF;
+  border:1px solid var(--border-color);
+  color:var(--text-main);
+  font-family:var(--font);
+  font-size:13.5px;
+  font-weight:700;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  transition:var(--transition);
+  box-shadow:0 1px 3px rgba(0,0,0,0.03);
+}
+.btn-google:hover{
+  background:var(--bg-page);
+  border-color:var(--text-light);
+}
+.google-icon{
+  width:18px;height:18px;
+}
+
+/* Legal Footer */
+.legal-footer{
+  text-align:center;
+  font-size:11px;
+  color:var(--text-light);
+  line-height:1.45;
+  margin-top:8px;
+}
+.legal-footer a{
+  color:var(--primary);
+  font-weight:600;
+  text-decoration:none;
+}
+.legal-footer a:hover{text-decoration:underline}
+
+/* Form transition animations */
+.fade-in{
+  animation:fadeSlide 0.25s ease-out;
+}
+@keyframes fadeSlide {
+  from{opacity:0;transform:translateY(6px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* ============ RESPONSIVE (MOBILE) ============ */
+@media (max-width: 960px){
+  .auth-wrapper{
+    grid-template-columns:1fr;
+    max-width:540px;
+    padding:12px;
+  }
+  .hero-panel{
+    min-height:auto;
+    padding:28px 22px;
+  }
+  .hero-title{font-size:28px}
+  .form-panel{
+    padding:18px 12px 24px;
+  }
+  .floating-bar{
+    top:16px;right:16px;
+  }
+}
+
+@media (max-width: 480px){
+  .field-row{grid-template-columns:1fr}
+  .hero-steps{grid-template-columns:1fr;gap:8px}
+  .step-card{min-height:auto;padding:12px}
+  body{padding:10px}
+}
+</style>
+<script src="/_aistudio-iframe.js?v=2c34bde1"></script></head>
+<body>
+
+<div class="auth-wrapper">
+
+  <!-- Top Floating Controls: Theme Toggle & Quick View -->
+  <div class="floating-bar">
+    <button class="theme-switch-btn" id="themeToggleBtn" title="Switch Between Emerald and Royal Blue">
+      <span class="theme-color-dot"></span>
+      <span id="themeLabel">Emerald Theme</span>
+    </button>
+  </div>
+
+  <!-- ==================== LEFT HERO PANEL ==================== -->
+  <div class="hero-panel">
+    <div class="hero-glow-1"></div>
+    <div class="hero-glow-2"></div>
+
+    <!-- Brand Logo -->
+    <div class="hero-logo">
+      <div class="hero-logo-icon">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" stroke-dasharray="14 4"></circle>
+          <circle cx="12" cy="12" r="4" fill="currentColor"></circle>
+        </svg>
+      </div>
+      <span id="brandName">ninth</span>
+    </div>
+
+    <!-- Middle Catchphrase -->
+    <div class="hero-content">
+      <div class="hero-pill">
+        <span>Join Us to Build 🤩</span>
+      </div>
+      <h2 class="hero-title" id="heroTitle">Start your Journey</h2>
+      <p class="hero-subtitle" id="heroSubtitle">Follow these simple steps to set up your account and access your hotel suite management console.</p>
+    </div>
+
+    <!-- 3-Step Flow Cards matching screenshot -->
+    <div class="hero-steps" id="stepsContainer">
+      <!-- Step 1 (Active) -->
+      <div class="step-card active" data-step="1">
+        <div class="step-num">1</div>
+        <div class="step-desc">Register your account</div>
+      </div>
+      <!-- Step 2 -->
+      <div class="step-card inactive" data-step="2">
+        <div class="step-num">2</div>
+        <div class="step-desc">Set up your profile information</div>
+      </div>
+      <!-- Step 3 -->
+      <div class="step-card inactive" data-step="3">
+        <div class="step-num">3</div>
+        <div class="step-desc">Verify your identity through passport/ID</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== RIGHT FORM PANEL ==================== -->
+  <div class="form-panel">
+    <div class="form-container">
+      
+      <!-- Heading -->
+      <div class="auth-mode-nav">
+        <h1 class="auth-heading" id="formHeader">Join Us</h1>
+      </div>
+
+      <!-- ================= SIGN UP FORM (DEFAULT) ================= -->
+      <form class="auth-form fade-in" id="signupForm" onsubmit="event.preventDefault(); handleSignupSubmit();">
+        
+        <!-- Phone Number Field -->
+        <div class="field-group">
+          <label class="field-label">Phone number</label>
+          <div class="phone-wrap">
+            <div class="flag-badge" id="flagSelector" title="Click to change country">
+              <span>🇦🇲</span>
+              <span id="countryCode">+374</span>
+            </div>
+            <input type="tel" id="signupPhone" placeholder="0000 00 00" required autocomplete="tel">
+          </div>
+        </div>
+
+        <!-- Name and Username Row -->
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label">Full Name</label>
+            <div class="input-wrap">
+              <input type="text" id="signupFullName" class="input-ctl" placeholder="Juliette Karapetyan" required autocomplete="name">
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">Username</label>
+            <div class="input-wrap">
+              <input type="text" id="signupUsername" class="input-ctl" placeholder="julietux" required autocomplete="username">
+              <span class="input-action valid-check" id="usernameCheck">
+                <i class="fa-solid fa-check"></i>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Password Field -->
+        <div class="field-group">
+          <label class="field-label">Password</label>
+          <div class="input-wrap">
+            <input type="password" id="signupPassword" class="input-ctl" placeholder="••••••••••••••••" required autocomplete="new-password">
+            <button type="button" class="input-action" onclick="togglePasswordVisibility('signupPassword', this)" aria-label="Toggle password visibility">
+              <i class="fa-regular fa-eye-slash"></i>
+            </button>
+          </div>
+          <p class="helper-text">
+            At least 12 characters, no more than 20 characters.<br>
+            Uppercase letters, lowercase letters, numbers, and symbols.
+          </p>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" class="btn-submit" id="btnContinue">Continue</button>
+
+        <!-- Switch to Log In -->
+        <div class="auth-switch">
+          Already have an account? <button type="button" onclick="switchAuthMode('login')">Log in</button>
+        </div>
+
+        <!-- Divider -->
+        <div class="divider">Or</div>
+
+        <!-- Google OAuth -->
+        <button type="button" class="btn-google" onclick="handleGoogleAuth()">
+          <svg class="google-icon" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.68-5.17 3.68-9.09z"/>
+            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.37 24 12 24z"/>
+            <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/>
+            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
+          </svg>
+          <span>Sign up with Google</span>
+        </button>
+
+        <!-- Terms Footer -->
+        <p class="legal-footer">
+          By signing up I confirm that I carefully have read and agree to the Ninth<br>
+          <a href="#">Privacy Policy</a> and <a href="#">Terms of Service</a>.
+        </p>
+      </form>
+
+      <!-- ================= LOG IN FORM ================= -->
+      <form class="auth-form hidden fade-in" id="loginForm" onsubmit="event.preventDefault(); handleLoginSubmit();">
+        
+        <!-- Username or Email -->
+        <div class="field-group">
+          <label class="field-label">Username or Email</label>
+          <div class="input-wrap">
+            <input type="text" id="loginUsername" class="input-ctl" placeholder="julietux or juliet@domain.com" required autocomplete="username">
+          </div>
+        </div>
+
+        <!-- Password Field -->
+        <div class="field-group">
+          <div class="field-label">
+            <span>Password</span>
+            <a href="#" onclick="alert('Password reset link sent to your registered email.')">Forgot password?</a>
+          </div>
+          <div class="input-wrap">
+            <input type="password" id="loginPassword" class="input-ctl" placeholder="••••••••••••••••" required autocomplete="current-password">
+            <button type="button" class="input-action" onclick="togglePasswordVisibility('loginPassword', this)" aria-label="Toggle password visibility">
+              <i class="fa-regular fa-eye-slash"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Remember Me Checkbox -->
+        <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-muted);cursor:pointer;">
+          <input type="checkbox" id="rememberMe" checked style="accent-color:var(--primary);width:16px;height:16px;">
+          <label for="rememberMe" style="cursor:pointer;">Keep me signed in on this workstation</label>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" class="btn-submit">Sign In to PMS</button>
+
+        <!-- Switch to Sign Up -->
+        <div class="auth-switch">
+          Don't have an account yet? <button type="button" onclick="switchAuthMode('signup')">Join us</button>
+        </div>
+
+        <!-- Divider -->
+        <div class="divider">Or</div>
+
+        <!-- Google OAuth -->
+        <button type="button" class="btn-google" onclick="handleGoogleAuth()">
+          <svg class="google-icon" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.68-5.17 3.68-9.09z"/>
+            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.37 24 12 24z"/>
+            <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/>
+            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
+          </svg>
+          <span>Continue with Google</span>
+        </button>
+
+      </form>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ==================== JAVASCRIPT ==================== -->
+<script>
+// Toggle Password Eye
+function togglePasswordVisibility(fieldId, btn){
+  const input = document.getElementById(fieldId);
+  const icon = btn.querySelector('i');
+  if(input.type === 'password'){
+    input.type = 'text';
+    icon.classList.remove('fa-eye-slash');
+    icon.classList.add('fa-eye');
+  } else {
+    input.type = 'password';
+    icon.classList.remove('fa-eye');
+    icon.classList.add('fa-eye-slash');
+  }
+}
+
+// Switch between Signup and Login forms
+function switchAuthMode(mode){
+  const signupForm = document.getElementById('signupForm');
+  const loginForm = document.getElementById('loginForm');
+  const formHeader = document.getElementById('formHeader');
+  const heroTitle = document.getElementById('heroTitle');
+  const heroSubtitle = document.getElementById('heroSubtitle');
+
+  if(mode === 'login'){
+    signupForm.classList.add('hidden');
+    loginForm.classList.remove('hidden');
+    formHeader.textContent = 'Welcome Back';
+    heroTitle.textContent = 'Access Console';
+    heroSubtitle.textContent = 'Sign in to access real-time hotel room statuses, guest check-ins, and revenue folios.';
+  } else {
+    loginForm.classList.add('hidden');
+    signupForm.classList.remove('hidden');
+    formHeader.textContent = 'Join Us';
+    heroTitle.textContent = 'Start your Journey';
+    heroSubtitle.textContent = 'Follow these simple steps to set up your account and access your hotel suite management console.';
+  }
+}
+
+// Step card progression interactivity
+document.querySelectorAll('.step-card').forEach(card => {
+  card.addEventListener('click', function(){
+    document.querySelectorAll('.step-card').forEach(c => {
+      c.classList.remove('active');
+      c.classList.add('inactive');
+    });
+    this.classList.remove('inactive');
+    this.classList.add('active');
+  });
+});
+
+// Flag Selector cycle demo
+const countries = [
+  { flag: '🇦🇲', code: '+374' },
+  { flag: '🇹🇭', code: '+66' },
+  { flag: '🇺🇸', code: '+1' },
+  { flag: '🇬🇧', code: '+44' },
+  { flag: '🇩🇪', code: '+49' },
+  { flag: '🇦🇪', code: '+971' }
+];
+let currentCountryIdx = 0;
+document.getElementById('flagSelector').addEventListener('click', function(){
+  currentCountryIdx = (currentCountryIdx + 1) % countries.length;
+  this.querySelector('span:first-child').textContent = countries[currentCountryIdx].flag;
+  document.getElementById('countryCode').textContent = countries[currentCountryIdx].code;
+});
+
+// Live Username validation checkmark
+const usernameInput = document.getElementById('signupUsername');
+const checkIcon = document.getElementById('usernameCheck');
+usernameInput.addEventListener('input', function(){
+  if(this.value.length >= 3){
+    checkIcon.style.opacity = '1';
+    checkIcon.style.color = '#10B981';
+  } else {
+    checkIcon.style.opacity = '0.3';
+  }
+});
+
+// Theme switcher: Emerald Hotel SaaS <-> Royal Blue (Screenshot 1:1)
+let isBlueTheme = false;
+document.getElementById('themeToggleBtn').addEventListener('click', function(){
+  isBlueTheme = !isBlueTheme;
+  if(isBlueTheme){
+    document.documentElement.setAttribute('data-theme', 'blue');
+    document.getElementById('themeLabel').textContent = 'Royal Blue Theme';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.getElementById('themeLabel').textContent = 'Emerald Theme';
+  }
+});
+
+// Form Submissions
+function handleSignupSubmit(){
+  const btn = document.getElementById('btnContinue');
+  btn.textContent = 'Creating Account...';
+  btn.style.opacity = '0.7';
+  setTimeout(() => {
+    alert('Account created successfully! Welcome to Ninth / Antigravity PMS.');
+    btn.textContent = 'Continue';
+    btn.style.opacity = '1';
+  }, 900);
+}
+
+function handleLoginSubmit(){
+  alert('Signed in successfully! Redirecting to Antigravity Hospitality Dashboard...');
+  window.location.href = '/';
+}
+
+function handleGoogleAuth(){
+  alert('Connecting to Google Identity Services...');
+}
+</script>
+
+</body>
+</html>
