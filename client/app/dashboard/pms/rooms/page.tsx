@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { pmsApi } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
 import {
   BedDouble,
   DoorOpen,
@@ -52,6 +53,20 @@ export default function RoomsPage() {
 
   useEffect(() => {
     loadData();
+
+    const socket = getSocket();
+    if (!socket) return;
+
+    const onRoomUpdated = (updatedRoom: any) => {
+      setRooms((prev) =>
+        prev.map((r) => (r.id === updatedRoom.id ? { ...r, ...updatedRoom } : r)),
+      );
+    };
+
+    socket.on('events:room:updated', onRoomUpdated);
+    return () => {
+      socket.off('events:room:updated', onRoomUpdated);
+    };
   }, []);
 
   const loadData = async () => {

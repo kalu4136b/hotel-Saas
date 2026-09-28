@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { pmsApi } from '@/lib/api';
+import { getSocket } from '@/lib/socket';
 import {
   Key,
   DoorOpen,
@@ -64,6 +65,25 @@ function FrontDeskContent() {
 
   useEffect(() => {
     loadData();
+
+    const socket = getSocket();
+    if (!socket) return;
+
+    const onRoomUpdated = () => {
+      pmsApi.getRooms().then(setAvailableRooms).catch(console.error);
+    };
+
+    const onFolioUpdated = () => {
+      pmsApi.getReservations().then(setReservations).catch(console.error);
+    };
+
+    socket.on('events:room:updated', onRoomUpdated);
+    socket.on('events:folio:updated', onFolioUpdated);
+
+    return () => {
+      socket.off('events:room:updated', onRoomUpdated);
+      socket.off('events:folio:updated', onFolioUpdated);
+    };
   }, []);
 
   const loadData = async () => {

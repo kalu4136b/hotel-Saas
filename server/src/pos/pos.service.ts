@@ -23,10 +23,14 @@ import { Reservation, ReservationStatus } from '../entities/reservation.entity';
 import { GuestFolio, FolioStatus } from '../entities/guest-folio.entity';
 import { FolioItem, FolioChargeType } from '../entities/folio-item.entity';
 import { Room } from '../entities/room.entity';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class PosService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly eventsGateway: EventsGateway,
+  ) {}
 
   // ================= MASTER DATA =================
   async getCategories(tenantId: string, propertyId: string) {
@@ -494,6 +498,11 @@ export class PosService {
       await queryRunner.commitTransaction();
 
       savedKot.items = kotItems;
+      try {
+        this.eventsGateway.notifyNewKot(propertyId, savedKot);
+      } catch (err) {
+        console.error('Failed to dispatch websocket event for new KOT:', err);
+      }
       return savedKot;
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -537,6 +546,12 @@ export class PosService {
         order.status = OrderStatus.READY;
       }
       await orderRepo.save(order);
+    }
+
+    try {
+      this.eventsGateway.notifyKotStatusUpdate(saved.propertyId, saved);
+    } catch (err) {
+      console.error('Failed to dispatch websocket event for KOT status update:', err);
     }
 
     return saved;
@@ -771,6 +786,18 @@ export class PosService {
       await queryRunner.manager.save(audit);
 
       await queryRunner.commitTransaction();
+
+      if (dto.paymentMethod === PaymentMethod.ROOM_CHARGE) {
+        try {
+          this.eventsGateway.notifyFolioUpdate(propertyId, {
+            orderNumber: order.orderNumber,
+            amount: totalDue,
+            roomId: dto.roomId,
+          });
+        } catch (err) {
+          console.error('Failed to dispatch websocket event for folio charge:', err);
+        }
+      }
 
       return {
         payment: savedPayment,

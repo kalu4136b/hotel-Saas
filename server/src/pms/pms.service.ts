@@ -21,10 +21,14 @@ import {
   AuditLog,
   Property,
 } from '../entities';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class PmsService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly eventsGateway: EventsGateway,
+  ) {}
 
   // ==========================================
   // 1. ROOM TYPES
@@ -119,7 +123,13 @@ export class PmsService {
     if (!room) throw new NotFoundException('Room not found');
 
     room.cleanlinessStatus = status;
-    return roomRepo.save(room);
+    const saved = await roomRepo.save(room);
+    try {
+      this.eventsGateway.notifyRoomStatusUpdate(propertyId, saved);
+    } catch (err) {
+      console.error('Failed to emit room cleanliness update:', err);
+    }
+    return saved;
   }
 
   async updateOccupancyStatus(
@@ -133,7 +143,13 @@ export class PmsService {
     if (!room) throw new NotFoundException('Room not found');
 
     room.status = status;
-    return roomRepo.save(room);
+    const saved = await roomRepo.save(room);
+    try {
+      this.eventsGateway.notifyRoomStatusUpdate(propertyId, saved);
+    } catch (err) {
+      console.error('Failed to emit room occupancy update:', err);
+    }
+    return saved;
   }
 
   // ==========================================
@@ -453,6 +469,16 @@ export class PmsService {
       });
 
       await queryRunner.commitTransaction();
+
+      try {
+        this.eventsGateway.notifyRoomStatusUpdate(propertyId, room);
+        if (folio) {
+          this.eventsGateway.notifyFolioUpdate(propertyId, folio);
+        }
+      } catch (err) {
+        console.error('Failed to dispatch websocket events on check-in:', err);
+      }
+
       return { reservation, folio };
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -532,6 +558,22 @@ export class PmsService {
       });
 
       await queryRunner.commitTransaction();
+
+      try {
+        if (reservation.roomId) {
+          this.eventsGateway.notifyRoomStatusUpdate(propertyId, {
+            id: reservation.roomId,
+            status: RoomStatus.AVAILABLE,
+            cleanlinessStatus: CleanlinessStatus.DIRTY,
+          });
+        }
+        if (folio) {
+          this.eventsGateway.notifyFolioUpdate(propertyId, folio);
+        }
+      } catch (err) {
+        console.error('Failed to dispatch websocket events on check-out:', err);
+      }
+
       return { success: true, reservation };
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -587,7 +629,13 @@ export class PmsService {
 
     folio.totalCharges = Number((Number(folio.totalCharges) + amount).toFixed(2));
     folio.balanceDue = Number((Number(folio.totalCharges) - Number(folio.totalPayments)).toFixed(2));
-    return folioRepo.save(folio);
+    const saved = await folioRepo.save(folio);
+    try {
+      this.eventsGateway.notifyFolioUpdate(propertyId, saved);
+    } catch (err) {
+      console.error('Failed to dispatch websocket event for folio charge:', err);
+    }
+    return saved;
   }
 
   async postFolioPayment(
@@ -622,7 +670,13 @@ export class PmsService {
     if (folio.balanceDue <= 0.05) {
       folio.status = FolioStatus.SETTLED;
     }
-    return folioRepo.save(folio);
+    const saved = await folioRepo.save(folio);
+    try {
+      this.eventsGateway.notifyFolioUpdate(propertyId, saved);
+    } catch (err) {
+      console.error('Failed to dispatch websocket event for folio payment:', err);
+    }
+    return saved;
   }
 
   // ==========================================

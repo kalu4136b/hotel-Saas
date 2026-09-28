@@ -9,6 +9,7 @@ import { PosModule } from './pos/pos.module';
 import { ReportsModule } from './reports/reports.module';
 import { SettingsModule } from './settings/settings.module';
 import { PmsModule } from './pms/pms.module';
+import { EventsModule } from './events/events.module';
 import {
   Tenant,
   Property,
@@ -80,6 +81,7 @@ import {
     ReportsModule,
     SettingsModule,
     PmsModule,
+    EventsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
