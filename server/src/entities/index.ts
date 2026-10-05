@@ -20,3 +20,11 @@ export * from './reservation.entity';
 export * from './guest-folio.entity';
 export * from './folio-item.entity';
 export * from './folio-payment.entity';
+export * from './inventory-item.entity';
+export * from './recipe-item.entity';
+export * from './stock-movement.entity';
+export * from './supplier.entity';
+export * from './purchase-order.entity';
+export * from './bar-item.entity';
+export * from './bar-pour-log.entity';
+

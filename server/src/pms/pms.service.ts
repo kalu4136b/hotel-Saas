@@ -34,7 +34,6 @@ export class PmsService {
   // 1. ROOM TYPES
   // ==========================================
   async getRoomTypes(tenantId: string, propertyId: string) {
-    await this.ensureSeedData(tenantId, propertyId);
     return this.dataSource.getRepository(RoomType).find({
       where: { tenantId, propertyId, isActive: true },
       order: { basePricePerNight: 'ASC' },
@@ -73,7 +72,6 @@ export class PmsService {
   // 2. ROOMS
   // ==========================================
   async getRooms(tenantId: string, propertyId: string) {
-    await this.ensureSeedData(tenantId, propertyId);
     return this.dataSource.getRepository(Room).find({
       where: { tenantId, propertyId },
       relations: { roomType: true },
@@ -200,7 +198,6 @@ export class PmsService {
     status?: string,
     search?: string,
   ) {
-    await this.ensureSeedData(tenantId, propertyId);
     const qb = this.dataSource
       .getRepository(Reservation)
       .createQueryBuilder('res')
@@ -281,7 +278,13 @@ export class PmsService {
       // 3. Compute nights
       const start = new Date(dto.checkInDate);
       const end = new Date(dto.checkOutDate);
-      const diffTime = Math.abs(end.getTime() - start.getTime());
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        throw new BadRequestException('Invalid check-in or check-out date format');
+      }
+      if (end.getTime() <= start.getTime()) {
+        throw new BadRequestException('Check-out date must be strictly after check-in date');
+      }
+      const diffTime = end.getTime() - start.getTime();
       const nightsCount = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
       const nightlyRate = Number(roomType.basePricePerNight);
       const totalAmount = Number((nightsCount * nightlyRate).toFixed(2));
@@ -374,6 +377,12 @@ export class PmsService {
       if (reservation.status === ReservationStatus.CHECKED_IN) {
         throw new BadRequestException('Guest is already checked in');
       }
+      if (reservation.status === ReservationStatus.CHECKED_OUT) {
+        throw new BadRequestException('Reservation has already been checked out');
+      }
+      if (reservation.status === ReservationStatus.CANCELLED) {
+        throw new BadRequestException('Cannot check in a cancelled reservation');
+      }
 
       // Validate Room
       const targetRoomId = roomId || reservation.roomId;
@@ -383,6 +392,24 @@ export class PmsService {
         where: { id: targetRoomId, tenantId, propertyId },
       });
       if (!room) throw new NotFoundException('Assigned room not found');
+
+      if (room.status === RoomStatus.OCCUPIED && reservation.roomId !== room.id) {
+        throw new BadRequestException(`Room ${room.roomNumber} is currently occupied by another guest`);
+      }
+      if (room.status === RoomStatus.MAINTENANCE) {
+        throw new BadRequestException(`Room ${room.roomNumber} is under maintenance and cannot be checked in`);
+      }
+      if (room.status === RoomStatus.OUT_OF_SERVICE) {
+        throw new BadRequestException(`Room ${room.roomNumber} is out of service`);
+      }
+      if (
+        room.cleanlinessStatus === CleanlinessStatus.DIRTY ||
+        room.cleanlinessStatus === CleanlinessStatus.IN_CLEANING
+      ) {
+        throw new BadRequestException(
+          `Room ${room.roomNumber} is currently ${room.cleanlinessStatus}. Please inspect and mark CLEAN before checking in.`,
+        );
+      }
 
       // Update Room to OCCUPIED
       room.status = RoomStatus.OCCUPIED;
@@ -629,6 +656,9 @@ export class PmsService {
 
     folio.totalCharges = Number((Number(folio.totalCharges) + amount).toFixed(2));
     folio.balanceDue = Number((Number(folio.totalCharges) - Number(folio.totalPayments)).toFixed(2));
+    if (folio.balanceDue > 0.05 && folio.status === FolioStatus.SETTLED) {
+      folio.status = FolioStatus.OPEN;
+    }
     const saved = await folioRepo.save(folio);
     try {
       this.eventsGateway.notifyFolioUpdate(propertyId, saved);
@@ -677,292 +707,5 @@ export class PmsService {
       console.error('Failed to dispatch websocket event for folio payment:', err);
     }
     return saved;
-  }
-
-  // ==========================================
-  // 8. ENSURE SEED DATA (Zero Dummy Data, Real MySQL Seeding)
-  // ==========================================
-  private async ensureSeedData(tenantId: string, propertyId: string) {
-    const roomTypeRepo = this.dataSource.getRepository(RoomType);
-    const roomRepo = this.dataSource.getRepository(Room);
-    const existingCount = await roomTypeRepo.count({ where: { propertyId } });
-    const existingRooms = await roomRepo.count({ where: { propertyId } });
-    if (existingCount > 0 || existingRooms > 0) return;
-
-    // Seed Real Hotel Room Types matching the UI template
-    const villaType = await roomTypeRepo.save(
-      roomTypeRepo.create({
-        tenantId,
-        propertyId,
-        name: 'Ocean Villa',
-        code: 'VILLA',
-        basePricePerNight: 340.0,
-        maxOccupancy: 4,
-        bedType: 'King Bed + Daybed',
-        amenities: 'Private Plunge Pool, Panoramic Ocean View, Free Minibar, Espresso Bar, 24/7 Butler',
-        description: 'Exquisite beachfront villa with private plunge pool and direct turquoise sea views.',
-      }),
-    );
-
-    const suiteType = await roomTypeRepo.save(
-      roomTypeRepo.create({
-        tenantId,
-        propertyId,
-        name: 'Deluxe Suite',
-        code: 'SUITE',
-        basePricePerNight: 290.0,
-        maxOccupancy: 3,
-        bedType: 'King Bed',
-        amenities: 'Private Balcony, Hydro Spa Tub, Smart TV, Rainforest Shower, High-speed Fiber WiFi',
-        description: 'Spacious contemporary suite featuring luxury marble bathroom and sunset views.',
-      }),
-    );
-
-    const loftType = await roomTypeRepo.save(
-      roomTypeRepo.create({
-        tenantId,
-        propertyId,
-        name: 'Mountain Loft',
-        code: 'LOFT',
-        basePricePerNight: 230.0,
-        maxOccupancy: 2,
-        bedType: 'Queen Bed',
-        amenities: 'Scenic Forest View, Balcony Lounge, Organic Bath Amenities, Work Desk',
-        description: 'Peaceful loft retreat immersed in lush tropical rainforest canopy.',
-      }),
-    );
-
-    const bungalowType = await roomTypeRepo.save(
-      roomTypeRepo.create({
-        tenantId,
-        propertyId,
-        name: 'Garden Bungalow',
-        code: 'BUNGALOW',
-        basePricePerNight: 180.0,
-        maxOccupancy: 2,
-        bedType: 'Queen Bed',
-        amenities: 'Private Garden Patio, Hammock, Outdoor Shower, Artisan Tea Selection',
-        description: 'Charming standalone bungalow nestled in exotic botanical gardens.',
-      }),
-    );
-
-    // Seed Physical Rooms
-    const roomsToSeed = [
-      { num: '304', floor: 3, type: villaType, status: RoomStatus.OCCUPIED, clean: CleanlinessStatus.CLEAN },
-      { num: '308', floor: 3, type: villaType, status: RoomStatus.AVAILABLE, clean: CleanlinessStatus.CLEAN },
-      { num: '102', floor: 1, type: suiteType, status: RoomStatus.AVAILABLE, clean: CleanlinessStatus.INSPECTED },
-      { num: '108', floor: 1, type: suiteType, status: RoomStatus.RESERVED, clean: CleanlinessStatus.CLEAN },
-      { num: '205', floor: 2, type: loftType, status: RoomStatus.OCCUPIED, clean: CleanlinessStatus.IN_CLEANING },
-      { num: '208', floor: 2, type: loftType, status: RoomStatus.AVAILABLE, clean: CleanlinessStatus.CLEAN },
-      { num: '12', floor: 1, type: bungalowType, status: RoomStatus.AVAILABLE, clean: CleanlinessStatus.CLEAN },
-      { num: '14', floor: 1, type: bungalowType, status: RoomStatus.AVAILABLE, clean: CleanlinessStatus.DIRTY },
-    ];
-
-    const seededRooms: Room[] = [];
-    for (const r of roomsToSeed) {
-      const room = await roomRepo.save(
-        roomRepo.create({
-          tenantId,
-          propertyId,
-          roomTypeId: r.type.id,
-          roomNumber: r.num,
-          floor: r.floor,
-          status: r.status,
-          cleanlinessStatus: r.clean,
-          notes: `Building A - Level ${r.floor}`,
-        }),
-      );
-      seededRooms.push(room);
-    }
-
-    // Seed Guests & Real Initial Reservations matching template
-    const guestRepo = this.dataSource.getRepository(Guest);
-    const resRepo = this.dataSource.getRepository(Reservation);
-
-    const guest1 = await guestRepo.save(
-      guestRepo.create({
-        tenantId,
-        propertyId,
-        fullName: 'Angela Vance',
-        email: 'angela.vance@example.com',
-        phone: '+1 555-0142',
-        passportOrId: 'US-9823412',
-        nationality: 'United States',
-        vipLevel: 'PLATINUM',
-      }),
-    );
-
-    const guest2 = await guestRepo.save(
-      guestRepo.create({
-        tenantId,
-        propertyId,
-        fullName: 'James Miller',
-        email: 'james.miller@example.com',
-        phone: '+44 7700 900142',
-        passportOrId: 'UK-7629103',
-        nationality: 'United Kingdom',
-        vipLevel: 'STANDARD',
-      }),
-    );
-
-    const guest3 = await guestRepo.save(
-      guestRepo.create({
-        tenantId,
-        propertyId,
-        fullName: 'Pamela Beesly',
-        email: 'pam.beesly@example.com',
-        phone: '+1 555-0188',
-        passportOrId: 'US-6510923',
-        nationality: 'United States',
-        vipLevel: 'VIP',
-      }),
-    );
-
-    // Create Initial Reservations
-    const room304 = seededRooms.find((r) => r.roomNumber === '304');
-    const room108 = seededRooms.find((r) => r.roomNumber === '108');
-    const room205 = seededRooms.find((r) => r.roomNumber === '205');
-
-    // 1. Angela Vance - Checked in to 304
-    const res1 = await resRepo.save(
-      resRepo.create({
-        tenantId,
-        propertyId,
-        reservationNumber: 'BK-9041',
-        guestId: guest1.id,
-        roomTypeId: villaType.id,
-        roomId: room304?.id,
-        checkInDate: '2026-09-25',
-        checkOutDate: '2026-09-29',
-        nightsCount: 4,
-        adultsCount: 2,
-        nightlyRate: 340.0,
-        totalAmount: 1360.0,
-        depositPaid: 500.0,
-        status: ReservationStatus.CHECKED_IN,
-        source: 'DIRECT',
-        specialRequests: 'High floor, late arrival, honeymoon setup',
-      }),
-    );
-
-    // Initial Folio for Angela
-    const folioRepo = this.dataSource.getRepository(GuestFolio);
-    const folio1 = await folioRepo.save(
-      folioRepo.create({
-        tenantId,
-        propertyId,
-        reservationId: res1.id,
-        guestId: guest1.id,
-        roomId: room304?.id,
-        totalCharges: 1496.0, // 1360 + 10% tax
-        totalPayments: 500.0,
-        balanceDue: 996.0,
-        status: FolioStatus.OPEN,
-      }),
-    );
-
-    await this.dataSource.getRepository(FolioItem).save([
-      {
-        folioId: folio1.id,
-        chargeType: FolioChargeType.ROOM_CHARGE,
-        description: 'Lodging (4 Nights @ $340.00/night)',
-        amount: 1360.0,
-        referenceId: 'BK-9041',
-      },
-      {
-        folioId: folio1.id,
-        chargeType: FolioChargeType.TAX,
-        description: 'Hospitality Lodging Tax (10%)',
-        amount: 136.0,
-        referenceId: 'BK-9041',
-      },
-    ]);
-
-    await this.dataSource.getRepository(FolioPayment).save({
-      folioId: folio1.id,
-      paymentMethod: 'CARD',
-      amount: 500.0,
-      receiptNumber: 'DEP-BK-9041',
-    });
-
-    // 2. James Miller - Confirmed for 108
-    await resRepo.save(
-      resRepo.create({
-        tenantId,
-        propertyId,
-        reservationNumber: 'BK-9042',
-        guestId: guest2.id,
-        roomTypeId: suiteType.id,
-        roomId: room108?.id,
-        checkInDate: '2026-09-27',
-        checkOutDate: '2026-09-29',
-        nightsCount: 2,
-        adultsCount: 2,
-        nightlyRate: 290.0,
-        totalAmount: 580.0,
-        depositPaid: 200.0,
-        status: ReservationStatus.CONFIRMED,
-        source: 'DIRECT',
-      }),
-    );
-
-    // 3. Pamela Beesly - Checked in to 205
-    const res3 = await resRepo.save(
-      resRepo.create({
-        tenantId,
-        propertyId,
-        reservationNumber: 'BK-9043',
-        guestId: guest3.id,
-        roomTypeId: loftType.id,
-        roomId: room205?.id,
-        checkInDate: '2026-09-26',
-        checkOutDate: '2026-09-29',
-        nightsCount: 3,
-        adultsCount: 1,
-        nightlyRate: 230.0,
-        totalAmount: 690.0,
-        depositPaid: 690.0,
-        status: ReservationStatus.CHECKED_IN,
-        source: 'CORPORATE',
-      }),
-    );
-
-    const folio3 = await folioRepo.save(
-      folioRepo.create({
-        tenantId,
-        propertyId,
-        reservationId: res3.id,
-        guestId: guest3.id,
-        roomId: room205?.id,
-        totalCharges: 759.0, // 690 + 10%
-        totalPayments: 759.0,
-        balanceDue: 0.0,
-        status: FolioStatus.SETTLED,
-      }),
-    );
-
-    await this.dataSource.getRepository(FolioItem).save([
-      {
-        folioId: folio3.id,
-        chargeType: FolioChargeType.ROOM_CHARGE,
-        description: 'Lodging (3 Nights @ $230.00/night)',
-        amount: 690.0,
-        referenceId: 'BK-9043',
-      },
-      {
-        folioId: folio3.id,
-        chargeType: FolioChargeType.TAX,
-        description: 'Hospitality Lodging Tax (10%)',
-        amount: 69.0,
-        referenceId: 'BK-9043',
-      },
-    ]);
-
-    await this.dataSource.getRepository(FolioPayment).save({
-      folioId: folio3.id,
-      paymentMethod: 'CARD',
-      amount: 759.0,
-      receiptNumber: 'DEP-BK-9043',
-    });
   }
 }

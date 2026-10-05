@@ -17,10 +17,8 @@ import {
 import { Property } from '../entities/property.entity';
 import { User, UserRole } from '../entities/user.entity';
 import { POSOutlet } from '../entities/pos-outlet.entity';
-import { Category } from '../entities/category.entity';
-import { Product } from '../entities/product.entity';
-import { DiningTable, TableStatus } from '../entities/dining-table.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import { resolveUserPermissions } from './permissions';
 
 @Injectable()
 export class AuthService {
@@ -62,6 +60,14 @@ export class AuthService {
         slug: uniqueSlug,
         status: TenantStatus.ACTIVE,
         subscriptionTier: SubscriptionTier.STARTER,
+        subscriptionPlan: 'HOSPITALITY_PRO',
+        modules: [
+          'pos', 'orders', 'tables', 'menu', 'kitchen',
+          'pms_hub', 'pms_rooms', 'pms_reservations', 'pms_front_desk',
+          'inventory', 'reports', 'settings', 'dashboard'
+        ],
+        planPrice: 89.0,
+        billingCycle: 'MONTHLY',
       });
       const savedTenant = await queryRunner.manager.save(tenant);
 
@@ -107,109 +113,7 @@ export class AuthService {
       });
       const savedUser = await queryRunner.manager.save(user);
 
-      // 7. Seed Initial Menu Categories
-      const categoriesData = [
-        { name: 'Beverages', sortOrder: 1, description: 'Coffee, tea, juices & refreshments' },
-        { name: 'Appetizers', sortOrder: 2, description: 'Starters, soups & finger food' },
-        { name: 'Main Courses', sortOrder: 3, description: 'Chef special gourmet dishes' },
-        { name: 'Desserts', sortOrder: 4, description: 'Sweet treats & pastries' },
-      ];
 
-      const savedCategories: Category[] = [];
-      for (const catData of categoriesData) {
-        const cat = queryRunner.manager.create(Category, {
-          tenantId: savedTenant.id,
-          propertyId: savedProperty.id,
-          outletId: savedOutlet.id,
-          name: catData.name,
-          description: catData.description,
-          sortOrder: catData.sortOrder,
-          isActive: true,
-        });
-        savedCategories.push(await queryRunner.manager.save(cat));
-      }
-
-      // 8. Seed Initial Products (Real Menu Items)
-      const bevCategory = savedCategories.find((c) => c.name === 'Beverages')!;
-      const mainCategory = savedCategories.find((c) => c.name === 'Main Courses')!;
-      const dessertCategory = savedCategories.find((c) => c.name === 'Desserts')!;
-
-      const initialProducts = [
-        {
-          name: 'Signature Angus Burger',
-          sku: 'M-001',
-          price: 15.5,
-          categoryId: mainCategory.id,
-          description: 'Brioche bun, prime Angus beef, cheddar, caramelized onions, fries',
-        },
-        {
-          name: 'Classic Margherita Pizza',
-          sku: 'M-002',
-          price: 13.0,
-          categoryId: mainCategory.id,
-          description: 'San Marzano tomatoes, fresh buffalo mozzarella, fragrant basil',
-        },
-        {
-          name: 'Iced Caramel Macchiato',
-          sku: 'B-001',
-          price: 5.5,
-          categoryId: bevCategory.id,
-          description: 'Fresh espresso, velvety milk, vanilla syrup, caramel drizzle',
-        },
-        {
-          name: 'Tropical Mango Smoothie',
-          sku: 'B-002',
-          price: 6.0,
-          categoryId: bevCategory.id,
-          description: 'Blended fresh mango, Greek yogurt, wildflower honey',
-        },
-        {
-          name: 'Warm Belgian Chocolate Lava Cake',
-          sku: 'D-001',
-          price: 7.5,
-          categoryId: dessertCategory.id,
-          description: 'Rich dark molten core, vanilla bean gelato',
-        },
-      ];
-
-      for (const prodData of initialProducts) {
-        const prod = queryRunner.manager.create(Product, {
-          tenantId: savedTenant.id,
-          propertyId: savedProperty.id,
-          outletId: savedOutlet.id,
-          categoryId: prodData.categoryId,
-          name: prodData.name,
-          sku: prodData.sku,
-          price: prodData.price,
-          taxRate: 10.0,
-          description: prodData.description,
-          isActive: true,
-        });
-        await queryRunner.manager.save(prod);
-      }
-
-      // 9. Seed Initial Dining Tables
-      const tablesData = [
-        { tableNumber: 'Table 1', capacity: 2 },
-        { tableNumber: 'Table 2', capacity: 4 },
-        { tableNumber: 'Table 3', capacity: 4 },
-        { tableNumber: 'Table 4', capacity: 6 },
-        { tableNumber: 'Patio 1', capacity: 4 },
-        { tableNumber: 'Patio 2', capacity: 2 },
-      ];
-
-      for (const tbl of tablesData) {
-        const diningTable = queryRunner.manager.create(DiningTable, {
-          tenantId: savedTenant.id,
-          propertyId: savedProperty.id,
-          outletId: savedOutlet.id,
-          tableNumber: tbl.tableNumber,
-          capacity: tbl.capacity,
-          status: TableStatus.AVAILABLE,
-          isActive: true,
-        });
-        await queryRunner.manager.save(diningTable);
-      }
 
       // 10. Audit Log Entry
       const audit = queryRunner.manager.create(AuditLog, {
@@ -288,10 +192,8 @@ export class AuthService {
     }
 
     // Update lastLoginAt
-    user.lastLoginAt = new Date();
-    await this.dataSource.getRepository(User).save(user);
-
-    const token = this.generateToken(user, user.tenantId, user.propertyId);
+    const permissions = resolveUserPermissions(user);
+    const token = this.generateToken(user, user.tenantId, user.propertyId, permissions);
 
     return {
       accessToken: token,
@@ -301,20 +203,33 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        permissions,
         avatarUrl: user.avatarUrl,
       },
-      tenant: {
-        id: user.tenant?.id || user.tenantId,
-        name: user.tenant?.name,
-        slug: user.tenant?.slug,
-        subscriptionTier: user.tenant?.subscriptionTier,
-      },
-      property: {
-        id: user.property?.id || user.propertyId,
-        name: user.property?.name,
-        currency: user.property?.currency || 'USD',
-        defaultTaxRate: user.property?.defaultTaxRate || 10.0,
-      },
+      tenant: user.tenant
+        ? {
+            id: user.tenant.id,
+            name: user.tenant.name,
+            slug: user.tenant.slug,
+            status: user.tenant.status,
+            subscriptionTier: user.tenant.subscriptionTier,
+            subscriptionPlan: user.tenant.subscriptionPlan || 'CUSTOM',
+            modules: user.tenant.modules || [],
+            planPrice: user.tenant.planPrice,
+            billingCycle: user.tenant.billingCycle,
+            maxRooms: user.tenant.maxRooms,
+            maxStaff: user.tenant.maxStaff,
+            expiresAt: user.tenant.expiresAt,
+          }
+        : null,
+      property: user.property
+        ? {
+            id: user.property.id,
+            name: user.property.name,
+            currency: user.property.currency || 'USD',
+            defaultTaxRate: user.property.defaultTaxRate || 10.0,
+          }
+        : null,
     };
   }
 
@@ -328,6 +243,8 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    const permissions = resolveUserPermissions(user);
+
     return {
       user: {
         id: user.id,
@@ -336,6 +253,7 @@ export class AuthService {
         fullName: user.fullName,
         phone: user.phone,
         role: user.role,
+        permissions,
         avatarUrl: user.avatarUrl,
       },
       tenant: user.tenant,
@@ -343,7 +261,8 @@ export class AuthService {
     };
   }
 
-  private generateToken(user: User, tenantId: string, propertyId?: string): string {
+  private generateToken(user: User, tenantId: string, propertyId?: string, permissions?: string[]): string {
+    const effectivePermissions = permissions || resolveUserPermissions(user);
     const payload = {
       sub: user.id,
       username: user.username,
@@ -351,6 +270,7 @@ export class AuthService {
       tenantId: tenantId,
       propertyId: propertyId || user.propertyId,
       role: user.role,
+      permissions: effectivePermissions,
     };
 
     return this.jwtService.sign(payload);

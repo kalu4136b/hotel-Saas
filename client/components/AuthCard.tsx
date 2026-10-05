@@ -74,12 +74,16 @@ export default function AuthCard({ initialMode = 'signup' }: AuthCardProps) {
     setLoading(true);
 
     try {
-      await authApi.login({
+      const res = await authApi.login({
         usernameOrEmail,
         password: loginPassword,
       });
 
-      router.push('/dashboard');
+      if (res.user?.role === 'SUPER_ADMIN') {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed. Invalid username/email or password.');
     } finally {
@@ -499,6 +503,29 @@ export default function AuthCard({ initialMode = 'signup' }: AuthCardProps) {
               <label htmlFor="rememberMeCheckbox" className="cursor-pointer">
                 Keep me signed in on this workstation
               </label>
+            </div>
+
+            {/* Super Admin Quick Shortcut */}
+            <div className="p-2.5 rounded-xl bg-[#0F172A]/5 border border-[#E2E8F0] flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-bold text-[#0F172A] flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]"></span>
+                  Company Platform Manager
+                </div>
+                <div className="text-[9.5px] text-[#64748B]">
+                  Super Admin: <code className="text-[#0F172A] font-semibold">superadmin</code> / <code className="text-[#0F172A] font-semibold">SuperAdmin123!</code>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsernameOrEmail('superadmin');
+                  setLoginPassword('SuperAdmin123!');
+                }}
+                className="px-2 py-1 bg-white hover:bg-[#F1F5F9] border border-[#CBD5E1] text-[10px] font-bold rounded-lg text-[#0F172A] transition"
+              >
+                Auto-Fill
+              </button>
             </div>
 
             {/* Submit Button */}

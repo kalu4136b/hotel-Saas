@@ -23,7 +23,15 @@ import {
   X,
   Shield,
   Search,
+  KeyRound,
+  SlidersHorizontal,
+  Check,
 } from 'lucide-react';
+import {
+  SYSTEM_PERMISSIONS,
+  DEFAULT_ROLE_PERMISSIONS,
+  getTenantModules,
+} from '@/lib/permissions';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'property' | 'staff' | 'audit'>('property');
@@ -53,7 +61,13 @@ export default function SettingsPage() {
     phone: '',
     password: '',
     role: 'CASHIER' as 'MANAGER' | 'CASHIER' | 'KITCHEN',
+    permissions: DEFAULT_ROLE_PERMISSIONS.CASHIER,
   });
+
+  // Edit Staff Modal State
+  const [editStaffModalOpen, setEditStaffModalOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<any>(null);
+  const [updatingStaff, setUpdatingStaff] = useState(false);
 
   // Audit Logs State
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -133,6 +147,7 @@ export default function SettingsPage() {
         phone: '',
         password: '',
         role: 'CASHIER',
+        permissions: DEFAULT_ROLE_PERMISSIONS.CASHIER,
       });
       setFeedbackMessage({
         type: 'success',
@@ -149,6 +164,38 @@ export default function SettingsPage() {
       setCreatingStaff(false);
     }
   };
+
+  const handleUpdateStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff) return;
+    setUpdatingStaff(true);
+    setFeedbackMessage(null);
+    try {
+      await settingsApi.updateUser(editingStaff.id, {
+        fullName: editingStaff.fullName,
+        phone: editingStaff.phone,
+        role: editingStaff.role,
+        permissions: editingStaff.permissions,
+        password: editingStaff.password ? editingStaff.password : undefined,
+      });
+      setEditStaffModalOpen(false);
+      setEditingStaff(null);
+      setFeedbackMessage({
+        type: 'success',
+        text: `Permissions & details for "${editingStaff.username}" updated successfully.`,
+      });
+      const users = await settingsApi.getUsers();
+      setStaffList(users);
+    } catch (err: any) {
+      setFeedbackMessage({
+        type: 'error',
+        text: err.message || 'Failed to update staff permissions',
+      });
+    } finally {
+      setUpdatingStaff(false);
+    }
+  };
+
 
   const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
     try {
@@ -461,6 +508,7 @@ export default function SettingsPage() {
                       <th className="px-5 py-3.5">User</th>
                       <th className="px-5 py-3.5">Username</th>
                       <th className="px-5 py-3.5">Assigned Role</th>
+                      <th className="px-5 py-3.5">Allowed Access Modules</th>
                       <th className="px-5 py-3.5">Account Status</th>
                       <th className="px-5 py-3.5">Created Date</th>
                       <th className="px-5 py-3.5 text-right">Actions</th>
@@ -469,13 +517,18 @@ export default function SettingsPage() {
                   <tbody className="divide-y divide-[#F1F5F9] font-medium text-[#334155]">
                     {staffList.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-5 py-10 text-center text-[#94A3B8]">
+                        <td colSpan={7} className="px-5 py-10 text-center text-[#94A3B8]">
                           {loading ? 'Loading staff roster...' : 'No staff accounts found.'}
                         </td>
                       </tr>
                     ) : (
                       staffList.map((member) => {
                         const isSelf = member.id === currentUser?.id;
+                        const perms: string[] =
+                          member.permissions && member.permissions.length > 0
+                            ? member.permissions
+                            : DEFAULT_ROLE_PERMISSIONS[member.role] || [];
+
                         return (
                           <tr key={member.id} className="hover:bg-[#F8FAFC] transition">
                             <td className="px-5 py-3.5">
@@ -502,7 +555,7 @@ export default function SettingsPage() {
                             <td className="px-5 py-3.5">
                               <span
                                 className={`text-[10.5px] px-2 py-0.5 rounded-md font-bold uppercase ${
-                                  member.role === 'ADMIN'
+                                  member.role === 'ADMIN' || member.role === 'TENANT_ADMIN'
                                     ? 'bg-purple-50 text-purple-700 border border-purple-200'
                                     : member.role === 'MANAGER'
                                     ? 'bg-blue-50 text-blue-700 border border-blue-200'
@@ -513,6 +566,28 @@ export default function SettingsPage() {
                               >
                                 {member.role}
                               </span>
+                            </td>
+                            <td className="px-5 py-3.5 max-w-xs">
+                              {member.role === 'TENANT_ADMIN' || member.role === 'ADMIN' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
+                                  Full System Access (All Modules)
+                                </span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {perms.map((permId) => {
+                                    const pItem = SYSTEM_PERMISSIONS.find((p) => p.id === permId);
+                                    return (
+                                      <span
+                                        key={permId}
+                                        className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-[#F1F5F9] text-[#0F172A] border border-[#CBD5E1]"
+                                        title={pItem?.description}
+                                      >
+                                        {pItem?.label || permId}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </td>
                             <td className="px-5 py-3.5">
                               <span
@@ -535,22 +610,37 @@ export default function SettingsPage() {
                                 ? new Date(member.createdAt).toLocaleDateString()
                                 : '—'}
                             </td>
-                            <td className="px-5 py-3.5 text-right">
+                            <td className="px-5 py-3.5 text-right whitespace-nowrap space-x-1.5">
                               {isSelf ? (
                                 <span className="text-[11px] text-[#94A3B8] italic">
                                   Current User
                                 </span>
                               ) : (
-                                <button
-                                  onClick={() => handleToggleStatus(member.id, member.isActive)}
-                                  className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition ${
-                                    member.isActive
-                                      ? 'text-rose-600 hover:bg-rose-50'
-                                      : 'text-[#00C48C] hover:bg-[#ECFDF5]'
-                                  }`}
-                                >
-                                  {member.isActive ? 'Deactivate' : 'Activate'}
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setEditingStaff({
+                                        ...member,
+                                        permissions: perms,
+                                      });
+                                      setEditStaffModalOpen(true);
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold text-[#0F172A] bg-[#F1F5F9] hover:bg-[#E2E8F0] transition inline-flex items-center gap-1"
+                                  >
+                                    <KeyRound className="w-3 h-3 text-[#00C48C]" />
+                                    <span>Edit Access</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleToggleStatus(member.id, member.isActive)}
+                                    className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition ${
+                                      member.isActive
+                                        ? 'text-rose-600 hover:bg-rose-50'
+                                        : 'text-[#00C48C] hover:bg-[#ECFDF5]'
+                                    }`}
+                                  >
+                                    {member.isActive ? 'Deactivate' : 'Activate'}
+                                  </button>
+                                </>
                               )}
                             </td>
                           </tr>
@@ -643,7 +733,7 @@ export default function SettingsPage() {
         {/* Modal: Add New Staff Member */}
         {addStaffModalOpen && (
           <div className="fixed inset-0 bg-[#0F172A]/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-150">
+            <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 animate-in fade-in zoom-in duration-150">
               <div className="flex items-center justify-between pb-4 border-b border-[#F1F5F9] mb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-[#00C48C]/10 text-[#00C48C] flex items-center justify-center">
@@ -651,7 +741,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-[#0F172A]">Add New Staff Account</h3>
-                    <p className="text-[11px] text-[#64748B]">Create credentials with role-based access.</p>
+                    <p className="text-[11px] text-[#64748B]">Create credentials with tailored module permissions.</p>
                   </div>
                 </div>
                 <button
@@ -671,7 +761,7 @@ export default function SettingsPage() {
                     value={newStaff.fullName}
                     onChange={(e) => setNewStaff({ ...newStaff, fullName: e.target.value })}
                     className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:border-[#00C48C]"
-                    placeholder="e.g. Somchai Prasert"
+                    placeholder="e.g. David Beckham"
                   />
                 </div>
 
@@ -684,44 +774,162 @@ export default function SettingsPage() {
                       value={newStaff.username}
                       onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })}
                       className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:border-[#00C48C]"
-                      placeholder="somchai_pos"
+                      placeholder="david_cashier"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-[#334155] mb-1">Role</label>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">Role Preset</label>
                     <select
                       value={newStaff.role}
-                      onChange={(e: any) => setNewStaff({ ...newStaff, role: e.target.value })}
+                      onChange={(e: any) => {
+                        const role = e.target.value;
+                        setNewStaff({
+                          ...newStaff,
+                          role,
+                          permissions: DEFAULT_ROLE_PERMISSIONS[role] || [],
+                        });
+                      }}
                       className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:border-[#00C48C]"
                     >
-                      <option value="CASHIER">CASHIER (POS Sales)</option>
+                      <option value="CASHIER">CASHIER (POS & Tables)</option>
                       <option value="KITCHEN">KITCHEN (KDS Station)</option>
-                      <option value="MANAGER">MANAGER (Full Ops)</option>
+                      <option value="MANAGER">MANAGER (Operations Lead)</option>
                     </select>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-[#334155] mb-1">Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={newStaff.email}
-                    onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:border-[#00C48C]"
-                    placeholder="somchai@hotel.com"
-                  />
+                {/* RBAC Custom Permissions Grid */}
+                <div className="p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-[#0F172A] block">
+                        Assigned Module Permissions
+                      </span>
+                      <span className="text-[10px] text-[#64748B]">
+                        Select only the relevant modules this staff member can access.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewStaff((prev) => ({
+                            ...prev,
+                            permissions: DEFAULT_ROLE_PERMISSIONS[prev.role] || [],
+                          }))
+                        }
+                        className="px-2 py-0.5 rounded bg-white border border-[#CBD5E1] text-[#0F172A] hover:bg-[#F1F5F9] font-bold"
+                      >
+                        Role Default
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNewStaff((prev) => ({
+                            ...prev,
+                            permissions: SYSTEM_PERMISSIONS.map((p) => p.id),
+                          }))
+                        }
+                        className="px-2 py-0.5 rounded bg-white border border-[#CBD5E1] text-[#0F172A] hover:bg-[#F1F5F9] font-bold"
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewStaff((prev) => ({ ...prev, permissions: [] }))}
+                        className="px-2 py-0.5 rounded bg-white border border-[#CBD5E1] text-[#0F172A] hover:bg-[#F1F5F9] font-bold"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {(['POS & Dining', 'PMS & Lodging', 'Operations & Admin'] as const).map(
+                      (cat) => {
+                        const tenantModules = getTenantModules();
+                        const catPerms = SYSTEM_PERMISSIONS.filter(
+                          (p) => p.category === cat && tenantModules.includes(p.id),
+                        );
+                        if (catPerms.length === 0) return null;
+                        return (
+                          <div key={cat} className="space-y-1">
+                            <span className="text-[9.5px] font-black uppercase tracking-wider text-[#94A3B8] block px-1">
+                              {cat}
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              {catPerms.map((perm) => {
+                                const isSelected = newStaff.permissions.includes(perm.id);
+                                return (
+                                  <label
+                                    key={perm.id}
+                                    className={`flex items-start gap-2 p-2 rounded-xl border text-left cursor-pointer transition ${
+                                      isSelected
+                                        ? 'bg-white border-[#00C48C] shadow-2xs'
+                                        : 'bg-white/60 border-[#E2E8F0] hover:bg-white text-[#64748B]'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setNewStaff((prev) => ({
+                                            ...prev,
+                                            permissions: [...prev.permissions, perm.id],
+                                          }));
+                                        } else {
+                                          setNewStaff((prev) => ({
+                                            ...prev,
+                                            permissions: prev.permissions.filter(
+                                              (x) => x !== perm.id,
+                                            ),
+                                          }));
+                                        }
+                                      }}
+                                      className="mt-0.5 accent-[#00C48C] rounded"
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-[11px] font-bold text-[#0F172A] leading-tight">
+                                        {perm.label}
+                                      </div>
+                                      <div className="text-[9.5px] text-[#64748B] leading-tight truncate">
+                                        {perm.description}
+                                      </div>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-[#334155] mb-1">Phone (Optional)</label>
-                  <input
-                    type="text"
-                    value={newStaff.phone}
-                    onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:border-[#00C48C]"
-                    placeholder="+66 81 234 5678"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">Email</label>
+                    <input
+                      type="email"
+                      required
+                      value={newStaff.email}
+                      onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:border-[#00C48C]"
+                      placeholder="staff@hotel.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">Phone (Optional)</label>
+                    <input
+                      type="text"
+                      value={newStaff.phone}
+                      onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:border-[#00C48C]"
+                      placeholder="+1 555-0142"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -751,6 +959,235 @@ export default function SettingsPage() {
                     className="px-4 py-2 bg-[#00C48C] hover:bg-[#00B07D] text-white text-xs font-bold rounded-xl transition shadow-xs disabled:opacity-50"
                   >
                     {creatingStaff ? 'Creating...' : 'Create Staff User'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Edit Staff Member Permissions */}
+        {editStaffModalOpen && editingStaff && (
+          <div className="fixed inset-0 bg-[#0F172A]/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 animate-in fade-in zoom-in duration-150">
+              <div className="flex items-center justify-between pb-4 border-b border-[#F1F5F9] mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#00C48C]/10 text-[#00C48C] flex items-center justify-center">
+                    <KeyRound className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#0F172A]">
+                      Edit Staff Access: @{editingStaff.username}
+                    </h3>
+                    <p className="text-[11px] text-[#64748B]">
+                      Customize allowed modules and workstation permissions for {editingStaff.fullName}.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setEditStaffModalOpen(false);
+                    setEditingStaff(null);
+                  }}
+                  className="text-[#94A3B8] hover:text-[#0F172A] p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateStaff} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingStaff.fullName || ''}
+                      onChange={(e) =>
+                        setEditingStaff({ ...editingStaff, fullName: e.target.value })
+                      }
+                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:border-[#00C48C]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">Role Preset</label>
+                    <select
+                      value={editingStaff.role}
+                      onChange={(e: any) => {
+                        const role = e.target.value;
+                        setEditingStaff({
+                          ...editingStaff,
+                          role,
+                          permissions: DEFAULT_ROLE_PERMISSIONS[role] || [],
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:border-[#00C48C]"
+                    >
+                      <option value="CASHIER">CASHIER (POS & Tables)</option>
+                      <option value="KITCHEN">KITCHEN (KDS Station)</option>
+                      <option value="MANAGER">MANAGER (Operations Lead)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Permissions Checkbox Grid */}
+                <div className="p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-[#0F172A] block">
+                        Allowed Station Permissions
+                      </span>
+                      <span className="text-[10px] text-[#64748B]">
+                        Staff member will only see and access these checked modules.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditingStaff((prev: any) => ({
+                            ...prev,
+                            permissions: DEFAULT_ROLE_PERMISSIONS[prev.role] || [],
+                          }))
+                        }
+                        className="px-2 py-0.5 rounded bg-white border border-[#CBD5E1] text-[#0F172A] hover:bg-[#F1F5F9] font-bold"
+                      >
+                        Role Default
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditingStaff((prev: any) => ({
+                            ...prev,
+                            permissions: SYSTEM_PERMISSIONS.map((p) => p.id),
+                          }))
+                        }
+                        className="px-2 py-0.5 rounded bg-white border border-[#CBD5E1] text-[#0F172A] hover:bg-[#F1F5F9] font-bold"
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditingStaff((prev: any) => ({ ...prev, permissions: [] }))
+                        }
+                        className="px-2 py-0.5 rounded bg-white border border-[#CBD5E1] text-[#0F172A] hover:bg-[#F1F5F9] font-bold"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {(['POS & Dining', 'PMS & Lodging', 'Operations & Admin'] as const).map(
+                      (cat) => {
+                        const tenantModules = getTenantModules();
+                        const catPerms = SYSTEM_PERMISSIONS.filter(
+                          (p) => p.category === cat && tenantModules.includes(p.id),
+                        );
+                        if (catPerms.length === 0) return null;
+                        return (
+                          <div key={cat} className="space-y-1">
+                            <span className="text-[9.5px] font-black uppercase tracking-wider text-[#94A3B8] block px-1">
+                              {cat}
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              {catPerms.map((perm) => {
+                                const isSelected = (editingStaff.permissions || []).includes(
+                                  perm.id,
+                                );
+                                return (
+                                  <label
+                                    key={perm.id}
+                                    className={`flex items-start gap-2 p-2 rounded-xl border text-left cursor-pointer transition ${
+                                      isSelected
+                                        ? 'bg-white border-[#00C48C] shadow-2xs'
+                                        : 'bg-white/60 border-[#E2E8F0] hover:bg-white text-[#64748B]'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        const current = editingStaff.permissions || [];
+                                        if (e.target.checked) {
+                                          setEditingStaff((prev: any) => ({
+                                            ...prev,
+                                            permissions: [...current, perm.id],
+                                          }));
+                                        } else {
+                                          setEditingStaff((prev: any) => ({
+                                            ...prev,
+                                            permissions: current.filter((x: string) => x !== perm.id),
+                                          }));
+                                        }
+                                      }}
+                                      className="mt-0.5 accent-[#00C48C] rounded"
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-[11px] font-bold text-[#0F172A] leading-tight">
+                                        {perm.label}
+                                      </div>
+                                      <div className="text-[9.5px] text-[#64748B] leading-tight truncate">
+                                        {perm.description}
+                                      </div>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">Phone</label>
+                    <input
+                      type="text"
+                      value={editingStaff.phone || ''}
+                      onChange={(e) =>
+                        setEditingStaff({ ...editingStaff, phone: e.target.value })
+                      }
+                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:border-[#00C48C]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">
+                      Reset Password (Optional)
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="Leave blank to keep current"
+                      value={editingStaff.password || ''}
+                      onChange={(e) =>
+                        setEditingStaff({ ...editingStaff, password: e.target.value })
+                      }
+                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:border-[#00C48C]"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-3 flex items-center justify-end gap-2 border-t border-[#F1F5F9]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditStaffModalOpen(false);
+                      setEditingStaff(null);
+                    }}
+                    className="px-4 py-2 border border-[#E2E8F0] text-xs font-semibold rounded-xl text-[#64748B] hover:bg-[#F8FAFC]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updatingStaff}
+                    className="px-4 py-2 bg-[#00C48C] hover:bg-[#00B07D] text-white text-xs font-bold rounded-xl transition shadow-xs disabled:opacity-50"
+                  >
+                    {updatingStaff ? 'Saving...' : 'Save Permissions'}
                   </button>
                 </div>
               </form>

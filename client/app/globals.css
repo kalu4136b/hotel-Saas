@@ -81,3 +81,51 @@ body {
 .animate-glow {
   animation: floatGlow 12s ease-in-out infinite alternate;
 }
+
+/* ================= PRINT STYLESHEET ================= */
+@media print {
+  /* Hide application sidebar, headers, and UI chrome */
+  aside,
+  header,
+  nav,
+  button,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Thermal Receipt Formatting (80mm width) */
+  #thermalReceipt {
+    display: block !important;
+    width: 78mm !important;
+    max-width: 78mm !important;
+    margin: 0 auto !important;
+    padding: 8px !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Full Statement / Invoice Modal Formatting */
+  .printable-statement {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}

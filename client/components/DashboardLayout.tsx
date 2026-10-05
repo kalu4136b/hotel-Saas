@@ -26,8 +26,17 @@ import {
   BedDouble,
   CalendarCheck,
   Key,
+  Boxes,
+  Wine,
+  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react';
 import { authStorage, authApi, posApi } from '@/lib/api';
+import {
+  isRoutePermitted,
+  getUserPermissions,
+  getFirstAllowedRoute,
+} from '@/lib/permissions';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -39,6 +48,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const [user, setUser] = useState<any>(null);
   const [property, setProperty] = useState<any>(null);
+  const [tenant, setTenant] = useState<any>(null);
   const [activeShift, setActiveShift] = useState<any>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
@@ -54,8 +64,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
     const currentUser = authStorage.getUser();
     const currentProperty = authStorage.getProperty();
+    const currentTenant = authStorage.getTenant();
     setUser(currentUser);
     setProperty(currentProperty);
+    setTenant(currentTenant);
 
     // Fetch active shift
     posApi
@@ -63,6 +75,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       .then((shift) => setActiveShift(shift))
       .catch(() => {});
   }, [router]);
+
+  // If staff user without dashboard overview lands on /dashboard, redirect to their first allowed station
+  useEffect(() => {
+    if (user && pathname === '/dashboard' && !isRoutePermitted('/dashboard', user, tenant)) {
+      const destination = getFirstAllowedRoute(user, tenant);
+      router.push(destination);
+    }
+  }, [user, tenant, pathname, router]);
 
   const handleOpenShift = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +108,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       label: 'Dashboard Overview',
       href: '/dashboard',
       icon: LayoutDashboard,
+    },
+    {
+      label: 'PMS Hub Overview',
+      href: '/dashboard/pms',
+      icon: Building2,
+      badge: 'PMS',
     },
     {
       label: 'Rooms & Housekeeping',
@@ -127,9 +153,21 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Grid,
     },
     {
+      label: 'Bar & Beverage',
+      href: '/dashboard/bar',
+      icon: Wine,
+      badge: 'Bar',
+    },
+    {
       label: 'Menu & Products',
       href: '/dashboard/menu',
       icon: MenuSquare,
+    },
+    {
+      label: 'Inventory & Recipes',
+      href: '/dashboard/inventory',
+      icon: Boxes,
+      badge: 'BOM',
     },
     {
       label: 'Financial Reports',
@@ -188,15 +226,37 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </span>
         </div>
 
+        {/* Platform Super Admin Console Banner */}
+        {user?.role === 'SUPER_ADMIN' && (
+          <div className="mb-4">
+            <Link
+              href="/admin"
+              className="flex items-center gap-2 p-2.5 rounded-xl bg-[#0F172A] text-white hover:bg-[#1E293B] transition shadow-xs border border-white/10"
+            >
+              <ShieldCheck className="w-4 h-4 text-[#00C48C] shrink-0" />
+              <div className="flex-1 text-left min-w-0">
+                <div className="text-[11px] font-bold leading-tight truncate">
+                  Platform Manager
+                </div>
+                <div className="text-[9.5px] text-[#94A3B8] leading-tight truncate">
+                  Manage Tenants & Modules
+                </div>
+              </div>
+            </Link>
+          </div>
+        )}
+
         {/* Navigation Section */}
         <div className="text-[10px] font-bold tracking-wider uppercase text-[#94A3B8] px-2 mb-2">
           Core Operations
         </div>
         <nav className="space-y-1 flex-1 overflow-y-auto pr-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
+          {navItems
+            .filter((item) => isRoutePermitted(item.href, user, tenant))
+            .map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
               <a
                 key={item.href}
                 href={item.href}
@@ -293,13 +353,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* Quick Actions */}
           <div className="flex items-center gap-2.5">
-            <a
-              href="/dashboard/pos"
-              className="hidden sm:inline-flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-[#00C48C] hover:bg-[#00A877] text-white text-xs font-bold transition-all shadow-xs"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>New POS Sale</span>
-            </a>
+            {isRoutePermitted('/dashboard/pos', user, tenant) && (
+              <a
+                href="/dashboard/pos"
+                className="hidden sm:inline-flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-[#00C48C] hover:bg-[#00A877] text-white text-xs font-bold transition-all shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New POS Sale</span>
+              </a>
+            )}
 
             <button
               onClick={() =>
@@ -315,7 +377,30 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
         {/* Main Content Area */}
         <main className="flex-1 p-4 lg:p-8 max-w-7xl w-full mx-auto">
-          {children}
+          {!isRoutePermitted(pathname, user, tenant) ? (
+            <div className="bg-white rounded-3xl border border-[#E2E8F0] p-10 sm:p-14 text-center max-w-lg mx-auto mt-10 shadow-xs">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4 border border-amber-200">
+                <ShieldAlert className="w-8 h-8" />
+              </div>
+              <h2 className="text-xl font-black text-[#0F172A] tracking-tight mb-2">
+                Access Restricted
+              </h2>
+              <p className="text-xs text-[#64748B] mb-2 leading-relaxed">
+                This module is either not included in your hotel&apos;s active subscription package, or your staff account (<b>{user?.role?.replace('_', ' ') || 'Staff'}</b>) has not been granted permission.
+              </p>
+              <p className="text-[11px] text-[#94A3B8] mb-6">
+                If you require access to this section, please ask your hotel administrator to update your permissions in <b>Settings & Staff</b>.
+              </p>
+              <a
+                href={getFirstAllowedRoute(user)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#00C48C] hover:bg-[#00A877] text-white text-xs font-bold rounded-xl transition shadow-xs"
+              >
+                <span>Go to Your Assigned Workstation &rarr;</span>
+              </a>
+            </div>
+          ) : (
+            children
+          )}
         </main>
       </div>
 

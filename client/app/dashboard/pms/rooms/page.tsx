@@ -101,6 +101,10 @@ export default function RoomsPage() {
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newRoom.roomTypeId) {
+      alert('Please create or select a Room Type first before creating a room.');
+      return;
+    }
     try {
       await pmsApi.createRoom({
         roomNumber: newRoom.roomNumber,
@@ -312,6 +316,38 @@ export default function RoomsPage() {
             <RefreshCw className="w-5 h-5 animate-spin text-[#00C48C]" />
             <span>Fetching live room rack from MySQL...</span>
           </div>
+        ) : rooms.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-[#CBD5E1] p-12 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-[#ECFDF5] text-[#00C48C] flex items-center justify-center mx-auto mb-4 border border-[#A7F3D0]">
+              <DoorOpen className="w-7 h-7" />
+            </div>
+            <h3 className="text-base font-bold text-[#0F172A] mb-1">No Rooms Configured Yet</h3>
+            <p className="text-xs text-[#64748B] max-w-md mx-auto mb-6">
+              Your property has zero rooms created. Start dynamically by defining your room types (e.g. Deluxe Villa, Standard Suite) and adding physical room numbers.
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => setAddTypeOpen(true)}
+                className="px-4 py-2.5 rounded-xl border border-[#CBD5E1] bg-white text-[#0F172A] hover:bg-[#F8FAFC] font-bold text-xs transition shadow-2xs flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4 text-[#00C48C]" />
+                <span>1. Add Room Type</span>
+              </button>
+              <button
+                onClick={() => {
+                  if (roomTypes.length === 0) {
+                    setAddTypeOpen(true);
+                  } else {
+                    setAddRoomOpen(true);
+                  }
+                }}
+                className="px-4 py-2.5 rounded-xl bg-[#00C48C] hover:bg-[#00B07D] text-white font-bold text-xs transition shadow-xs flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>2. Add Physical Room</span>
+              </button>
+            </div>
+          </div>
         ) : filteredRooms.length === 0 ? (
           <div className="bg-white rounded-2xl border border-[#E2E8F0] p-12 text-center text-[#94A3B8]">
             <DoorOpen className="w-10 h-10 mx-auto mb-2 opacity-50" />
@@ -453,20 +489,37 @@ export default function RoomsPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-[#334155] mb-1">Room Type Tier</label>
-                  <select
-                    value={newRoom.roomTypeId}
-                    onChange={(e) => setNewRoom({ ...newRoom, roomTypeId: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-bold"
-                  >
-                    {roomTypes.map((rt) => (
-                      <option key={rt.id} value={rt.id}>
-                        {rt.name} (${rt.basePricePerNight}/night)
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {roomTypes.length === 0 ? (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
+                    <p className="font-bold mb-1">No Room Types Defined</p>
+                    <p className="text-[11px] mb-3">You must create a Room Type (e.g. Deluxe Room, Suite) before adding physical rooms.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddRoomOpen(false);
+                        setAddTypeOpen(true);
+                      }}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs"
+                    >
+                      + Create Room Type First
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">Room Type Tier</label>
+                    <select
+                      value={newRoom.roomTypeId}
+                      onChange={(e) => setNewRoom({ ...newRoom, roomTypeId: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-bold"
+                    >
+                      {roomTypes.map((rt) => (
+                        <option key={rt.id} value={rt.id}>
+                          {rt.name} (${rt.basePricePerNight}/night)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold text-[#334155] mb-1">Location / Notes (Optional)</label>
@@ -489,7 +542,8 @@ export default function RoomsPage() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-[#00C48C] text-white text-xs font-bold rounded-xl shadow-xs"
+                    disabled={roomTypes.length === 0}
+                    className="px-4 py-2 bg-[#00C48C] text-white text-xs font-bold rounded-xl shadow-xs disabled:opacity-50"
                   >
                     Create Room
                   </button>

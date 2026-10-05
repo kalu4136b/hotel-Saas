@@ -12,6 +12,7 @@ import { Tenant } from './tenant.entity';
 import { Property } from './property.entity';
 
 export enum UserRole {
+  SUPER_ADMIN = 'SUPER_ADMIN',
   TENANT_ADMIN = 'TENANT_ADMIN',
   MANAGER = 'MANAGER',
   CASHIER = 'CASHIER',
@@ -24,10 +25,10 @@ export class User {
   id: string;
 
   @Index()
-  @Column({ type: 'varchar', length: 36 })
+  @Column({ type: 'varchar', length: 36, nullable: true })
   tenantId: string;
 
-  @ManyToOne(() => Tenant, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Tenant, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'tenantId' })
   tenant: Tenant;
 
@@ -62,6 +63,12 @@ export class User {
     default: UserRole.CASHIER,
   })
   role: UserRole;
+
+  @Column({
+    type: 'simple-json',
+    nullable: true,
+  })
+  permissions: string[];
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;

@@ -237,6 +237,25 @@ export default function ReservationsPage() {
                       Loading bookings from database...
                     </td>
                   </tr>
+                ) : reservations.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-12 text-center">
+                      <div className="w-12 h-12 rounded-2xl bg-[#ECFDF5] text-[#00C48C] flex items-center justify-center mx-auto mb-3 border border-[#A7F3D0]">
+                        <CalendarCheck className="w-6 h-6" />
+                      </div>
+                      <p className="font-bold text-sm text-[#0F172A]">No reservations or stays recorded yet</p>
+                      <p className="text-xs text-[#64748B] mt-1 mb-4">
+                        All bookings are completely dynamic. Create your first guest reservation to start tracking stays and folios.
+                      </p>
+                      <button
+                        onClick={() => setNewBookingModalOpen(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#00C48C] hover:bg-[#00B07D] text-white text-xs font-bold rounded-xl transition shadow-xs"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Create First Booking</span>
+                      </button>
+                    </td>
+                  </tr>
                 ) : filteredReservations.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-12 text-center text-[#94A3B8]">
@@ -454,40 +473,53 @@ export default function ReservationsPage() {
                 </div>
 
                 {/* Room Type & Pre-assignment */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-[#334155] mb-1">Room Type</label>
-                    <select
-                      value={newBooking.roomTypeId}
-                      onChange={(e) => setNewBooking({ ...newBooking, roomTypeId: e.target.value })}
-                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-bold"
+                {roomTypes.length === 0 ? (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
+                    <p className="font-bold mb-1">No Room Types Available</p>
+                    <p className="text-[11px] mb-3">Please configure at least one Room Type in Rooms & Housekeeping before creating bookings.</p>
+                    <Link
+                      href="/dashboard/pms/rooms"
+                      className="inline-block px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs"
                     >
-                      {roomTypes.map((rt) => (
-                        <option key={rt.id} value={rt.id}>
-                          {rt.name} (${rt.basePricePerNight}/nt)
-                        </option>
-                      ))}
-                    </select>
+                      Go to Rooms & Housekeeping &rarr;
+                    </Link>
                   </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-[#334155] mb-1">Assign Room (Optional)</label>
-                    <select
-                      value={newBooking.roomId}
-                      onChange={(e) => setNewBooking({ ...newBooking, roomId: e.target.value })}
-                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-semibold"
-                    >
-                      <option value="">Assign at Check-in</option>
-                      {availableRooms
-                        .filter((r) => r.status === 'AVAILABLE')
-                        .map((r) => (
-                          <option key={r.id} value={r.id}>
-                            #{r.roomNumber} ({r.roomType?.name})
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-[#334155] mb-1">Room Type</label>
+                      <select
+                        value={newBooking.roomTypeId}
+                        onChange={(e) => setNewBooking({ ...newBooking, roomTypeId: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-bold"
+                      >
+                        {roomTypes.map((rt) => (
+                          <option key={rt.id} value={rt.id}>
+                            {rt.name} (${rt.basePricePerNight}/nt)
                           </option>
                         ))}
-                    </select>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-[#334155] mb-1">Assign Room (Optional)</label>
+                      <select
+                        value={newBooking.roomId}
+                        onChange={(e) => setNewBooking({ ...newBooking, roomId: e.target.value })}
+                        className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-semibold"
+                      >
+                        <option value="">Assign at Check-in</option>
+                        {availableRooms
+                          .filter((r) => r.status === 'AVAILABLE')
+                          .map((r) => (
+                            <option key={r.id} value={r.id}>
+                              #{r.roomNumber} ({r.roomType?.name})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Adults, Children, Deposit */}
                 <div className="grid grid-cols-3 gap-3">
@@ -544,7 +576,7 @@ export default function ReservationsPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={creatingBooking}
+                    disabled={creatingBooking || roomTypes.length === 0}
                     className="px-4 py-2 bg-[#00C48C] hover:bg-[#00B07D] text-white text-xs font-bold rounded-xl shadow-xs disabled:opacity-50"
                   >
                     {creatingBooking ? 'Saving...' : 'Confirm Booking'}

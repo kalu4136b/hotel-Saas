@@ -10,6 +10,9 @@ import { ReportsModule } from './reports/reports.module';
 import { SettingsModule } from './settings/settings.module';
 import { PmsModule } from './pms/pms.module';
 import { EventsModule } from './events/events.module';
+import { InventoryModule } from './inventory/inventory.module';
+import { SuperAdminModule } from './super-admin/super-admin.module';
+import { BarModule } from './bar/bar.module';
 import {
   Tenant,
   Property,
@@ -33,6 +36,14 @@ import {
   GuestFolio,
   FolioItem,
   FolioPayment,
+  InventoryItem,
+  RecipeItem,
+  StockMovement,
+  Supplier,
+  PurchaseOrder,
+  PurchaseOrderItem,
+  BarItem,
+  BarPourLog,
 } from './entities';
 
 @Module({
@@ -71,6 +82,14 @@ import {
         GuestFolio,
         FolioItem,
         FolioPayment,
+        InventoryItem,
+        RecipeItem,
+        StockMovement,
+        Supplier,
+        PurchaseOrder,
+        PurchaseOrderItem,
+        BarItem,
+        BarPourLog,
       ],
       synchronize: true,
       logging: ['error', 'warn'],
@@ -82,6 +101,9 @@ import {
     SettingsModule,
     PmsModule,
     EventsModule,
+    InventoryModule,
+    SuperAdminModule,
+    BarModule,
   ],
   controllers: [AppController],
   providers: [AppService],

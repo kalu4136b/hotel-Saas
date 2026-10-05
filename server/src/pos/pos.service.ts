@@ -24,12 +24,14 @@ import { GuestFolio, FolioStatus } from '../entities/guest-folio.entity';
 import { FolioItem, FolioChargeType } from '../entities/folio-item.entity';
 import { Room } from '../entities/room.entity';
 import { EventsGateway } from '../events/events.gateway';
+import { InventoryService } from '../inventory/inventory.service';
 
 @Injectable()
 export class PosService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
+    private readonly inventoryService: InventoryService,
   ) {}
 
   // ================= MASTER DATA =================
@@ -497,6 +499,21 @@ export class PosService {
 
       await queryRunner.commitTransaction();
 
+      // Trigger automatic Recipe (BOM) stock reduction for kitchen items
+      try {
+        await this.inventoryService.deductIngredientsForOrder(
+          tenantId,
+          propertyId,
+          pendingItems.map((pi) => ({
+            productId: pi.productId,
+            quantity: pi.quantity,
+          })),
+          savedKot.kotNumber,
+        );
+      } catch (err) {
+        console.warn('[POS] Recipe inventory deduction error:', err);
+      }
+
       savedKot.items = kotItems;
       try {
         this.eventsGateway.notifyNewKot(propertyId, savedKot);
@@ -709,11 +726,11 @@ export class PosService {
         }
 
         const folio = await queryRunner.manager.findOne(GuestFolio, {
-          where: { reservationId: reservation.id, status: FolioStatus.OPEN },
+          where: { reservationId: reservation.id },
         });
 
         if (!folio) {
-          throw new BadRequestException(`No open folio exists for Room ${reservation.room?.roomNumber || dto.roomId}.`);
+          throw new BadRequestException(`No active folio exists for Room ${reservation.room?.roomNumber || dto.roomId}.`);
         }
 
         // Post charge to folio items
@@ -726,9 +743,12 @@ export class PosService {
         });
         await queryRunner.manager.save(folioItem);
 
-        // Update folio totals
+        // Update folio totals and reopen if previously settled
         folio.totalCharges = Number((Number(folio.totalCharges) + totalDue).toFixed(2));
         folio.balanceDue = Number((Number(folio.balanceDue) + totalDue).toFixed(2));
+        if (folio.balanceDue > 0.05 && folio.status === FolioStatus.SETTLED) {
+          folio.status = FolioStatus.OPEN;
+        }
         await queryRunner.manager.save(folio);
 
         transactionRef = `Folio #${folio.id.substring(0, 8).toUpperCase()} - Room ${reservation.room?.roomNumber || ''} (${reservation.guest?.fullName || 'Guest'})`;

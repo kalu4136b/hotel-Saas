@@ -9,6 +9,11 @@ import * as bcrypt from 'bcrypt';
 import { Property } from '../entities/property.entity';
 import { User, UserRole } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import {
+  SYSTEM_PERMISSIONS,
+  DEFAULT_ROLE_PERMISSIONS,
+  resolveUserPermissions,
+} from '../auth/permissions';
 
 @Injectable()
 export class SettingsService {
@@ -70,7 +75,7 @@ export class SettingsService {
 
   // 3. Get Staff Members
   async getUsers(tenantId: string) {
-    return this.dataSource.getRepository(User).find({
+    const users = await this.dataSource.getRepository(User).find({
       where: { tenantId },
       select: {
         id: true,
@@ -79,12 +84,18 @@ export class SettingsService {
         email: true,
         phone: true,
         role: true,
+        permissions: true,
         isActive: true,
         lastLoginAt: true,
         createdAt: true,
       },
       order: { createdAt: 'ASC' },
     });
+
+    return users.map((u) => ({
+      ...u,
+      permissions: resolveUserPermissions(u),
+    }));
   }
 
   // 4. Create Staff Member
@@ -98,6 +109,7 @@ export class SettingsService {
       phone?: string;
       password: string;
       role: UserRole;
+      permissions?: string[];
     },
     adminUserId: string,
   ) {
@@ -117,6 +129,11 @@ export class SettingsService {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(dto.password, salt);
 
+    const permissions =
+      dto.permissions && dto.permissions.length > 0
+        ? dto.permissions
+        : DEFAULT_ROLE_PERMISSIONS[dto.role] || [];
+
     const newUser = userRepo.create({
       tenantId,
       propertyId,
@@ -126,6 +143,7 @@ export class SettingsService {
       phone: dto.phone || undefined,
       passwordHash,
       role: dto.role,
+      permissions,
       isActive: true,
     });
 
@@ -139,11 +157,72 @@ export class SettingsService {
       action: 'STAFF_CREATED',
       entity: 'User',
       entityId: saved.id,
-      details: JSON.stringify({ username: saved.username, role: saved.role }),
+      details: JSON.stringify({
+        username: saved.username,
+        role: saved.role,
+        permissions: saved.permissions,
+      }),
     });
 
     const { passwordHash: _, ...result } = saved;
-    return result;
+    return {
+      ...result,
+      permissions: resolveUserPermissions(result),
+    };
+  }
+
+  // 4b. Update Staff Member (Role & Permissions)
+  async updateUser(
+    userId: string,
+    dto: {
+      fullName?: string;
+      phone?: string;
+      role?: UserRole;
+      permissions?: string[];
+      password?: string;
+    },
+    tenantId: string,
+    adminUserId: string,
+  ) {
+    const userRepo = this.dataSource.getRepository(User);
+    const user = await userRepo.findOne({ where: { id: userId, tenantId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (dto.fullName) user.fullName = dto.fullName.trim();
+    if (dto.phone !== undefined) user.phone = dto.phone;
+    if (dto.role) {
+      user.role = dto.role;
+    }
+    if (dto.permissions !== undefined) {
+      user.permissions = dto.permissions;
+    }
+    if (dto.password && dto.password.trim().length >= 6) {
+      const salt = await bcrypt.genSalt(10);
+      user.passwordHash = await bcrypt.hash(dto.password, salt);
+    }
+
+    const saved = await userRepo.save(user);
+
+    // Audit log
+    await this.dataSource.getRepository(AuditLog).save({
+      tenantId,
+      propertyId: user.propertyId,
+      userId: adminUserId,
+      action: 'STAFF_PERMISSIONS_UPDATED',
+      entity: 'User',
+      entityId: saved.id,
+      details: JSON.stringify({
+        username: saved.username,
+        role: saved.role,
+        permissions: saved.permissions,
+      }),
+    });
+
+    const { passwordHash: _, ...result } = saved;
+    return {
+      ...result,
+      permissions: resolveUserPermissions(result),
+    };
   }
 
   // 5. Toggle Staff Active Status

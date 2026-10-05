@@ -248,7 +248,7 @@ function FrontDeskContent() {
         <div className="flex border-b border-[#E2E8F0] gap-2">
           <button
             onClick={() => setActiveTab('IN_HOUSE')}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition -mb-[2px] ${
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition mb-[-2px] ${
               activeTab === 'IN_HOUSE'
                 ? 'border-[#00C48C] text-[#00C48C]'
                 : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
@@ -259,7 +259,7 @@ function FrontDeskContent() {
           </button>
           <button
             onClick={() => setActiveTab('ARRIVALS')}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition -mb-[2px] ${
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition mb-[-2px] ${
               activeTab === 'ARRIVALS'
                 ? 'border-[#00C48C] text-[#00C48C]'
                 : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
@@ -440,14 +440,25 @@ function FrontDeskContent() {
                     <option value="">-- Choose Clean Available Room --</option>
                     {availableRooms
                       .filter((r) => r.status === 'AVAILABLE' || r.id === selectedResForCheckIn.roomId)
-                      .map((room) => (
-                        <option key={room.id} value={room.id}>
-                          Room #{room.roomNumber} ({room.roomType?.name}) · Floor {room.floor} · [{room.cleanlinessStatus}]
-                        </option>
-                      ))}
+                      .map((room) => {
+                        const isClean = room.cleanlinessStatus === 'CLEAN' || room.cleanlinessStatus === 'INSPECTED';
+                        return (
+                          <option key={room.id} value={room.id}>
+                            {isClean ? '✨ ' : '⚠️ '}Room #{room.roomNumber} ({room.roomType?.name}) · Floor {room.floor} · [{room.cleanlinessStatus}]
+                          </option>
+                        );
+                      })}
                   </select>
+                  {selectedRoomId &&
+                    (availableRooms.find((r) => r.id === selectedRoomId)?.cleanlinessStatus === 'DIRTY' ||
+                      availableRooms.find((r) => r.id === selectedRoomId)?.cleanlinessStatus === 'IN_CLEANING') && (
+                      <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                        <span>Warning: This room is marked {availableRooms.find((r) => r.id === selectedRoomId)?.cleanlinessStatus}. Please inspect and mark CLEAN before assigning.</span>
+                      </div>
+                    )}
                   <p className="text-[10.5px] text-[#64748B] mt-1">
-                    Assigning a room marks it OCCUPIED and opens the guest billing folio.
+                    Assigning a clean room marks it OCCUPIED and opens the guest billing folio.
                   </p>
                 </div>
 
@@ -475,7 +486,7 @@ function FrontDeskContent() {
         {/* Modal: Full Guest Folio Management */}
         {folioModalOpen && (
           <div className="fixed inset-0 bg-[#0F172A]/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto print:shadow-none print:border-none print:p-0">
+            <div className="printable-statement bg-white rounded-2xl border border-[#E2E8F0] shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto print:shadow-none print:border-none print:p-0">
               {loadingFolio || !activeFolio ? (
                 <div className="py-16 text-center text-xs text-[#64748B]">
                   <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#00C48C]" />

@@ -12,11 +12,20 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SettingsService } from './settings.service';
 import { UserRole } from '../entities/user.entity';
+import { SYSTEM_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS } from '../auth/permissions';
 
 @Controller('api/settings')
 @UseGuards(JwtAuthGuard)
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
+
+  @Get('permissions-meta')
+  async getPermissionsMeta() {
+    return {
+      permissions: SYSTEM_PERMISSIONS,
+      roleDefaults: DEFAULT_ROLE_PERMISSIONS,
+    };
+  }
 
   @Get('property')
   async getProperty(@Request() req: any) {
@@ -61,12 +70,34 @@ export class SettingsController {
       phone?: string;
       password: string;
       role: UserRole;
+      permissions?: string[];
     },
   ) {
     return this.settingsService.createUser(
       req.user.tenantId,
       req.user.propertyId,
       dto,
+      req.user.id,
+    );
+  }
+
+  @Patch('users/:id')
+  async updateUser(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body()
+    dto: {
+      fullName?: string;
+      phone?: string;
+      role?: UserRole;
+      permissions?: string[];
+      password?: string;
+    },
+  ) {
+    return this.settingsService.updateUser(
+      id,
+      dto,
+      req.user.tenantId,
       req.user.id,
     );
   }

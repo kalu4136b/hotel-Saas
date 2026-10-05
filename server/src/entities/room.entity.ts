@@ -17,6 +17,7 @@ export enum RoomStatus {
   OCCUPIED = 'OCCUPIED',
   RESERVED = 'RESERVED',
   MAINTENANCE = 'MAINTENANCE',
+  OUT_OF_SERVICE = 'OUT_OF_SERVICE',
 }
 
 export enum CleanlinessStatus {

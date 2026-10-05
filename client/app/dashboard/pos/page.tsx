@@ -373,44 +373,73 @@ export default function POSTerminalPage() {
           </div>
 
           {/* Product Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5">
-            {filteredProducts.map((prod) => (
-              <div
-                key={prod.id}
-                onClick={() => addToCart(prod)}
-                className="bg-white rounded-2xl border border-[#E2E8F0] p-4 shadow-xs hover:border-[#00C48C] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group min-h-[140px]"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]">
-                      {prod.category?.name || 'Dish'}
-                    </span>
-                    <span className="text-[10px] text-[#94A3B8] font-mono">
-                      {prod.sku}
-                    </span>
-                  </div>
-                  <h4 className="text-xs font-bold text-[#0F172A] group-hover:text-[#00C48C] transition-colors line-clamp-1">
-                    {prod.name}
-                  </h4>
-                  <p className="text-[11px] text-[#64748B] line-clamp-2 mt-1 leading-snug">
-                    {prod.description || 'Chef special prepared fresh.'}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#F1F5F9]">
-                  <span className="text-sm font-bold text-[#0F172A] mono">
-                    ${Number(prod.price).toFixed(2)}
-                  </span>
-                  <button
-                    type="button"
-                    className="w-7 h-7 rounded-lg bg-[#00C48C] text-white flex items-center justify-center group-hover:scale-110 transition-transform shadow-xs"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
+          {loading ? (
+            <div className="py-20 text-center text-xs text-[#64748B]">
+              <div className="w-6 h-6 border-2 border-[#00C48C] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              Loading POS catalog...
+            </div>
+          ) : products.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-dashed border-[#CBD5E1] p-12 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-[#ECFDF5] text-[#00C48C] flex items-center justify-center mx-auto mb-4 border border-[#A7F3D0]">
+                <UtensilsCrossed className="w-7 h-7" />
               </div>
-            ))}
-          </div>
+              <h3 className="text-base font-bold text-[#0F172A] mb-1">No Menu Items Available</h3>
+              <p className="text-xs text-[#64748B] max-w-sm mx-auto mb-5">
+                Your restaurant catalog is currently empty. Configure your menu categories and dishes in Menu &amp; Products to take POS orders.
+              </p>
+              <a
+                href="/dashboard/menu"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#00C48C] hover:bg-[#00B07D] text-white text-xs font-bold rounded-xl shadow-xs transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Go to Menu Catalog</span>
+              </a>
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-[#E2E8F0] p-12 text-center text-[#94A3B8]">
+              <UtensilsCrossed className="w-10 h-10 mx-auto mb-2 opacity-40" />
+              <p className="font-semibold text-sm">No dishes match your filter.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              {filteredProducts.map((prod) => (
+                <div
+                  key={prod.id}
+                  onClick={() => addToCart(prod)}
+                  className="bg-white rounded-2xl border border-[#E2E8F0] p-4 shadow-xs hover:border-[#00C48C] hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group min-h-[140px]"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]">
+                        {prod.category?.name || 'Dish'}
+                      </span>
+                      <span className="text-[10px] text-[#94A3B8] font-mono">
+                        {prod.sku}
+                      </span>
+                    </div>
+                    <h4 className="text-xs font-bold text-[#0F172A] group-hover:text-[#00C48C] transition-colors line-clamp-1">
+                      {prod.name}
+                    </h4>
+                    <p className="text-[11px] text-[#64748B] line-clamp-2 mt-1 leading-snug">
+                      {prod.description || 'Chef special prepared fresh.'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#F1F5F9]">
+                    <span className="text-sm font-bold text-[#0F172A] mono">
+                      ${Number(prod.price).toFixed(2)}
+                    </span>
+                    <button
+                      type="button"
+                      className="w-7 h-7 rounded-lg bg-[#00C48C] text-white flex items-center justify-center group-hover:scale-110 transition-transform shadow-xs"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ================= RIGHT: ACTIVE CART & ACTIONS ================= */}
@@ -468,22 +497,31 @@ export default function POSTerminalPage() {
               <label className="block text-[11px] font-semibold text-[#64748B] mb-1">
                 Select Table
               </label>
-              <select
-                value={selectedTableId}
-                onChange={(e) => setSelectedTableId(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs font-bold text-[#0F172A] outline-none"
-              >
-                <option value="">-- Choose Dining Table --</option>
-                {tables.map((t) => (
-                  <option
-                    key={t.id}
-                    value={t.id}
-                    disabled={t.status === 'OCCUPIED' && t.id !== activeOrder?.tableId}
-                  >
-                    {t.tableNumber} ({t.status} - {t.capacity} seats)
-                  </option>
-                ))}
-              </select>
+              {tables.length === 0 ? (
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px]">
+                  <span>No dining tables set up yet. Switch to <b>Takeaway</b> or </span>
+                  <a href="/dashboard/tables" className="font-bold underline text-amber-900">
+                    add tables &rarr;
+                  </a>
+                </div>
+              ) : (
+                <select
+                  value={selectedTableId}
+                  onChange={(e) => setSelectedTableId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs font-bold text-[#0F172A] outline-none"
+                >
+                  <option value="">-- Choose Dining Table --</option>
+                  {tables.map((t) => (
+                    <option
+                      key={t.id}
+                      value={t.id}
+                      disabled={t.status === 'OCCUPIED' && t.id !== activeOrder?.tableId}
+                    >
+                      {t.tableNumber} ({t.status} - {t.capacity} seats)
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 

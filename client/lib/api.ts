@@ -373,6 +373,10 @@ export const settingsApi = {
     });
   },
 
+  async getPermissionsMeta() {
+    return apiRequest('/api/settings/permissions-meta', { method: 'GET' });
+  },
+
   async getUsers() {
     return apiRequest('/api/settings/users', { method: 'GET' });
   },
@@ -384,9 +388,23 @@ export const settingsApi = {
     phone?: string;
     password: string;
     role: 'MANAGER' | 'CASHIER' | 'KITCHEN';
+    permissions?: string[];
   }) {
     return apiRequest('/api/settings/users', {
       method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateUser(userId: string, data: {
+    fullName?: string;
+    phone?: string;
+    role?: 'MANAGER' | 'CASHIER' | 'KITCHEN';
+    permissions?: string[];
+    password?: string;
+  }) {
+    return apiRequest(`/api/settings/users/${userId}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     });
   },
@@ -548,3 +566,314 @@ export const pmsApi = {
     });
   },
 };
+
+export const inventoryApi = {
+  async getItems(category?: string, search?: string, lowStock?: boolean) {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    if (search) params.append('search', search);
+    if (lowStock) params.append('lowStock', 'true');
+    const q = params.toString() ? `?${params.toString()}` : '';
+    return apiRequest(`/api/inventory/items${q}`, { method: 'GET' });
+  },
+
+  async getItem(id: string) {
+    return apiRequest(`/api/inventory/items/${id}`, { method: 'GET' });
+  },
+
+  async createItem(data: {
+    name: string;
+    sku?: string;
+    category: string;
+    unit: string;
+    currentStock?: number;
+    minStockLevel?: number;
+    costPerUnit?: number;
+  }) {
+    return apiRequest('/api/inventory/items', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateItem(id: string, data: any) {
+    return apiRequest(`/api/inventory/items/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async adjustStock(
+    id: string,
+    data: {
+      quantity: number;
+      movementType: string;
+      unitCost?: number;
+      reason: string;
+      referenceId?: string;
+    },
+  ) {
+    return apiRequest(`/api/inventory/items/${id}/adjust`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getMovements(itemId?: string) {
+    const q = itemId ? `?itemId=${itemId}` : '';
+    return apiRequest(`/api/inventory/movements${q}`, { method: 'GET' });
+  },
+
+  async getRecipe(productId: string) {
+    return apiRequest(`/api/inventory/recipes/${productId}`, { method: 'GET' });
+  },
+
+  async saveRecipe(
+    productId: string,
+    items: Array<{ inventoryItemId: string; quantityRequired: number }>,
+  ) {
+    return apiRequest(`/api/inventory/recipes/${productId}`, {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  },
+
+  async getSuppliers() {
+    return apiRequest('/api/inventory/suppliers', { method: 'GET' });
+  },
+
+  async createSupplier(data: {
+    name: string;
+    contactPerson?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+  }) {
+    return apiRequest('/api/inventory/suppliers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getPurchaseOrders(status?: string) {
+    const q = status ? `?status=${status}` : '';
+    return apiRequest(`/api/inventory/purchase-orders${q}`, { method: 'GET' });
+  },
+
+  async createPurchaseOrder(data: {
+    supplierId: string;
+    expectedDate?: string;
+    notes?: string;
+    items: Array<{
+      inventoryItemId: string;
+      quantityOrdered: number;
+      unitCost: number;
+    }>;
+  }) {
+    return apiRequest('/api/inventory/purchase-orders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async receivePurchaseOrder(id: string) {
+    return apiRequest(`/api/inventory/purchase-orders/${id}/receive`, {
+      method: 'POST',
+    });
+  },
+};
+
+export const superAdminApi = {
+  async getPackages() {
+    return apiRequest('/api/super-admin/packages', { method: 'GET' });
+  },
+
+  async getOverview() {
+    return apiRequest('/api/super-admin/overview', { method: 'GET' });
+  },
+
+  async getTenants(params?: { search?: string; status?: string; plan?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.search) qs.append('search', params.search);
+    if (params?.status) qs.append('status', params.status);
+    if (params?.plan) qs.append('plan', params.plan);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/super-admin/tenants${q}`, { method: 'GET' });
+  },
+
+  async getTenant(id: string) {
+    return apiRequest(`/api/super-admin/tenants/${id}`, { method: 'GET' });
+  },
+
+  async createTenant(data: {
+    name: string;
+    slug?: string;
+    subscriptionPlan: string;
+    modules?: string[];
+    planPrice?: number;
+    billingCycle?: 'MONTHLY' | 'ANNUAL' | 'LIFETIME';
+    maxRooms?: number;
+    maxStaff?: number;
+    propertyName?: string;
+    currency?: string;
+    adminFullName: string;
+    adminUsername: string;
+    adminEmail: string;
+    adminPhone?: string;
+    adminPassword: string;
+  }) {
+    return apiRequest('/api/super-admin/tenants', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateModules(id: string, modules: string[]) {
+    return apiRequest(`/api/super-admin/tenants/${id}/modules`, {
+      method: 'PATCH',
+      body: JSON.stringify({ modules }),
+    });
+  },
+
+  async updateSubscription(
+    id: string,
+    data: {
+      subscriptionPlan?: string;
+      status?: 'ACTIVE' | 'SUSPENDED' | 'PENDING';
+      planPrice?: number;
+      billingCycle?: 'MONTHLY' | 'ANNUAL' | 'LIFETIME';
+      maxRooms?: number;
+      maxStaff?: number;
+      expiresAt?: string | null;
+    },
+  ) {
+    return apiRequest(`/api/super-admin/tenants/${id}/subscription`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async resetPassword(id: string, newPassword: string) {
+    return apiRequest(`/api/super-admin/tenants/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ newPassword }),
+    });
+  },
+};
+
+export const barApi = {
+  async getItems(category?: string, search?: string, lowStock?: boolean) {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    if (search) params.append('search', search);
+    if (lowStock) params.append('lowStock', 'true');
+    const q = params.toString() ? `?${params.toString()}` : '';
+    return apiRequest(`/api/bar/items${q}`, { method: 'GET' });
+  },
+
+  async getItem(id: string) {
+    return apiRequest(`/api/bar/items/${id}`, { method: 'GET' });
+  },
+
+  async createItem(data: {
+    name: string;
+    category: string;
+    brand?: string;
+    bottleSizeMl?: number;
+    fullBottlesStock?: number;
+    currentBottleRemainingMl?: number;
+    standardPourMl?: number;
+    costPerBottle?: number;
+    pricePerPour?: number;
+    pricePerBottle?: number;
+    parLevelBottles?: number;
+  }) {
+    return apiRequest('/api/bar/items', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateItem(id: string, data: any) {
+    return apiRequest(`/api/bar/items/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteItem(id: string) {
+    return apiRequest(`/api/bar/items/${id}`, { method: 'DELETE' });
+  },
+
+  async quickPour(data: {
+    barItemId: string;
+    millilitersPoured: number;
+    servingsCount?: number;
+    pourType?: string;
+    unitPriceOverride?: number;
+    bartenderName?: string;
+    notes?: string;
+  }) {
+    return apiRequest('/api/bar/pour', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async logWastage(data: {
+    barItemId: string;
+    millilitersWasted: number;
+    bottlesWasted?: number;
+    bartenderName?: string;
+    reason: string;
+  }) {
+    return apiRequest('/api/bar/wastage', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async restockBottles(
+    id: string,
+    data: { bottlesCount: number; costPerBottle?: number; notes?: string },
+  ) {
+    return apiRequest(`/api/bar/items/${id}/restock`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async openBottle(id: string) {
+    return apiRequest(`/api/bar/items/${id}/open-bottle`, { method: 'POST' });
+  },
+
+  async getLogs(params?: {
+    pourType?: string;
+    category?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    limit?: number;
+  }) {
+    const qs = new URLSearchParams();
+    if (params?.pourType) qs.append('pourType', params.pourType);
+    if (params?.category) qs.append('category', params.category);
+    if (params?.startDate) qs.append('startDate', params.startDate);
+    if (params?.endDate) qs.append('endDate', params.endDate);
+    if (params?.search) qs.append('search', params.search);
+    if (params?.limit) qs.append('limit', params.limit.toString());
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/bar/logs${q}`, { method: 'GET' });
+  },
+
+  async getAnalytics(startDate?: string, endDate?: string) {
+    const qs = new URLSearchParams();
+    if (startDate) qs.append('startDate', startDate);
+    if (endDate) qs.append('endDate', endDate);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/bar/analytics${q}`, { method: 'GET' });
+  },
+};
+
+
+

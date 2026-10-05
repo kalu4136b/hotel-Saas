@@ -14,6 +14,7 @@ import { Bill } from '../entities/bill.entity';
 import { Payment } from '../entities/payment.entity';
 import { Property } from '../entities/property.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import { InventoryModule } from '../inventory/inventory.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AuditLog } from '../entities/audit-log.entity';
       Property,
       AuditLog,
     ]),
+    InventoryModule,
   ],
   controllers: [PosController],
   providers: [PosService],

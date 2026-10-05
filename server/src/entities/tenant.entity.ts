@@ -45,6 +45,27 @@ export class Tenant {
   })
   subscriptionTier: SubscriptionTier;
 
+  @Column({ type: 'simple-json', nullable: true })
+  modules: string[];
+
+  @Column({ type: 'varchar', length: 50, default: 'CUSTOM' })
+  subscriptionPlan: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.0 })
+  planPrice: number;
+
+  @Column({ type: 'varchar', length: 20, default: 'MONTHLY' })
+  billingCycle: 'MONTHLY' | 'ANNUAL' | 'LIFETIME';
+
+  @Column({ type: 'int', nullable: true })
+  maxRooms: number;
+
+  @Column({ type: 'int', nullable: true })
+  maxStaff: number;
+
+  @Column({ type: 'datetime', nullable: true })
+  expiresAt: Date;
+
   @CreateDateColumn()
   createdAt: Date;
 
