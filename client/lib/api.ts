@@ -464,6 +464,20 @@ export const pmsApi = {
     });
   },
 
+  async bulkUpdateCleanliness(roomIds: string[], status: string) {
+    return apiRequest('/api/pms/rooms/bulk-cleanliness', {
+      method: 'POST',
+      body: JSON.stringify({ roomIds, status }),
+    });
+  },
+
+  async updateRoomNotes(roomId: string, notes: string) {
+    return apiRequest(`/api/pms/rooms/${roomId}/notes`, {
+      method: 'PATCH',
+      body: JSON.stringify({ notes }),
+    });
+  },
+
   async updateOccupancy(roomId: string, status: string) {
     return apiRequest(`/api/pms/rooms/${roomId}/occupancy`, {
       method: 'PATCH',
@@ -762,11 +776,23 @@ export const superAdminApi = {
 };
 
 export const barApi = {
-  async getItems(category?: string, search?: string, lowStock?: boolean) {
+  async getItems(
+    categoryOrParams?: string | { category?: string; search?: string; lowStock?: boolean },
+    search?: string,
+    lowStock?: boolean,
+  ) {
     const params = new URLSearchParams();
-    if (category) params.append('category', category);
-    if (search) params.append('search', search);
-    if (lowStock) params.append('lowStock', 'true');
+    if (typeof categoryOrParams === 'object' && categoryOrParams !== null) {
+      if (categoryOrParams.category && categoryOrParams.category !== 'ALL') {
+        params.append('category', categoryOrParams.category);
+      }
+      if (categoryOrParams.search) params.append('search', categoryOrParams.search);
+      if (categoryOrParams.lowStock) params.append('lowStock', 'true');
+    } else {
+      if (categoryOrParams && categoryOrParams !== 'ALL') params.append('category', categoryOrParams);
+      if (search) params.append('search', search);
+      if (lowStock) params.append('lowStock', 'true');
+    }
     const q = params.toString() ? `?${params.toString()}` : '';
     return apiRequest(`/api/bar/items${q}`, { method: 'GET' });
   },

@@ -194,6 +194,7 @@ export class PosService {
 
   // ================= SHIFTS =================
   async getCurrentShift(userId: string, tenantId: string) {
+    if (!tenantId) return null;
     return this.dataSource.getRepository(POSShift).findOne({
       where: { userId, tenantId, status: ShiftStatus.OPEN },
       order: { openedAt: 'DESC' },

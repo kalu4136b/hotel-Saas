@@ -75,6 +75,34 @@ export class PmsController {
     );
   }
 
+  @Post('rooms/bulk-cleanliness')
+  bulkUpdateCleanliness(
+    @Request() req: any,
+    @Body('roomIds') roomIds: string[],
+    @Body('status') status: CleanlinessStatus,
+  ) {
+    return this.pmsService.bulkUpdateCleanliness(
+      req.user.tenantId,
+      req.user.propertyId,
+      roomIds,
+      status,
+    );
+  }
+
+  @Patch('rooms/:id/notes')
+  updateRoomNotes(
+    @Request() req: any,
+    @Param('id') roomId: string,
+    @Body('notes') notes: string,
+  ) {
+    return this.pmsService.updateRoomNotes(
+      req.user.tenantId,
+      req.user.propertyId,
+      roomId,
+      notes,
+    );
+  }
+
   @Patch('rooms/:id/occupancy')
   updateOccupancy(
     @Request() req: any,

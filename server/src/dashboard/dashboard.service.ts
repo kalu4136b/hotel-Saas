@@ -11,6 +11,15 @@ export class DashboardService {
   constructor(private readonly dataSource: DataSource) {}
 
   async getStats(tenantId: string, propertyId: string) {
+    if (!tenantId) {
+      return {
+        revenue: { todayTotal: 0, cashSales: 0, cardSales: 0, transactionCount: 0 },
+        orders: { todayTotal: 0, completed: 0, active: 0, cancelled: 0 },
+        tables: { total: 0, occupied: 0, billed: 0, available: 0, occupancyRate: 0 },
+        kitchen: { activeKots: 0 },
+      };
+    }
+
     const orderRepo = this.dataSource.getRepository(Order);
     const paymentRepo = this.dataSource.getRepository(Payment);
     const tableRepo = this.dataSource.getRepository(DiningTable);
@@ -103,6 +112,8 @@ export class DashboardService {
   }
 
   async getRecentOrders(tenantId: string, propertyId: string) {
+    if (!tenantId) return [];
+
     const orders = await this.dataSource.getRepository(Order).find({
       where: { tenantId, propertyId },
       relations: { items: true },
@@ -114,6 +125,8 @@ export class DashboardService {
   }
 
   async getTopProducts(tenantId: string, propertyId: string) {
+    if (!tenantId) return [];
+
     const topProducts = await this.dataSource
       .createQueryBuilder()
       .select('oi.productName', 'name')
@@ -137,6 +150,8 @@ export class DashboardService {
   }
 
   async getLiveTables(tenantId: string, propertyId: string) {
+    if (!tenantId) return [];
+
     return this.dataSource.getRepository(DiningTable).find({
       where: { tenantId, propertyId, isActive: true },
       order: { tableNumber: 'ASC' },

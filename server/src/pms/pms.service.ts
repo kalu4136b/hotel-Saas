@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import {
   RoomType,
   Room,
@@ -126,6 +126,57 @@ export class PmsService {
       this.eventsGateway.notifyRoomStatusUpdate(propertyId, saved);
     } catch (err) {
       console.error('Failed to emit room cleanliness update:', err);
+    }
+    return saved;
+  }
+
+  async bulkUpdateCleanliness(
+    tenantId: string,
+    propertyId: string,
+    roomIds: string[],
+    status: CleanlinessStatus,
+  ) {
+    const roomRepo = this.dataSource.getRepository(Room);
+    const rooms = await roomRepo.find({
+      where: {
+        id: In(roomIds),
+        tenantId,
+        propertyId,
+      },
+      relations: { roomType: true },
+    });
+
+    for (const room of rooms) {
+      room.cleanlinessStatus = status;
+      await roomRepo.save(room);
+      try {
+        this.eventsGateway.notifyRoomStatusUpdate(propertyId, room);
+      } catch (err) {
+        // Continue
+      }
+    }
+    return rooms;
+  }
+
+  async updateRoomNotes(
+    tenantId: string,
+    propertyId: string,
+    roomId: string,
+    notes: string,
+  ) {
+    const roomRepo = this.dataSource.getRepository(Room);
+    const room = await roomRepo.findOne({
+      where: { id: roomId, tenantId, propertyId },
+      relations: { roomType: true },
+    });
+    if (!room) throw new NotFoundException('Room not found');
+
+    room.notes = notes;
+    const saved = await roomRepo.save(room);
+    try {
+      this.eventsGateway.notifyRoomStatusUpdate(propertyId, saved);
+    } catch (err) {
+      console.error('Failed to emit room notes update:', err);
     }
     return saved;
   }

@@ -4,45 +4,196 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { DataSource, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
+import {
+  IsNotEmpty,
+  IsString,
+  IsEnum,
+  IsOptional,
+  IsNumber,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { BarItem, BarCategory } from '../entities/bar-item.entity';
 import { BarPourLog, PourType } from '../entities/bar-pour-log.entity';
 
 export class CreateBarItemDto {
+  @IsNotEmpty({ message: 'Liquor name is required' })
+  @IsString()
   name: string;
+
+  @IsNotEmpty({ message: 'Category is required' })
+  @IsEnum(BarCategory)
   category: BarCategory;
+
+  @IsOptional()
+  @IsString()
   brand?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   bottleSizeMl?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   fullBottlesStock?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   currentBottleRemainingMl?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   standardPourMl?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   costPerBottle?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   pricePerPour?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   pricePerBottle?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   parLevelBottles?: number;
 }
 
 export class QuickPourDto {
+  @IsNotEmpty({ message: 'Bar item ID is required' })
+  @IsString()
   barItemId: string;
+
+  @IsNotEmpty({ message: 'Milliliters poured is required' })
+  @IsNumber()
+  @Type(() => Number)
   millilitersPoured: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   servingsCount?: number;
+
+  @IsOptional()
+  @IsEnum(PourType)
   pourType?: PourType;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   unitPriceOverride?: number;
+
+  @IsOptional()
+  @IsString()
   bartenderName?: string;
+
+  @IsOptional()
+  @IsString()
   notes?: string;
 }
 
 export class LogWastageDto {
+  @IsNotEmpty({ message: 'Bar item ID is required' })
+  @IsString()
   barItemId: string;
+
+  @IsNotEmpty({ message: 'Milliliters wasted is required' })
+  @IsNumber()
+  @Type(() => Number)
   millilitersWasted: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   bottlesWasted?: number;
+
+  @IsOptional()
+  @IsString()
   bartenderName?: string;
+
+  @IsNotEmpty({ message: 'Reason for wastage is required' })
+  @IsString()
   reason: string;
 }
 
 export class RestockBarItemDto {
+  @IsNotEmpty({ message: 'Bottles count is required' })
+  @IsNumber()
+  @Type(() => Number)
   bottlesCount: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   costPerBottle?: number;
+
+  @IsOptional()
+  @IsString()
   notes?: string;
+}
+
+export class UpdateBarItemDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsEnum(BarCategory)
+  category?: BarCategory;
+
+  @IsOptional()
+  @IsString()
+  brand?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  bottleSizeMl?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  fullBottlesStock?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  currentBottleRemainingMl?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  standardPourMl?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  costPerBottle?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  pricePerPour?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  pricePerBottle?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  parLevelBottles?: number;
 }
 
 @Injectable()

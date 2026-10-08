@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
-import { dashboardApi } from '@/lib/api';
+import { dashboardApi, authStorage } from '@/lib/api';
 import {
   HandCoins,
   UtensilsCrossed,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 
 export default function DashboardOverviewPage() {
+  const router = useRouter();
   const [stats, setStats] = useState<any>(null);
   const [tables, setTables] = useState<any[]>([]);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
@@ -25,6 +27,12 @@ export default function DashboardOverviewPage() {
   const [loading, setLoading] = useState(true);
 
   const loadDashboardData = async () => {
+    const user = authStorage.getUser();
+    if (user?.role === 'SUPER_ADMIN') {
+      router.push('/admin');
+      return;
+    }
+
     try {
       setLoading(true);
       const [statsData, tablesData, ordersData, productsData] =

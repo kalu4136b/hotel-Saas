@@ -70,17 +70,25 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     setTenant(currentTenant);
 
     // Fetch active shift
-    posApi
-      .getCurrentShift()
-      .then((shift) => setActiveShift(shift))
-      .catch(() => {});
+    if (currentUser?.role !== 'SUPER_ADMIN') {
+      posApi
+        .getCurrentShift()
+        .then((shift) => setActiveShift(shift))
+        .catch(() => {});
+    }
   }, [router]);
 
   // If staff user without dashboard overview lands on /dashboard, redirect to their first allowed station
   useEffect(() => {
-    if (user && pathname === '/dashboard' && !isRoutePermitted('/dashboard', user, tenant)) {
-      const destination = getFirstAllowedRoute(user, tenant);
-      router.push(destination);
+    if (user && pathname === '/dashboard') {
+      if (user.role === 'SUPER_ADMIN') {
+        router.push('/admin');
+        return;
+      }
+      if (!isRoutePermitted('/dashboard', user, tenant)) {
+        const destination = getFirstAllowedRoute(user, tenant);
+        router.push(destination);
+      }
     }
   }, [user, tenant, pathname, router]);
 
@@ -116,9 +124,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       badge: 'PMS',
     },
     {
-      label: 'Rooms & Housekeeping',
+      label: 'Rooms & Inventory',
       href: '/dashboard/pms/rooms',
       icon: BedDouble,
+    },
+    {
+      label: 'Housekeeping Station',
+      href: '/dashboard/pms/housekeeping',
+      icon: Sparkles,
+      badge: 'Live',
     },
     {
       label: 'Reservations & Stays',

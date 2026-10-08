@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   BarService,
   CreateBarItemDto,
+  UpdateBarItemDto,
   QuickPourDto,
   LogWastageDto,
   RestockBarItemDto,
@@ -58,7 +59,7 @@ export class BarController {
   updateItem(
     @Request() req: any,
     @Param('id') id: string,
-    @Body() dto: Partial<CreateBarItemDto>,
+    @Body() dto: UpdateBarItemDto,
   ) {
     const tenantId = req.user.tenantId;
     const propertyId = req.user.propertyId || req.user.property?.id;
