@@ -251,7 +251,11 @@ export default function DashboardOverviewPage() {
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#F1F5F9] text-[11px] text-[#64748B]">
                     <span>Capacity: {table.capacity} guests</span>
                     <a
-                      href="/dashboard/pos"
+                      href={
+                        table.status !== 'AVAILABLE'
+                          ? `/dashboard/pos?tableId=${table.id}${table.currentOrderId ? `&orderId=${table.currentOrderId}` : ''}&action=pay`
+                          : `/dashboard/pos?tableId=${table.id}`
+                      }
                       className="text-[#00C48C] font-bold hover:underline"
                     >
                       {isAvailable ? 'Seat' : 'View'}

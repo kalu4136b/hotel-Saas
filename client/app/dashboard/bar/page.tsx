@@ -31,9 +31,13 @@ import {
   ArrowRight,
   ChevronDown,
   Pencil,
+  ClipboardCheck,
 } from 'lucide-react';
+import BarStockReportsTab from './components/BarStockReportsTab';
+import BarAdjustmentsTab from './components/BarAdjustmentsTab';
+import BarLedgerTab from './components/BarLedgerTab';
 
-interface BarItem {
+export interface BarItem {
   id: string;
   name: string;
   category: string;
@@ -166,7 +170,9 @@ const STARTER_BAR_ITEMS = [
 ];
 
 export default function BarPage() {
-  const [activeTab, setActiveTab] = useState<'RACK' | 'POURS' | 'ANALYTICS'>('RACK');
+  const [activeTab, setActiveTab] = useState<
+    'RACK' | 'POURS' | 'STOCK_REPORTS' | 'ADJUSTMENTS' | 'LEDGER' | 'ANALYTICS'
+  >('RACK');
   const [items, setItems] = useState<BarItem[]>([]);
   const [logs, setLogs] = useState<PourLog[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
@@ -643,44 +649,83 @@ export default function BarPage() {
       </div>
 
       {/* ================= TAB NAVIGATION ================= */}
-      <div className="flex items-center gap-2 mb-6 border-b border-[#E2E8F0] pb-2">
+      <div className="flex items-center gap-1.5 mb-6 border-b border-[#E2E8F0] pb-2 overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab('RACK')}
-          className={`py-2 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
             activeTab === 'RACK'
               ? 'bg-[#0F172A] text-white shadow-xs'
               : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
           }`}
         >
-          <Wine className="w-4 h-4" />
+          <Wine className="w-4 h-4 text-[#D97706]" />
           <span>Bottle Rack & Speed Rail</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('POURS')}
-          className={`py-2 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
             activeTab === 'POURS'
               ? 'bg-[#0F172A] text-white shadow-xs'
               : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
           }`}
         >
-          <History className="w-4 h-4" />
-          <span>Pour & Spillage Logs ({logs.length})</span>
+          <History className="w-4 h-4 text-[#3B82F6]" />
+          <span>Pour History ({logs.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('STOCK_REPORTS')}
+          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+            activeTab === 'STOCK_REPORTS'
+              ? 'bg-[#0F172A] text-white shadow-xs'
+              : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+          }`}
+        >
+          <DollarSign className="w-4 h-4 text-[#10B981]" />
+          <span>Stock Valuation & Reports</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('ADJUSTMENTS')}
+          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+            activeTab === 'ADJUSTMENTS'
+              ? 'bg-[#0F172A] text-white shadow-xs'
+              : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+          }`}
+        >
+          <ClipboardCheck className="w-4 h-4 text-[#8B5CF6]" />
+          <span>Adjustments & Audit</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('LEDGER')}
+          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+            activeTab === 'LEDGER'
+              ? 'bg-[#0F172A] text-white shadow-xs'
+              : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+          }`}
+        >
+          <Layers className="w-4 h-4 text-[#EC4899]" />
+          <span>Unified Ledger</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('ANALYTICS')}
-          className={`py-2 px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
             activeTab === 'ANALYTICS'
               ? 'bg-[#0F172A] text-white shadow-xs'
               : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
           }`}
         >
-          <BarChart3 className="w-4 h-4" />
-          <span>Consumption & Wastage Analytics</span>
+          <BarChart3 className="w-4 h-4 text-[#F59E0B]" />
+          <span>Analytics</span>
         </button>
       </div>
 
@@ -1124,6 +1169,28 @@ export default function BarPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ================= TAB 4: STOCK VALUATION & REPORTS ================= */}
+      {activeTab === 'STOCK_REPORTS' && (
+        <BarStockReportsTab categories={CATEGORIES} />
+      )}
+
+      {/* ================= TAB 5: ADJUSTMENTS & AUDIT ================= */}
+      {activeTab === 'ADJUSTMENTS' && (
+        <BarAdjustmentsTab
+          items={items}
+          onReloadAll={loadAllData}
+          onShowFeedback={(type, text) => {
+            setFeedback({ type, text });
+            setTimeout(() => setFeedback(null), 4000);
+          }}
+        />
+      )}
+
+      {/* ================= TAB 6: UNIFIED LEDGER ================= */}
+      {activeTab === 'LEDGER' && (
+        <BarLedgerTab items={items} />
       )}
 
       {/* ================= MODAL: QUICK POUR SHOT ================= */}

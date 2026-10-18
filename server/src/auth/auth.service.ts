@@ -62,8 +62,8 @@ export class AuthService {
         subscriptionTier: SubscriptionTier.STARTER,
         subscriptionPlan: 'HOSPITALITY_PRO',
         modules: [
-          'pos', 'orders', 'tables', 'menu', 'kitchen',
-          'pms_hub', 'pms_rooms', 'pms_reservations', 'pms_front_desk',
+          'pos', 'orders', 'tables', 'menu', 'kitchen', 'bar',
+          'pms_hub', 'pms_rooms', 'pms_housekeeping', 'pms_reservations', 'pms_front_desk',
           'inventory', 'reports', 'settings', 'dashboard'
         ],
         planPrice: 89.0,

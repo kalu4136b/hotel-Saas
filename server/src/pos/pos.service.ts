@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { Category } from '../entities/category.entity';
 import { Product } from '../entities/product.entity';
 import { DiningTable, TableStatus } from '../entities/dining-table.entity';
@@ -273,9 +273,10 @@ export class PosService {
   }
 
   // ================= ORDERS =================
-  async getOrders(tenantId: string, propertyId: string, status?: OrderStatus) {
+  async getOrders(tenantId: string, propertyId: string, status?: OrderStatus, tableId?: string) {
     const where: any = { tenantId, propertyId };
     if (status) where.status = status;
+    if (tableId) where.tableId = tableId;
 
     return this.dataSource.getRepository(Order).find({
       where,
@@ -292,7 +293,65 @@ export class PosService {
     });
 
     if (!order) throw new NotFoundException('Order not found');
-    return order;
+
+    const bill = await this.dataSource.getRepository(Bill).findOne({
+      where: { orderId: order.id, tenantId },
+    });
+
+    return { ...order, bill: bill || null };
+  }
+
+  async getTableActiveOrder(tableId: string, tenantId: string, propertyId: string) {
+    const table = await this.dataSource.getRepository(DiningTable).findOne({
+      where: { id: tableId, tenantId, propertyId },
+    });
+    if (!table) throw new NotFoundException('Table not found');
+
+    let order: Order | null = null;
+    if (table.currentOrderId) {
+      order = await this.dataSource.getRepository(Order).findOne({
+        where: { id: table.currentOrderId, tenantId },
+        relations: { items: true },
+      });
+      if (order && (order.status === OrderStatus.PAID || order.status === OrderStatus.CANCELLED)) {
+        order = null;
+      }
+    }
+
+    if (!order) {
+      order = await this.dataSource.getRepository(Order).findOne({
+        where: {
+          tableId,
+          tenantId,
+          propertyId,
+          status: In([
+            OrderStatus.OPEN,
+            OrderStatus.KOT_SENT,
+            OrderStatus.IN_PREPARATION,
+            OrderStatus.READY,
+            OrderStatus.BILLED,
+          ]),
+        },
+        relations: { items: true },
+        order: { createdAt: 'DESC' },
+      });
+
+      if (order && (!table.currentOrderId || table.currentOrderId !== order.id)) {
+        table.currentOrderId = order.id;
+        if (table.status === TableStatus.AVAILABLE) {
+          table.status = TableStatus.OCCUPIED;
+        }
+        await this.dataSource.getRepository(DiningTable).save(table);
+      }
+    }
+
+    if (!order) return null;
+
+    const bill = await this.dataSource.getRepository(Bill).findOne({
+      where: { orderId: order.id, tenantId },
+    });
+
+    return { ...order, bill: bill || null };
   }
 
   async createOrder(

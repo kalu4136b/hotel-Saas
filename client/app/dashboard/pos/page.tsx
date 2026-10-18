@@ -1,7 +1,8 @@
 'use client';
 
 // Point of Sale (POS) active terminal
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
 import { posApi, pmsApi, authStorage } from '@/lib/api';
 import {
@@ -22,6 +23,7 @@ import {
   X,
   ShoppingBag,
   Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 
 interface CartItem {
@@ -32,7 +34,12 @@ interface CartItem {
   notes?: string;
 }
 
-export default function POSTerminalPage() {
+function POSTerminalContent() {
+  const searchParams = useSearchParams();
+  const urlTableId = searchParams.get('tableId');
+  const urlOrderId = searchParams.get('orderId');
+  const urlAction = searchParams.get('action');
+
   const [categories, setCategories] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [tables, setTables] = useState<any[]>([]);
@@ -64,6 +71,47 @@ export default function POSTerminalPage() {
   const [processing, setProcessing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  const applyLoadedOrder = (order: any, currentTables?: any[]) => {
+    setActiveOrder(order);
+    setOrderType(order.orderType || 'DINE_IN');
+    if (order.tableId) {
+      setSelectedTableId(order.tableId);
+    }
+    if (order.customerName) {
+      setCustomerName(order.customerName);
+    }
+    if (order.notes) {
+      setOrderNotes(order.notes);
+    }
+
+    if (order.items && order.items.length > 0) {
+      const loadedCart: CartItem[] = order.items.map((it: any) => ({
+        productId: it.productId,
+        productName: it.productName,
+        price: Number(it.unitPrice ?? it.price ?? 0),
+        quantity: Number(it.quantity || 1),
+        notes: it.notes || undefined,
+      }));
+      setCart(loadedCart);
+    }
+
+    if (order.bill) {
+      setActiveBill(order.bill);
+      setAmountTendered(Number(order.bill.grandTotal).toFixed(2));
+    } else if (order.totalAmount) {
+      setAmountTendered(Number(order.totalAmount).toFixed(2));
+    }
+
+    const tList = currentTables || tables;
+    const matchedTable = tList.find((t: any) => t.id === order.tableId);
+    const tableName = order.tableNumber || matchedTable?.tableNumber || 'Assigned Table';
+
+    setFeedbackMsg({
+      type: 'success',
+      text: `Order ${order.orderNumber} for Table ${tableName} loaded ($${Number(order.totalAmount).toFixed(2)}). Ready for payment.`,
+    });
+  };
+
   const loadTerminalData = async () => {
     try {
       setLoading(true);
@@ -75,6 +123,49 @@ export default function POSTerminalPage() {
       setCategories(cats);
       setProducts(prods);
       setTables(tbls);
+
+      let orderToLoad: any = null;
+
+      // 1. Try loading by URL orderId
+      if (urlOrderId) {
+        try {
+          orderToLoad = await posApi.getOrder(urlOrderId);
+        } catch (err) {
+          console.error('Failed to load order by urlOrderId:', err);
+        }
+      }
+
+      // 2. Try loading by URL tableId
+      if (!orderToLoad && urlTableId) {
+        const table = tbls.find((t: any) => t.id === urlTableId);
+        if (table && table.currentOrderId) {
+          try {
+            orderToLoad = await posApi.getOrder(table.currentOrderId);
+          } catch (err) {
+            console.error('Failed to load order from table.currentOrderId:', err);
+          }
+        }
+        if (!orderToLoad) {
+          try {
+            orderToLoad = await posApi.getTableActiveOrder(urlTableId);
+          } catch (err) {
+            console.error('Failed to load active order for table:', err);
+          }
+        }
+      }
+
+      if (orderToLoad) {
+        applyLoadedOrder(orderToLoad, tbls);
+        if (urlAction === 'pay') {
+          const expectedAmt = orderToLoad.bill?.grandTotal ?? orderToLoad.totalAmount;
+          setTimeout(() => {
+            openPaymentModal(expectedAmt);
+          }, 300);
+        }
+      } else if (urlTableId) {
+        setSelectedTableId(urlTableId);
+        setOrderType('DINE_IN');
+      }
     } catch (err) {
       console.error('Failed to load POS data from MySQL:', err);
     } finally {
@@ -84,7 +175,7 @@ export default function POSTerminalPage() {
 
   useEffect(() => {
     loadTerminalData();
-  }, []);
+  }, [urlTableId, urlOrderId, urlAction]);
 
   // Cart operations
   const addToCart = (product: any) => {
@@ -136,9 +227,20 @@ export default function POSTerminalPage() {
   };
 
   // Calculations
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = Number((subtotal * 0.1).toFixed(2));
-  const total = Number((subtotal + tax).toFixed(2));
+  const cartSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal =
+    activeOrder && activeOrder.subtotal !== undefined && cart.length === (activeOrder.items?.length || 0)
+      ? Number(activeOrder.subtotal)
+      : cartSubtotal;
+  const tax =
+    activeOrder && activeOrder.taxAmount !== undefined && cart.length === (activeOrder.items?.length || 0)
+      ? Number(activeOrder.taxAmount)
+      : Number((subtotal * 0.1).toFixed(2));
+  const total = activeBill?.grandTotal
+    ? Number(activeBill.grandTotal)
+    : activeOrder && activeOrder.totalAmount !== undefined && cart.length === (activeOrder.items?.length || 0)
+    ? Number(activeOrder.totalAmount)
+    : Number((subtotal + tax).toFixed(2));
 
   // 1. Create Order
   const handleSaveOrder = async () => {
@@ -219,11 +321,12 @@ export default function POSTerminalPage() {
       const bill = await posApi.generateBill(activeOrder.id);
       setActiveBill(bill);
       setActiveOrder((prev: any) => ({ ...prev, status: 'BILLED' }));
-      setAmountTendered(bill.grandTotal.toString());
+      setAmountTendered(Number(bill.grandTotal).toFixed(2));
       setFeedbackMsg({
         type: 'success',
-        text: `Bill ${bill.billNumber} generated ($${bill.grandTotal}). Ready for payment.`,
+        text: `Bill ${bill.billNumber} generated ($${Number(bill.grandTotal).toFixed(2)}). Ready for payment.`,
       });
+      return bill;
     } catch (err: any) {
       setFeedbackMsg({
         type: 'error',
@@ -235,9 +338,18 @@ export default function POSTerminalPage() {
   };
 
   // 4. Open Payment Modal with In-House Guests
-  const openPaymentModal = async () => {
+  const openPaymentModal = async (overrideAmount?: number | string) => {
     setPaymentModalOpen(true);
     setLoadingRooms(true);
+    if (overrideAmount !== undefined && overrideAmount !== null && Number(overrideAmount) > 0) {
+      setAmountTendered(Number(overrideAmount).toFixed(2));
+    } else {
+      setAmountTendered((prev) => {
+        if (prev && Number(prev) > 0) return prev;
+        const fallback = activeBill?.grandTotal || activeOrder?.totalAmount || total;
+        return fallback ? Number(fallback).toFixed(2) : '';
+      });
+    }
     try {
       const inHouseReservations = await pmsApi.getReservations('CHECKED_IN');
       const valid = inHouseReservations || [];
@@ -450,9 +562,18 @@ export default function POSTerminalPage() {
                 <ShoppingBag className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-[#0F172A]">Current Cart</h3>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-sm font-bold text-[#0F172A]">
+                    {activeOrder ? activeOrder.orderNumber : 'Current Cart'}
+                  </h3>
+                  {activeOrder && (
+                    <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                      {activeOrder.status}
+                    </span>
+                  )}
+                </div>
                 <span className="text-[10px] text-[#64748B]">
-                  {activeOrder ? activeOrder.orderNumber : 'New Sale'}
+                  {activeOrder ? `Table: ${activeOrder.tableNumber || 'Selected Table'}` : 'New Sale'}
                 </span>
               </div>
             </div>
@@ -460,9 +581,9 @@ export default function POSTerminalPage() {
             {cart.length > 0 && (
               <button
                 onClick={clearCart}
-                className="text-[11px] font-semibold text-red-600 hover:underline"
+                className="text-[11px] font-semibold text-[#64748B] hover:text-rose-600 hover:underline"
               >
-                Clear
+                {activeOrder ? 'Close / New Sale' : 'Clear'}
               </button>
             )}
           </div>
@@ -491,6 +612,31 @@ export default function POSTerminalPage() {
             </button>
           </div>
 
+          {/* Active Order In-Progress Alert Banner */}
+          {activeOrder && (
+            <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between">
+              <div>
+                <div className="font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>Order in Service: {activeOrder.orderNumber}</span>
+                </div>
+                <p className="text-[10px] text-amber-700 mt-0.5">
+                  Table {activeOrder.tableNumber || 'Assigned'} • Ready to generate bill or settle payment.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!activeBill) await handleGenerateBill();
+                  openPaymentModal();
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-[#00C48C] hover:bg-[#00A877] text-white text-[11px] font-bold shadow-xs whitespace-nowrap"
+              >
+                Pay Now
+              </button>
+            </div>
+          )}
+
           {/* Table Selector (if Dine-In) */}
           {orderType === 'DINE_IN' && (
             <div className="mb-4">
@@ -507,7 +653,31 @@ export default function POSTerminalPage() {
               ) : (
                 <select
                   value={selectedTableId}
-                  onChange={(e) => setSelectedTableId(e.target.value)}
+                  onChange={async (e) => {
+                    const newTableId = e.target.value;
+                    setSelectedTableId(newTableId);
+                    if (!newTableId) return;
+
+                    const tbl = tables.find((t) => t.id === newTableId);
+                    if (tbl && (tbl.status === 'OCCUPIED' || tbl.status === 'BILLED')) {
+                      try {
+                        setProcessing(true);
+                        let ord = null;
+                        if (tbl.currentOrderId) {
+                          ord = await posApi.getOrder(tbl.currentOrderId);
+                        } else {
+                          ord = await posApi.getTableActiveOrder(tbl.id);
+                        }
+                        if (ord) {
+                          applyLoadedOrder(ord);
+                        }
+                      } catch (err: any) {
+                        console.error('Failed to load table order:', err);
+                      } finally {
+                        setProcessing(false);
+                      }
+                    }
+                  }}
                   className="w-full px-3 py-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs font-bold text-[#0F172A] outline-none"
                 >
                   <option value="">-- Choose Dining Table --</option>
@@ -515,9 +685,8 @@ export default function POSTerminalPage() {
                     <option
                       key={t.id}
                       value={t.id}
-                      disabled={t.status === 'OCCUPIED' && t.id !== activeOrder?.tableId}
                     >
-                      {t.tableNumber} ({t.status} - {t.capacity} seats)
+                      {t.tableNumber} ({t.status} - {t.capacity} seats){t.status !== 'AVAILABLE' ? ' • Active Order' : ''}
                     </option>
                   ))}
                 </select>
@@ -611,15 +780,17 @@ export default function POSTerminalPage() {
               </button>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={handleSendToKitchen}
-                  disabled={processing || activeOrder.status === 'PAID'}
-                  className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all flex items-center justify-center gap-2"
-                >
-                  <ChefHat className="w-4 h-4" />
-                  <span>Send KOT to Kitchen</span>
-                </button>
+                {activeOrder.status === 'OPEN' && (
+                  <button
+                    type="button"
+                    onClick={handleSendToKitchen}
+                    disabled={processing || activeOrder.status === 'PAID'}
+                    className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all flex items-center justify-center gap-2"
+                  >
+                    <ChefHat className="w-4 h-4" />
+                    <span>Send KOT to Kitchen</span>
+                  </button>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -629,22 +800,36 @@ export default function POSTerminalPage() {
                     className="py-2.5 px-3 rounded-xl border border-[#0284C7] bg-[#F0F9FF] text-[#0284C7] text-xs font-bold hover:bg-[#0284C7] hover:text-white transition-all flex items-center justify-center gap-1.5"
                   >
                     <Receipt className="w-3.5 h-3.5" />
-                    <span>Generate Bill</span>
+                    <span>{activeBill ? 'View Bill' : 'Generate Bill'}</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!activeBill) handleGenerateBill();
+                    onClick={async () => {
+                      if (!activeBill) await handleGenerateBill();
                       openPaymentModal();
                     }}
                     disabled={processing || activeOrder.status === 'PAID'}
-                    className="py-2.5 px-3 rounded-xl bg-[#00C48C] hover:bg-[#00A877] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                    className="py-2.5 px-3 rounded-xl bg-[#00C48C] hover:bg-[#00A877] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs"
                   >
                     <CreditCard className="w-3.5 h-3.5" />
                     <span>Settle Pay</span>
                   </button>
                 </div>
+
+                {/* Prominent Direct Settle Payment Button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!activeBill) await handleGenerateBill();
+                    openPaymentModal();
+                  }}
+                  disabled={processing || activeOrder.status === 'PAID'}
+                  className="w-full py-3 px-4 rounded-xl bg-[#00C48C] hover:bg-[#00B07D] text-white text-xs font-extrabold transition-all shadow-sm flex items-center justify-center gap-2 mt-2"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Settle Payment (${total.toFixed(2)})</span>
+                </button>
               </>
             )}
 
@@ -918,5 +1103,22 @@ export default function POSTerminalPage() {
         </div>
       )}
     </DashboardLayout>
+  );
+}
+
+export default function POSTerminalPage() {
+  return (
+    <Suspense
+      fallback={
+        <DashboardLayout>
+          <div className="py-20 text-center text-xs text-[#64748B]">
+            <div className="w-6 h-6 border-2 border-[#00C48C] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            Loading POS Terminal...
+          </div>
+        </DashboardLayout>
+      }
+    >
+      <POSTerminalContent />
+    </Suspense>
   );
 }

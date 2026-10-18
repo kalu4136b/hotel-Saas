@@ -531,12 +531,12 @@ export default function HousekeepingStationPage() {
           <div className="flex flex-wrap items-center gap-1.5">
             {(
               [
-                { id: 'ALL', label: 'All Rooms', count: stats.total },
+                { id: 'ALL', label: 'All Rooms', count: stats.total, alert: false },
                 { id: 'DIRTY', label: 'Dirty', count: stats.dirty, alert: stats.dirty > 0 },
-                { id: 'IN_CLEANING', label: 'In Cleaning', count: stats.inCleaning },
-                { id: 'CLEAN', label: 'Clean', count: stats.clean },
-                { id: 'INSPECTED', label: 'Inspected', count: stats.inspected },
-                { id: 'MAINTENANCE', label: 'Out of Order', count: stats.maintenance },
+                { id: 'IN_CLEANING', label: 'In Cleaning', count: stats.inCleaning, alert: false },
+                { id: 'CLEAN', label: 'Clean', count: stats.clean, alert: false },
+                { id: 'INSPECTED', label: 'Inspected', count: stats.inspected, alert: false },
+                { id: 'MAINTENANCE', label: 'Out of Order', count: stats.maintenance, alert: false },
               ] as const
             ).map((tab) => (
               <button

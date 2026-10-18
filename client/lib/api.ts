@@ -231,6 +231,10 @@ export const posApi = {
     return apiRequest(`/api/pos/tables/${id}`, { method: 'DELETE' });
   },
 
+  async getTableActiveOrder(tableId: string) {
+    return apiRequest(`/api/pos/tables/${tableId}/active-order`, { method: 'GET' });
+  },
+
   async getCurrentShift() {
     return apiRequest('/api/pos/shifts/current', { method: 'GET' });
   },
@@ -249,8 +253,11 @@ export const posApi = {
     });
   },
 
-  async getOrders(status?: string) {
-    const query = status ? `?status=${status}` : '';
+  async getOrders(status?: string, tableId?: string) {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (tableId) params.append('tableId', tableId);
+    const query = params.toString() ? `?${params.toString()}` : '';
     return apiRequest(`/api/pos/orders${query}`, { method: 'GET' });
   },
 
@@ -898,6 +905,92 @@ export const barApi = {
     if (endDate) qs.append('endDate', endDate);
     const q = qs.toString() ? `?${qs.toString()}` : '';
     return apiRequest(`/api/bar/analytics${q}`, { method: 'GET' });
+  },
+
+  async adjustStock(data: {
+    barItemId: string;
+    adjustmentType: string;
+    newFullBottles?: number;
+    newOpenMl?: number;
+    fullBottlesDelta?: number;
+    openMlDelta?: number;
+    adjustedBy?: string;
+    reason: string;
+    notes?: string;
+  }) {
+    return apiRequest('/api/bar/adjustments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async bulkStocktake(data: {
+    counts: Array<{
+      barItemId: string;
+      actualFullBottles: number;
+      actualOpenMl: number;
+      notes?: string;
+    }>;
+    auditedBy?: string;
+    notes?: string;
+  }) {
+    return apiRequest('/api/bar/stocktake', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getAdjustments(params?: {
+    adjustmentType?: string;
+    barItemId?: string;
+    category?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    limit?: number;
+  }) {
+    const qs = new URLSearchParams();
+    if (params?.adjustmentType)
+      qs.append('adjustmentType', params.adjustmentType);
+    if (params?.barItemId) qs.append('barItemId', params.barItemId);
+    if (params?.category) qs.append('category', params.category);
+    if (params?.startDate) qs.append('startDate', params.startDate);
+    if (params?.endDate) qs.append('endDate', params.endDate);
+    if (params?.search) qs.append('search', params.search);
+    if (params?.limit) qs.append('limit', params.limit.toString());
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/bar/adjustments${q}`, { method: 'GET' });
+  },
+
+  async getValuationReport(params?: { category?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.category) qs.append('category', params.category);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/bar/reports/valuation${q}`, { method: 'GET' });
+  },
+
+  async getRunwayReport(params?: { daysPeriod?: number }) {
+    const qs = new URLSearchParams();
+    if (params?.daysPeriod)
+      qs.append('daysPeriod', params.daysPeriod.toString());
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/bar/reports/runway${q}`, { method: 'GET' });
+  },
+
+  async getShrinkageReport(params?: { startDate?: string; endDate?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.startDate) qs.append('startDate', params.startDate);
+    if (params?.endDate) qs.append('endDate', params.endDate);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/bar/reports/shrinkage${q}`, { method: 'GET' });
+  },
+
+  async getLedger(params?: { barItemId?: string; limit?: number }) {
+    const qs = new URLSearchParams();
+    if (params?.barItemId) qs.append('barItemId', params.barItemId);
+    if (params?.limit) qs.append('limit', params.limit.toString());
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/bar/ledger${q}`, { method: 'GET' });
   },
 };
 

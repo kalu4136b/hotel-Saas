@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BarController } from './bar.controller';
 import { BarService } from './bar.service';
-import { BarItem, BarPourLog } from '../entities';
+import { BarItem, BarPourLog, BarStockAdjustment } from '../entities';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([BarItem, BarPourLog])],
+  imports: [TypeOrmModule.forFeature([BarItem, BarPourLog, BarStockAdjustment])],
   controllers: [BarController],
   providers: [BarService],
   exports: [BarService],

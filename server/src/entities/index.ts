@@ -27,4 +27,5 @@ export * from './supplier.entity';
 export * from './purchase-order.entity';
 export * from './bar-item.entity';
 export * from './bar-pour-log.entity';
+export * from './bar-stock-adjustment.entity';
 

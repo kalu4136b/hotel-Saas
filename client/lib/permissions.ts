@@ -183,10 +183,10 @@ export const ROUTE_PERMISSION_MAP: Record<string, string> = {
 };
 
 export function getTenantModules(tenant?: any): string[] {
+  let list: string[] = [];
   if (tenant && Array.isArray(tenant.modules) && tenant.modules.length > 0) {
-    return tenant.modules;
-  }
-  if (typeof window !== 'undefined') {
+    list = [...tenant.modules];
+  } else if (typeof window !== 'undefined') {
     try {
       const raw =
         localStorage.getItem('hotel_saas_tenant') ||
@@ -194,15 +194,24 @@ export function getTenantModules(tenant?: any): string[] {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed.modules) && parsed.modules.length > 0) {
-          return parsed.modules;
+          list = [...parsed.modules];
         }
       }
     } catch {
       // Ignore
     }
   }
-  // Fallback: all permissions
-  return SYSTEM_PERMISSIONS.map((p) => p.id);
+
+  if (list.length === 0) {
+    return SYSTEM_PERMISSIONS.map((p) => p.id);
+  }
+
+  // Ensure bar, inventory, and housekeeping are always included in active modules
+  if (!list.includes('bar')) list.push('bar');
+  if (!list.includes('inventory')) list.push('inventory');
+  if (!list.includes('pms_housekeeping')) list.push('pms_housekeeping');
+
+  return list;
 }
 
 export function getUserPermissions(user: any, tenantModules?: string[]): string[] {

@@ -18,6 +18,8 @@ import {
   QuickPourDto,
   LogWastageDto,
   RestockBarItemDto,
+  AdjustBarStockDto,
+  BulkStocktakeAuditDto,
 } from './bar.service';
 
 @Controller('api/bar')
@@ -148,6 +150,114 @@ export class BarController {
       propertyId,
       startDate,
       endDate,
+    );
+  }
+
+  @Post('adjustments')
+  adjustStock(@Request() req: any, @Body() dto: AdjustBarStockDto) {
+    const tenantId = req.user.tenantId;
+    const propertyId = req.user.propertyId || req.user.property?.id;
+    const adjustedBy =
+      dto.adjustedBy || req.user.fullName || req.user.username || 'Bar Manager';
+    return this.barService.adjustStock(tenantId, propertyId, {
+      ...dto,
+      adjustedBy,
+    });
+  }
+
+  @Post('stocktake')
+  bulkStocktakeAudit(@Request() req: any, @Body() dto: BulkStocktakeAuditDto) {
+    const tenantId = req.user.tenantId;
+    const propertyId = req.user.propertyId || req.user.property?.id;
+    const auditedBy =
+      dto.auditedBy || req.user.fullName || req.user.username || 'Auditor';
+    return this.barService.bulkStocktakeAudit(tenantId, propertyId, {
+      ...dto,
+      auditedBy,
+    });
+  }
+
+  @Get('adjustments')
+  getStockAdjustments(
+    @Request() req: any,
+    @Query('adjustmentType') adjustmentType?: string,
+    @Query('barItemId') barItemId?: string,
+    @Query('category') category?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const tenantId = req.user.tenantId;
+    const propertyId = req.user.propertyId || req.user.property?.id;
+    return this.barService.getStockAdjustments(tenantId, propertyId, {
+      adjustmentType,
+      barItemId,
+      category,
+      startDate,
+      endDate,
+      search,
+      limit: limit ? parseInt(limit) : undefined,
+    });
+  }
+
+  @Get('reports/valuation')
+  getBarStockValuationReport(
+    @Request() req: any,
+    @Query('category') category?: string,
+  ) {
+    const tenantId = req.user.tenantId;
+    const propertyId = req.user.propertyId || req.user.property?.id;
+    return this.barService.getBarStockValuationReport(
+      tenantId,
+      propertyId,
+      category,
+    );
+  }
+
+  @Get('reports/runway')
+  getBarDepletionRunwayReport(
+    @Request() req: any,
+    @Query('daysPeriod') daysPeriod?: string,
+  ) {
+    const tenantId = req.user.tenantId;
+    const propertyId = req.user.propertyId || req.user.property?.id;
+    return this.barService.getBarDepletionRunwayReport(
+      tenantId,
+      propertyId,
+      daysPeriod ? parseInt(daysPeriod) : 30,
+    );
+  }
+
+  @Get('reports/shrinkage')
+  getBarShrinkageReport(
+    @Request() req: any,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const tenantId = req.user.tenantId;
+    const propertyId = req.user.propertyId || req.user.property?.id;
+    return this.barService.getBarShrinkageReport(
+      tenantId,
+      propertyId,
+      startDate,
+      endDate,
+    );
+  }
+
+  @Get('ledger')
+  getUnifiedStockLedger(
+    @Request() req: any,
+    @Query('barItemId') barItemId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const tenantId = req.user.tenantId;
+    const propertyId = req.user.propertyId || req.user.property?.id;
+    return this.barService.getUnifiedStockLedger(
+      tenantId,
+      propertyId,
+      barItemId,
+      limit ? parseInt(limit) : 100,
     );
   }
 }

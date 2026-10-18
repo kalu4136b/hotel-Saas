@@ -17,6 +17,12 @@ import {
   PurchaseOrder,
   PurchaseOrderItem,
   PurchaseOrderStatus,
+  BarItem,
+  BarCategory,
+  BarPourLog,
+  PourType,
+  BarStockAdjustment,
+  BarAdjustmentType,
 } from '../entities';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -39,6 +45,9 @@ const AppDataSource = new DataSource({
     Supplier,
     PurchaseOrder,
     PurchaseOrderItem,
+    BarItem,
+    BarPourLog,
+    BarStockAdjustment,
   ],
   synchronize: true,
 });
@@ -322,6 +331,200 @@ async function seedInventory() {
         totalCost: 57.0,
       }),
     ]);
+
+    // 5. Seed Premium Bar Inventory & Sample Adjustments
+    const barRepo = AppDataSource.getRepository(BarItem);
+    const existingBars = await barRepo.find({ where: { tenantId, propertyId } });
+    if (existingBars.length === 0) {
+      console.log('  Seeding Premium Bar Inventory...');
+      const starterBars = [
+        {
+          name: 'Macallan 12 Double Cask',
+          category: BarCategory.WHISKEY,
+          brand: 'The Macallan',
+          bottleSizeMl: 750,
+          fullBottlesStock: 4,
+          currentBottleRemainingMl: 520,
+          standardPourMl: 30,
+          costPerBottle: 58.0,
+          pricePerPour: 16.0,
+          pricePerBottle: 220.0,
+          parLevelBottles: 3,
+        },
+        {
+          name: 'Grey Goose Premium Vodka',
+          category: BarCategory.VODKA,
+          brand: 'Grey Goose',
+          bottleSizeMl: 1000,
+          fullBottlesStock: 5,
+          currentBottleRemainingMl: 650,
+          standardPourMl: 30,
+          costPerBottle: 32.0,
+          pricePerPour: 12.0,
+          pricePerBottle: 160.0,
+          parLevelBottles: 3,
+        },
+        {
+          name: "Hendrick's Gin",
+          category: BarCategory.GIN,
+          brand: "Hendrick's",
+          bottleSizeMl: 750,
+          fullBottlesStock: 1, // Below par
+          currentBottleRemainingMl: 280,
+          standardPourMl: 30,
+          costPerBottle: 35.0,
+          pricePerPour: 13.0,
+          pricePerBottle: 175.0,
+          parLevelBottles: 3,
+        },
+        {
+          name: 'Don Julio Reposado Tequila',
+          category: BarCategory.TEQUILA,
+          brand: 'Don Julio',
+          bottleSizeMl: 750,
+          fullBottlesStock: 2,
+          currentBottleRemainingMl: 180,
+          standardPourMl: 30,
+          costPerBottle: 48.0,
+          pricePerPour: 15.0,
+          pricePerBottle: 195.0,
+          parLevelBottles: 2,
+        },
+        {
+          name: 'Ron Zacapa 23 Centenario Rum',
+          category: BarCategory.RUM,
+          brand: 'Ron Zacapa',
+          bottleSizeMl: 750,
+          fullBottlesStock: 3,
+          currentBottleRemainingMl: 480,
+          standardPourMl: 30,
+          costPerBottle: 45.0,
+          pricePerPour: 14.0,
+          pricePerBottle: 180.0,
+          parLevelBottles: 2,
+        },
+        {
+          name: 'Veuve Clicquot Brut Champagne',
+          category: BarCategory.WINE,
+          brand: 'Veuve Clicquot',
+          bottleSizeMl: 750,
+          fullBottlesStock: 8,
+          currentBottleRemainingMl: 750,
+          standardPourMl: 150,
+          costPerBottle: 52.0,
+          pricePerPour: 22.0,
+          pricePerBottle: 140.0,
+          parLevelBottles: 4,
+        },
+        {
+          name: 'Campari Bitter Liqueur',
+          category: BarCategory.LIQUEUR,
+          brand: 'Campari',
+          bottleSizeMl: 1000,
+          fullBottlesStock: 1, // Low stock
+          currentBottleRemainingMl: 300,
+          standardPourMl: 30,
+          costPerBottle: 24.0,
+          pricePerPour: 9.5,
+          pricePerBottle: 90.0,
+          parLevelBottles: 2,
+        },
+      ];
+
+      const createdBars: BarItem[] = [];
+      for (const b of starterBars) {
+        const item = await barRepo.save(
+          barRepo.create({
+            tenantId,
+            propertyId,
+            ...b,
+            isActive: true,
+          }),
+        );
+        createdBars.push(item);
+      }
+
+      // Seed Sample Stock Adjustments (Breakage, Spoilage, Audit count)
+      const adjRepo = AppDataSource.getRepository(BarStockAdjustment);
+      const macallan = createdBars[0];
+      const hendricks = createdBars[2];
+
+      await adjRepo.save([
+        adjRepo.create({
+          tenantId,
+          propertyId,
+          barItemId: macallan.id,
+          barItemName: macallan.name,
+          category: macallan.category,
+          adjustmentType: BarAdjustmentType.BREAKAGE,
+          previousFullBottles: 5,
+          newFullBottles: 4,
+          fullBottlesDelta: -1,
+          previousOpenMl: 520,
+          newOpenMl: 520,
+          openMlDelta: 0,
+          netVolumeDeltaMl: -750,
+          costImpact: -58.0,
+          adjustedBy: 'Head Bartender',
+          reason: 'Bottle slipped from speed rail during dinner rush',
+          notes: 'Broken on service floor; incident logged with manager',
+        }),
+        adjRepo.create({
+          tenantId,
+          propertyId,
+          barItemId: hendricks.id,
+          barItemName: hendricks.name,
+          category: hendricks.category,
+          adjustmentType: BarAdjustmentType.PHYSICAL_AUDIT,
+          previousFullBottles: 2,
+          newFullBottles: 1,
+          fullBottlesDelta: -1,
+          previousOpenMl: 350,
+          newOpenMl: 280,
+          openMlDelta: -70,
+          netVolumeDeltaMl: -820,
+          costImpact: -38.27,
+          adjustedBy: 'Inventory Auditor',
+          reason: 'Weekly Sunday physical stock count discrepancy',
+          notes: 'Unaccounted shortage reconciled in closing audit',
+        }),
+      ]);
+
+      // Seed Sample Pour Logs
+      const pourRepo = AppDataSource.getRepository(BarPourLog);
+      await pourRepo.save([
+        pourRepo.create({
+          tenantId,
+          propertyId,
+          barItemId: macallan.id,
+          barItemName: macallan.name,
+          category: macallan.category,
+          pourType: PourType.SALE,
+          millilitersPoured: 60,
+          servingsCount: 2,
+          totalSaleAmount: 32.0,
+          costAmount: 4.64,
+          bartenderName: 'Alex Rivera',
+          notes: 'Table 6 Double Macallan Neat',
+        }),
+        pourRepo.create({
+          tenantId,
+          propertyId,
+          barItemId: hendricks.id,
+          barItemName: hendricks.name,
+          category: hendricks.category,
+          pourType: PourType.WASTAGE,
+          millilitersPoured: 45,
+          servingsCount: 1,
+          totalSaleAmount: 0.0,
+          costAmount: 2.1,
+          bartenderName: 'Sarah Jenkins',
+          notes: 'Cocktail shaker spill during order preparation',
+        }),
+      ]);
+
+      console.log('  Bar Inventory, Sample Incidents & Pours Seeded!');
+    }
   }
 
   console.log('--- Phase 3 Inventory & Recipe Seed Complete! ---');

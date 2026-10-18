@@ -89,6 +89,11 @@ export class PosController {
     return this.posService.createTable(req.user.tenantId, req.user.propertyId, dto);
   }
 
+  @Get('tables/:id/active-order')
+  async getTableActiveOrder(@Request() req: any, @Param('id') tableId: string) {
+    return this.posService.getTableActiveOrder(tableId, req.user.tenantId, req.user.propertyId);
+  }
+
   @Delete('tables/:id')
   async deleteTable(@Request() req: any, @Param('id') tableId: string) {
     return this.posService.deleteTable(req.user.tenantId, req.user.propertyId, tableId);
@@ -130,8 +135,12 @@ export class PosController {
 
   // Orders
   @Get('orders')
-  async getOrders(@Request() req: any, @Query('status') status?: OrderStatus) {
-    return this.posService.getOrders(req.user.tenantId, req.user.propertyId, status);
+  async getOrders(
+    @Request() req: any,
+    @Query('status') status?: OrderStatus,
+    @Query('tableId') tableId?: string,
+  ) {
+    return this.posService.getOrders(req.user.tenantId, req.user.propertyId, status, tableId);
   }
 
   @Get('orders/:id')

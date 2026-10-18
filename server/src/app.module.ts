@@ -44,6 +44,7 @@ import {
   PurchaseOrderItem,
   BarItem,
   BarPourLog,
+  BarStockAdjustment,
 } from './entities';
 
 @Module({
@@ -90,6 +91,7 @@ import {
         PurchaseOrderItem,
         BarItem,
         BarPourLog,
+        BarStockAdjustment,
       ],
       synchronize: true,
       logging: ['error', 'warn'],

@@ -14,6 +14,7 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  CreditCard,
 } from 'lucide-react';
 
 export default function TablesManagementPage() {
@@ -215,12 +216,24 @@ export default function TablesManagementPage() {
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      <a
-                        href="/dashboard/pos"
-                        className="font-bold text-[#00C48C] hover:underline flex items-center gap-1 text-[11px]"
-                      >
-                        POS &rarr;
-                      </a>
+                      {isOccupied || isBilled ? (
+                        <a
+                          href={`/dashboard/pos?tableId=${table.id}${table.currentOrderId ? `&orderId=${table.currentOrderId}` : ''}&action=pay`}
+                          title={`Load Table ${table.tableNumber} order to POS for payment`}
+                          className="px-2.5 py-1 rounded-lg bg-[#00C48C] hover:bg-[#00B07D] text-white font-bold flex items-center gap-1.5 text-[11px] transition-all shadow-xs"
+                        >
+                          <CreditCard className="w-3 h-3" />
+                          <span>POS Pay &rarr;</span>
+                        </a>
+                      ) : (
+                        <a
+                          href={`/dashboard/pos?tableId=${table.id}`}
+                          title={`Open POS for Table ${table.tableNumber}`}
+                          className="font-bold text-[#00C48C] hover:underline flex items-center gap-1 text-[11px]"
+                        >
+                          POS &rarr;
+                        </a>
+                      )}
                     </div>
                   </div>
                 </div>
