@@ -45,7 +45,7 @@ export default function SettingsPage() {
     address: '',
     phone: '',
     email: '',
-    currency: 'USD',
+    currency: 'LKR',
     defaultTaxRate: 10,
     serviceChargeRate: 0,
   });
@@ -390,10 +390,10 @@ export default function SettingsPage() {
                       <input
                         type="text"
                         required
-                        value={property?.currency || 'USD'}
+                        value={property?.currency || 'LKR'}
                         onChange={(e) => setProperty({ ...property, currency: e.target.value.toUpperCase() })}
                         className="w-full pl-10 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-mono font-bold focus:bg-white focus:outline-none focus:border-[#00C48C] transition uppercase"
-                        placeholder="USD"
+                        placeholder="LKR"
                       />
                     </div>
                   </div>

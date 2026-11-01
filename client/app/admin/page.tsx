@@ -103,10 +103,10 @@ export default function SuperAdminPortalPage() {
   const [onboardForm, setOnboardForm] = useState({
     name: '',
     propertyName: '',
-    currency: 'USD',
+    currency: 'LKR',
     subscriptionPlan: 'HOSPITALITY_PRO',
     billingCycle: 'MONTHLY' as 'MONTHLY' | 'ANNUAL' | 'LIFETIME',
-    planPrice: 89.0,
+    planPrice: 29000.0,
     maxRooms: 60,
     maxStaff: 20,
     modules: [
@@ -152,16 +152,16 @@ export default function SuperAdminPortalPage() {
 
   // 1. Initial Auth Check & Data Load
   useEffect(() => {
-    const user = authStorage.getUser();
-    if (!user) {
+    const adminUser = authStorage.getAdminUser() || authStorage.getUser('admin');
+    if (!adminUser) {
       router.push('/login');
       return;
     }
-    if (user.role !== 'SUPER_ADMIN') {
+    if (adminUser.role !== 'SUPER_ADMIN') {
       router.push('/dashboard');
       return;
     }
-    setCurrentUser(user);
+    setCurrentUser(adminUser);
     setAuthChecked(true);
     loadPlatformData();
   }, []);
@@ -368,7 +368,7 @@ export default function SuperAdminPortalPage() {
   };
 
   const handleLogout = () => {
-    authStorage.clearSession();
+    authStorage.clearAdminSession();
     router.push('/login');
   };
 
@@ -412,7 +412,16 @@ export default function SuperAdminPortalPage() {
           </div>
 
           <button
-            onClick={() => router.push('/dashboard')}
+            onClick={() => {
+              if (authStorage.getTenantToken()) {
+                router.push('/dashboard');
+              } else {
+                setFeedback({
+                  type: 'error',
+                  text: 'No active Hotel Staff session detected. Please sign in with a hotel account (e.g. novotel_admin or admin@hotel.com).',
+                });
+              }
+            }}
             className="px-3 py-1.5 rounded-xl bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#0F172A] text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
             title="Switch to Hotel Dashboard"
           >
@@ -492,7 +501,7 @@ export default function SuperAdminPortalPage() {
                 Active Monthly MRR
               </div>
               <div className="text-2xl font-bold text-[#0F172A] mono mt-0.5">
-                ${overview?.mrr ? overview.mrr.toLocaleString() : '0.00'}
+                Rs. {overview?.mrr ? overview.mrr.toLocaleString() : '0.00'}
               </div>
               <div className="text-[11px] text-[#64748B] mt-1">
                 Recurring subscription revenue
@@ -712,7 +721,7 @@ export default function SuperAdminPortalPage() {
                               {t.subscriptionPlan.replace('_', ' ')}
                             </span>
                             <div className="text-[10.5px] text-[#64748B]">
-                              ${t.planPrice || 0}{' '}
+                              Rs. {t.planPrice ? Number(t.planPrice).toLocaleString() : 0}{' '}
                               <span className="text-[9px] text-[#94A3B8]">
                                 /{t.billingCycle.toLowerCase()}
                               </span>
@@ -871,10 +880,10 @@ export default function SuperAdminPortalPage() {
                       }
                       className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] font-semibold focus:bg-white focus:outline-none focus:border-[#00C48C]"
                     >
+                      <option value="LKR">LKR (Rs.)</option>
                       <option value="USD">USD ($)</option>
                       <option value="EUR">EUR (€)</option>
                       <option value="GBP">GBP (£)</option>
-                      <option value="LKR">LKR (Rs)</option>
                       <option value="INR">INR (₹)</option>
                       <option value="AED">AED (د.إ)</option>
                     </select>
@@ -897,7 +906,7 @@ export default function SuperAdminPortalPage() {
                   </div>
                   <div>
                     <label className="block text-[#334155] font-bold mb-1">
-                      Subscription Fee ($)
+                      Subscription Fee (Rs.)
                     </label>
                     <input
                       type="number"
@@ -929,28 +938,28 @@ export default function SuperAdminPortalPage() {
                     {
                       id: 'POS_STARTER',
                       name: 'POS Express',
-                      price: '$29/mo',
+                      price: 'Rs. 9,500/mo',
                       badge: 'Dining Only',
                       desc: 'Restaurant, Cafe, KDS',
                     },
                     {
                       id: 'PMS_BOUTIQUE',
                       name: 'Boutique PMS',
-                      price: '$49/mo',
+                      price: 'Rs. 16,000/mo',
                       badge: 'Lodging Only',
                       desc: 'Rooms, Stays, Folios',
                     },
                     {
                       id: 'HOSPITALITY_PRO',
                       name: 'Hospitality Pro',
-                      price: '$89/mo',
+                      price: 'Rs. 29,000/mo',
                       badge: 'Hotel + Dining',
                       desc: 'Full Suite + Stock',
                     },
                     {
                       id: 'ENTERPRISE_SUITE',
                       name: 'Enterprise',
-                      price: '$199/mo',
+                      price: 'Rs. 65,000/mo',
                       badge: 'Resort / Chains',
                       desc: 'Unlimited power',
                     },
@@ -1356,10 +1365,10 @@ export default function SuperAdminPortalPage() {
                       }
                       className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] font-semibold focus:bg-white focus:outline-none focus:border-[#00C48C]"
                     >
-                      <option value="POS_STARTER">POS Express & Dining ($29/mo)</option>
-                      <option value="PMS_BOUTIQUE">Boutique Hotel & PMS ($49/mo)</option>
-                      <option value="HOSPITALITY_PRO">Hospitality Pro ($89/mo)</option>
-                      <option value="ENTERPRISE_SUITE">Enterprise All-In-One ($199/mo)</option>
+                      <option value="POS_STARTER">POS Express & Dining (Rs. 9,500/mo)</option>
+                      <option value="PMS_BOUTIQUE">Boutique Hotel & PMS (Rs. 16,000/mo)</option>
+                      <option value="HOSPITALITY_PRO">Hospitality Pro (Rs. 29,000/mo)</option>
+                      <option value="ENTERPRISE_SUITE">Enterprise All-In-One (Rs. 65,000/mo)</option>
                       <option value="CUSTOM">Custom Tailored Plan</option>
                     </select>
                   </div>
@@ -1383,7 +1392,7 @@ export default function SuperAdminPortalPage() {
 
                   <div>
                     <label className="block text-[#334155] font-bold mb-1">
-                      Subscription Fee ($)
+                      Subscription Fee (Rs.)
                     </label>
                     <input
                       type="number"

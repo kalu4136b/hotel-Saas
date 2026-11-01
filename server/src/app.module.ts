@@ -42,10 +42,23 @@ import {
   Supplier,
   PurchaseOrder,
   PurchaseOrderItem,
+  GoodsReceivedNote,
+  GoodsReceivedNoteItem,
+  OperationalStockIssuance,
+  OperationalStockIssuanceItem,
   BarItem,
   BarPourLog,
   BarStockAdjustment,
+  ChannelConnection,
+  ChannelRoomMapping,
+  ChannelRatePlanMapping,
+  ChannelPricingRule,
+  ChannelSyncJob,
+  ChannelSyncLog,
+  ChannelReservation,
+  ChannelWebhookEvent,
 } from './entities';
+import { ChannelManagerModule } from './channel-manager/channel-manager.module';
 
 @Module({
   imports: [
@@ -89,9 +102,21 @@ import {
         Supplier,
         PurchaseOrder,
         PurchaseOrderItem,
+        GoodsReceivedNote,
+        GoodsReceivedNoteItem,
+        OperationalStockIssuance,
+        OperationalStockIssuanceItem,
         BarItem,
         BarPourLog,
         BarStockAdjustment,
+        ChannelConnection,
+        ChannelRoomMapping,
+        ChannelRatePlanMapping,
+        ChannelPricingRule,
+        ChannelSyncJob,
+        ChannelSyncLog,
+        ChannelReservation,
+        ChannelWebhookEvent,
       ],
       synchronize: true,
       logging: ['error', 'warn'],
@@ -106,8 +131,10 @@ import {
     InventoryModule,
     SuperAdminModule,
     BarModule,
+    ChannelManagerModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
+

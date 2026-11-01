@@ -18,26 +18,22 @@ No mock data, placeholder arrays, or simulated figures exist anywhere in the cod
 
 ## 2. Authentication & Multi-Tenant Onboarding Operations
 
-### 2.1 Tenant Organization Self-Registration (`/signup`)
-- **What it does:** Allows a hotel owner or enterprise operator to provision an entirely new tenant environment in a single atomic transaction.
-- **Form Inputs:**
+### 2.1 Tenant Provisioning via Platform Administration (`/admin`)
+- **Policy:** Public self-registration and third-party social auth (Google OAuth) are decommissioned. All tenant organizations and initial administrative credentials are provisioned strictly by Platform Administrators (Super Admin console at `/admin`).
+- **Provisioning Parameters:**
   - Hotel / Business Name (e.g., `Novotel Phuket City Grand`)
   - Subdomain / Organization Code (e.g., `novotel`)
-  - Administrator Full Name
-  - Admin Username
-  - Work Email
-  - Secure Password (min 8 chars)
-  - Currency Code (e.g., `USD`, `THB`, `EUR`)
+  - Subscription Plan & Modules (`LITE_OPERATIONS`, `HOSPITALITY_PRO`, `ENTERPRISE_SUITE`)
+  - Administrator Full Name & Email
+  - Admin Initial Password
+  - Default Currency Code (e.g., `USD`, `THB`, `EUR`)
 - **Automated Backend Actions:**
-  1. Creates a row in `tenants` with active subscription status.
-  2. Creates a primary branch in `properties` with specified currency and default 10% tax rate.
+  1. Creates a row in `tenants` with active subscription status and module entitlements.
+  2. Creates a primary branch in `properties` with specified currency and default tax rate.
   3. Provisions a default `pos_outlets` record ("Main Restaurant & Bar").
-  4. Seeds default menu `categories` (Starters, Main Courses, Desserts, Beverages).
-  5. Seeds real initial dishes in `products` (e.g., Tom Yum Goong, Wagyu Ribeye, Mango Sticky Rice, Thai Iced Tea) with real pricing and SKU codes.
-  6. Provisions dining tables `T-01` through `T-06` in `dining_tables` with capacities.
-  7. Hashes the password using `bcrypt` (10 rounds) and creates the `ADMIN` user in `users`.
-  8. Commits an immutable audit log entry in `audit_logs`.
-  9. Signs and returns a JWT token, automatically logging the administrator into the system.
+  4. Provisions initial dining tables and operational configurations.
+  5. Hashes the password using `bcrypt` and creates the `TENANT_ADMIN` user in `users`.
+  6. Commits an immutable audit log entry in `audit_logs`.
 
 ### 2.2 Secure Authentication (`/login`)
 - **What it does:** Validates credentials against MySQL and generates a cryptographically signed JWT.

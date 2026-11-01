@@ -87,6 +87,13 @@ export const SYSTEM_PERMISSIONS: PermissionItem[] = [
     description: 'Guest billing folios, room charges, payments, and checkout folios',
     route: '/dashboard/pms/front-desk',
   },
+  {
+    id: 'channel_manager',
+    label: 'Channel Manager (OTA)',
+    category: 'PMS & Lodging',
+    description: 'Manage OTA distribution channels (Booking.com, Agoda, Airbnb, Expedia, Tripadvisor, iCal)',
+    route: '/dashboard/channel-manager',
+  },
 
   // Operations & Admin
   {
@@ -101,6 +108,41 @@ export const SYSTEM_PERMISSIONS: PermissionItem[] = [
     label: 'Inventory & Stock Recipes',
     category: 'Operations & Admin',
     description: 'Stock balances, ingredient recipe deductions, and suppliers',
+    route: '/dashboard/inventory',
+  },
+  {
+    id: 'inventory_items',
+    label: 'Inventory Item Management',
+    category: 'Operations & Admin',
+    description: 'Create, edit, and deactivate inventory items across Bar, Kitchen, and Operations',
+    route: '/dashboard/inventory',
+  },
+  {
+    id: 'purchase_orders',
+    label: 'Purchase Order Management',
+    category: 'Operations & Admin',
+    description: 'Create, edit, approve, and cancel supplier purchase orders',
+    route: '/dashboard/inventory',
+  },
+  {
+    id: 'grn_receiving',
+    label: 'Goods Received Notes (GRN)',
+    category: 'Operations & Admin',
+    description: 'Receive goods against purchase orders, accept/reject deliveries, and update stock',
+    route: '/dashboard/inventory',
+  },
+  {
+    id: 'operational_issuance',
+    label: 'Operational Stock Issuance',
+    category: 'Operations & Admin',
+    description: 'Issue operational supplies and equipment to hotel departments',
+    route: '/dashboard/inventory',
+  },
+  {
+    id: 'stock_adjustments',
+    label: 'Stock Adjustments & Audit',
+    category: 'Operations & Admin',
+    description: 'Perform stock adjustments, view stock movements, and audit inventory transactions',
     route: '/dashboard/inventory',
   },
   {
@@ -132,7 +174,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'pms_rooms',
     'pms_reservations',
     'pms_front_desk',
+    'channel_manager',
     'inventory',
+    'inventory_items',
+    'purchase_orders',
+    'grn_receiving',
+    'operational_issuance',
+    'stock_adjustments',
     'reports',
     'settings',
   ],
@@ -149,7 +197,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'pms_housekeeping',
     'pms_reservations',
     'pms_front_desk',
+    'channel_manager',
     'inventory',
+    'inventory_items',
+    'purchase_orders',
+    'grn_receiving',
+    'operational_issuance',
+    'stock_adjustments',
     'reports',
   ],
   CASHIER: [
@@ -161,6 +215,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   KITCHEN: [
     'kitchen',
     'orders',
+    'inventory',
   ],
 };
 
@@ -171,6 +226,13 @@ export const ROUTE_PERMISSION_MAP: Record<string, string> = {
   '/dashboard/pms/housekeeping': 'pms_housekeeping',
   '/dashboard/pms/reservations': 'pms_reservations',
   '/dashboard/pms/front-desk': 'pms_front_desk',
+  '/dashboard/channel-manager': 'channel_manager',
+  '/dashboard/channel-manager/channels': 'channel_manager',
+  '/dashboard/channel-manager/mappings': 'channel_manager',
+  '/dashboard/channel-manager/pricing': 'channel_manager',
+  '/dashboard/channel-manager/inventory': 'channel_manager',
+  '/dashboard/channel-manager/reservations': 'channel_manager',
+  '/dashboard/channel-manager/logs': 'channel_manager',
   '/dashboard/pos': 'pos',
   '/dashboard/kitchen': 'kitchen',
   '/dashboard/bar': 'bar',
@@ -181,6 +243,7 @@ export const ROUTE_PERMISSION_MAP: Record<string, string> = {
   '/dashboard/reports': 'reports',
   '/dashboard/settings': 'settings',
 };
+
 
 export function getTenantModules(tenant?: any): string[] {
   let list: string[] = [];

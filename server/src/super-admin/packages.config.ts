@@ -119,8 +119,8 @@ export const PRICING_PACKAGES: Record<string, PricingPackageDefinition> = {
     badge: 'Restaurant / Cafe',
     description:
       'Engineered for standalone cafes, restaurants, bars, and cloud kitchens.',
-    monthlyPrice: 29.0,
-    annualPrice: 290.0,
+    monthlyPrice: 9500.0,
+    annualPrice: 95000.0,
     defaultModules: [
       'pos',
       'orders',
@@ -142,8 +142,8 @@ export const PRICING_PACKAGES: Record<string, PricingPackageDefinition> = {
     badge: 'Lodging / B&B',
     description:
       'Purpose-built for boutique hotels, motels, guest houses, and homestays.',
-    monthlyPrice: 49.0,
-    annualPrice: 490.0,
+    monthlyPrice: 16000.0,
+    annualPrice: 160000.0,
     defaultModules: [
       'pms_hub',
       'pms_rooms',
@@ -163,8 +163,8 @@ export const PRICING_PACKAGES: Record<string, PricingPackageDefinition> = {
     badge: 'Full Hotel & Dining',
     description:
       'Unified hotel lodging + in-house restaurant dining, room service, and stock management.',
-    monthlyPrice: 89.0,
-    annualPrice: 890.0,
+    monthlyPrice: 29000.0,
+    annualPrice: 290000.0,
     popular: true,
     defaultModules: [
       'pos',
@@ -192,8 +192,8 @@ export const PRICING_PACKAGES: Record<string, PricingPackageDefinition> = {
     badge: 'Resorts & Chains',
     description:
       'Unlimited power for resorts, hotel chains, and multi-branch operations with VIP support.',
-    monthlyPrice: 199.0,
-    annualPrice: 1990.0,
+    monthlyPrice: 65000.0,
+    annualPrice: 650000.0,
     defaultModules: [
       'pos',
       'orders',

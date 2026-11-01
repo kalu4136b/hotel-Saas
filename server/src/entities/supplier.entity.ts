@@ -24,6 +24,9 @@ export class Supplier {
   @Column({ type: 'varchar', length: 150 })
   name: string;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  supplierCode: string;
+
   @Column({ type: 'varchar', length: 100, nullable: true })
   contactPerson: string;
 
@@ -35,6 +38,12 @@ export class Supplier {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   address: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  paymentTerms: string; // E.g., Net 30, Cash on Delivery
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  taxNumber: string;
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;

@@ -7,6 +7,10 @@ import {
   Supplier,
   PurchaseOrder,
   PurchaseOrderItem,
+  GoodsReceivedNote,
+  GoodsReceivedNoteItem,
+  OperationalStockIssuance,
+  OperationalStockIssuanceItem,
   Product,
 } from '../entities';
 import { InventoryService } from './inventory.service';
@@ -21,6 +25,10 @@ import { InventoryController } from './inventory.controller';
       Supplier,
       PurchaseOrder,
       PurchaseOrderItem,
+      GoodsReceivedNote,
+      GoodsReceivedNoteItem,
+      OperationalStockIssuance,
+      OperationalStockIssuanceItem,
       Product,
     ]),
   ],

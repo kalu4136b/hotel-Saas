@@ -315,11 +315,11 @@ export default function ReservationsPage() {
                         {/* Total Price */}
                         <td className="px-5 py-3.5">
                           <div className="font-mono font-bold text-sm text-[#0F172A]">
-                            ${res.totalAmount}
+                            Rs. {Number(res.totalAmount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                           </div>
                           {Number(res.depositPaid) > 0 && (
                             <div className="text-[10px] text-[#00C48C] font-semibold">
-                              Deposit: ${res.depositPaid}
+                              Deposit: Rs. {Number(res.depositPaid).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                             </div>
                           )}
                         </td>
@@ -495,7 +495,7 @@ export default function ReservationsPage() {
                       >
                         {roomTypes.map((rt) => (
                           <option key={rt.id} value={rt.id}>
-                            {rt.name} (${rt.basePricePerNight}/nt)
+                            {rt.name} (Rs. {Number(rt.basePricePerNight).toLocaleString('en-LK')}/nt)
                           </option>
                         ))}
                       </select>
@@ -544,7 +544,7 @@ export default function ReservationsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-[#334155] mb-1">Deposit ($)</label>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">Deposit (Rs.)</label>
                     <input
                       type="number"
                       min="0"

@@ -38,10 +38,10 @@ export class Property {
   @Column({ type: 'varchar', length: 100, nullable: true })
   email: string;
 
-  @Column({ type: 'varchar', length: 10, default: 'USD' })
+  @Column({ type: 'varchar', length: 10, default: 'LKR' })
   currency: string;
 
-  @Column({ type: 'varchar', length: 50, default: 'UTC' })
+  @Column({ type: 'varchar', length: 50, default: 'Asia/Colombo' })
   timezone: string;
 
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 10.0 })

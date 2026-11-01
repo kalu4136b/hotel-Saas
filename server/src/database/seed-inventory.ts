@@ -8,8 +8,9 @@ import {
   Category,
   Product,
   InventoryItem,
+  MainInventoryCategory,
+  ItemType,
   InventoryCategory,
-  InventoryUnit,
   RecipeItem,
   StockMovement,
   StockMovementType,
@@ -17,12 +18,17 @@ import {
   PurchaseOrder,
   PurchaseOrderItem,
   PurchaseOrderStatus,
+  ProcurementCategory,
+  GoodsReceivedNote,
+  GoodsReceivedNoteItem,
+  GRNStatus,
+  OperationalStockIssuance,
+  OperationalStockIssuanceItem,
+  IssuanceStatus,
   BarItem,
   BarCategory,
   BarPourLog,
-  PourType,
   BarStockAdjustment,
-  BarAdjustmentType,
 } from '../entities';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -45,6 +51,10 @@ const AppDataSource = new DataSource({
     Supplier,
     PurchaseOrder,
     PurchaseOrderItem,
+    GoodsReceivedNote,
+    GoodsReceivedNoteItem,
+    OperationalStockIssuance,
+    OperationalStockIssuanceItem,
     BarItem,
     BarPourLog,
     BarStockAdjustment,
@@ -54,7 +64,7 @@ const AppDataSource = new DataSource({
 
 async function seedInventory() {
   await AppDataSource.initialize();
-  console.log('--- Initializing Phase 3 Inventory & Recipe Seed ---');
+  console.log('--- Initializing Enhanced Inventory (Bar, Kitchen, Operational, PO, GRN) Seed ---');
 
   const propertyRepo = AppDataSource.getRepository(Property);
   const properties = await propertyRepo.find();
@@ -66,472 +76,788 @@ async function seedInventory() {
     const invRepo = AppDataSource.getRepository(InventoryItem);
     const existingCount = await invRepo.count({ where: { tenantId, propertyId } });
     if (existingCount > 0) {
-      console.log(`  Items already exist for this property. Skipping.`);
-      continue;
+      console.log(`  Updating existing items with category and UOM classifications...`);
+      // Update existing items without mainCategory
+      const items = await invRepo.find({ where: { tenantId, propertyId } });
+      for (const item of items) {
+        let changed = false;
+        if (!item.mainCategory) {
+          if (item.category === InventoryCategory.BEVERAGES) {
+            item.mainCategory = MainInventoryCategory.BAR;
+          } else if (item.category === InventoryCategory.AMENITIES || item.category === InventoryCategory.PACKAGING) {
+            item.mainCategory = MainInventoryCategory.OPERATIONAL;
+          } else {
+            item.mainCategory = MainInventoryCategory.KITCHEN;
+          }
+          changed = true;
+        }
+        if (!item.purchaseUnit) {
+          item.purchaseUnit = item.unit || 'PCS';
+          item.conversionFactor = 1.0;
+          changed = true;
+        }
+        if (changed) {
+          await invRepo.save(item);
+        }
+      }
     }
 
-    // 1. Seed Suppliers
+    // 1. Seed / Ensure Suppliers
     const supplierRepo = AppDataSource.getRepository(Supplier);
-    const s1 = await supplierRepo.save(
-      supplierRepo.create({
-        tenantId,
-        propertyId,
-        name: 'Prime Fresh Produce & Dairy Co.',
-        contactPerson: 'David Miller',
-        email: 'orders@primefreshdairy.com',
-        phone: '+1 (555) 234-8901',
-        address: '45 Wholesale District Blvd, Metro City',
-      }),
-    );
+    let s1 = await supplierRepo.findOne({ where: { tenantId, propertyId, name: 'Prime Fresh Produce & Dairy Co.' } });
+    if (!s1) {
+      s1 = await supplierRepo.save(
+        supplierRepo.create({
+          tenantId,
+          propertyId,
+          name: 'Prime Fresh Produce & Dairy Co.',
+          supplierCode: 'SUP-FOOD-001',
+          contactPerson: 'David Miller',
+          email: 'orders@primefreshdairy.com',
+          phone: '+1 (555) 234-8901',
+          address: '45 Wholesale District Blvd, Metro City',
+          paymentTerms: 'Net 30',
+        }),
+      );
+    }
 
-    const s2 = await supplierRepo.save(
-      supplierRepo.create({
-        tenantId,
-        propertyId,
-        name: 'Apex Meats & Ocean Harvest',
-        contactPerson: 'Sarah Jenkins',
-        email: 'supply@apexmeats.com',
-        phone: '+1 (555) 345-6789',
-        address: '12 Harbor Distribution Way, Bay Area',
-      }),
-    );
+    let s2 = await supplierRepo.findOne({ where: { tenantId, propertyId, name: 'Apex Meats & Ocean Harvest' } });
+    if (!s2) {
+      s2 = await supplierRepo.save(
+        supplierRepo.create({
+          tenantId,
+          propertyId,
+          name: 'Apex Meats & Ocean Harvest',
+          supplierCode: 'SUP-MEAT-002',
+          contactPerson: 'Sarah Jenkins',
+          email: 'supply@apexmeats.com',
+          phone: '+1 (555) 345-6789',
+          address: '12 Harbor Distribution Way, Bay Area',
+          paymentTerms: 'Net 15',
+        }),
+      );
+    }
 
-    const s3 = await supplierRepo.save(
-      supplierRepo.create({
-        tenantId,
-        propertyId,
-        name: 'Artisan Roast & Beverage Logistics',
-        contactPerson: 'Marco Rossi',
-        email: 'marco@artisanroast.com',
-        phone: '+1 (555) 456-7890',
-        address: '88 Roasters Alley, Industrial Park',
-      }),
-    );
+    let s3 = await supplierRepo.findOne({ where: { tenantId, propertyId, name: 'Artisan Beverage & Spirits Logistics' } });
+    if (!s3) {
+      s3 = await supplierRepo.save(
+        supplierRepo.create({
+          tenantId,
+          propertyId,
+          name: 'Artisan Beverage & Spirits Logistics',
+          supplierCode: 'SUP-BEV-003',
+          contactPerson: 'Marco Rossi',
+          email: 'marco@artisanbeverage.com',
+          phone: '+1 (555) 456-7890',
+          address: '88 Roasters Alley, Industrial Park',
+          paymentTerms: 'Net 30',
+        }),
+      );
+    }
 
-    // 2. Seed Inventory Items
-    const itemsData = [
+    let s4 = await supplierRepo.findOne({ where: { tenantId, propertyId, name: 'Metro Hospitality Operational Depot' } });
+    if (!s4) {
+      s4 = await supplierRepo.save(
+        supplierRepo.create({
+          tenantId,
+          propertyId,
+          name: 'Metro Hospitality Operational Depot',
+          supplierCode: 'SUP-OPS-004',
+          contactPerson: 'Elena Rostova',
+          email: 'sales@metroopsdepot.com',
+          phone: '+1 (555) 567-8901',
+          address: '100 Supply Terminal Road, North Sector',
+          paymentTerms: 'Due on Receipt',
+        }),
+      );
+    }
+
+    // 2. Seed Items Across 3 Categories if not already present
+    const seedItemList = [
+      // --- A. BAR INVENTORY ---
+      {
+        name: 'Heineken Lager Beer (330ml Bottle)',
+        sku: 'BAR-BEER-001',
+        itemCode: 'BAR-BEER-001',
+        mainCategory: MainInventoryCategory.BAR,
+        subcategory: 'Beer & Cider',
+        category: InventoryCategory.BEVERAGES,
+        unit: 'BOTTLE',
+        purchaseUnit: 'CARTON',
+        conversionFactor: 24, // 1 Carton = 24 Bottles
+        currentStock: 96, // 4 Cartons = 96 Bottles
+        minStockLevel: 24,
+        reorderLevel: 48,
+        defaultSupplierId: s3.id,
+        purchaseCost: 36.0, // $36 / carton = $1.50 / bottle
+        costPerUnit: 1.5,
+        sellingPrice: 7.0, // Retails at $7.00
+        isSellingItem: true,
+      },
+      {
+        name: 'Coca-Cola Zero Sugar (330ml Can)',
+        sku: 'BAR-SODA-001',
+        itemCode: 'BAR-SODA-001',
+        mainCategory: MainInventoryCategory.BAR,
+        subcategory: 'Soft Drinks & Mixers',
+        category: InventoryCategory.BEVERAGES,
+        unit: 'CAN',
+        purchaseUnit: 'CARTON',
+        conversionFactor: 24,
+        currentStock: 120,
+        minStockLevel: 48,
+        reorderLevel: 72,
+        defaultSupplierId: s3.id,
+        purchaseCost: 19.2, // $0.80 / can
+        costPerUnit: 0.8,
+        sellingPrice: 4.5,
+        isSellingItem: true,
+      },
+      {
+        name: 'San Pellegrino Sparkling Mineral Water (750ml)',
+        sku: 'BAR-WATER-001',
+        itemCode: 'BAR-WATER-001',
+        mainCategory: MainInventoryCategory.BAR,
+        subcategory: 'Water',
+        category: InventoryCategory.BEVERAGES,
+        unit: 'BOTTLE',
+        purchaseUnit: 'CARTON',
+        conversionFactor: 12,
+        currentStock: 36,
+        minStockLevel: 12,
+        reorderLevel: 24,
+        defaultSupplierId: s3.id,
+        purchaseCost: 24.0, // $2.00 / bottle
+        costPerUnit: 2.0,
+        sellingPrice: 8.0,
+        isSellingItem: true,
+      },
+      {
+        name: 'Fever-Tree Mediterranean Tonic (200ml)',
+        sku: 'BAR-MIX-001',
+        itemCode: 'BAR-MIX-001',
+        mainCategory: MainInventoryCategory.BAR,
+        subcategory: 'Soft Drinks & Mixers',
+        category: InventoryCategory.BEVERAGES,
+        unit: 'BOTTLE',
+        purchaseUnit: 'CARTON',
+        conversionFactor: 24,
+        currentStock: 48,
+        minStockLevel: 24,
+        reorderLevel: 48,
+        defaultSupplierId: s3.id,
+        purchaseCost: 28.8,
+        costPerUnit: 1.2,
+        sellingPrice: 5.0,
+        isSellingItem: true,
+      },
+      {
+        name: 'Organic Fresh Lime & Cocktail Garnishes',
+        sku: 'BAR-GARN-001',
+        itemCode: 'BAR-GARN-001',
+        mainCategory: MainInventoryCategory.BAR,
+        subcategory: 'Bar Consumables',
+        category: InventoryCategory.PRODUCE,
+        unit: 'KG',
+        purchaseUnit: 'BOX',
+        conversionFactor: 5, // 5kg box
+        currentStock: 8.5,
+        minStockLevel: 4.0,
+        reorderLevel: 6.0,
+        defaultSupplierId: s1.id,
+        purchaseCost: 18.0,
+        costPerUnit: 3.6,
+        isSellingItem: false,
+      },
+
+      // --- B. KITCHEN INVENTORY ---
       {
         name: 'Black Angus Beef Patties (180g)',
-        sku: 'ING-BEEF-001',
+        sku: 'KIT-BEEF-001',
+        itemCode: 'KIT-BEEF-001',
+        mainCategory: MainInventoryCategory.KITCHEN,
+        subcategory: 'Meat & Poultry',
         category: InventoryCategory.MEAT,
-        unit: InventoryUnit.PCS,
-        currentStock: 95,
-        minStockLevel: 25,
+        unit: 'PCS',
+        purchaseUnit: 'BOX',
+        conversionFactor: 40, // 40 patties per box
+        currentStock: 80,
+        minStockLevel: 20,
+        reorderLevel: 40,
+        defaultSupplierId: s2.id,
+        purchaseCost: 140.0,
         costPerUnit: 3.5,
+        isSellingItem: false,
       },
       {
         name: 'Artisan Brioche Burger Buns',
-        sku: 'ING-BUN-001',
+        sku: 'KIT-BUN-001',
+        itemCode: 'KIT-BUN-001',
+        mainCategory: MainInventoryCategory.KITCHEN,
+        subcategory: 'Dry Goods & Bakery',
         category: InventoryCategory.DRY_GOODS,
-        unit: InventoryUnit.PCS,
+        unit: 'PCS',
+        purchaseUnit: 'PACK',
+        conversionFactor: 24,
         currentStock: 120,
-        minStockLevel: 30,
+        minStockLevel: 36,
+        reorderLevel: 48,
+        defaultSupplierId: s1.id,
+        purchaseCost: 20.4,
         costPerUnit: 0.85,
+        isSellingItem: false,
       },
       {
         name: 'Aged Wisconsin White Cheddar',
-        sku: 'ING-CHED-001',
+        sku: 'KIT-CHED-001',
+        itemCode: 'KIT-CHED-001',
+        mainCategory: MainInventoryCategory.KITCHEN,
+        subcategory: 'Dairy & Cheese',
         category: InventoryCategory.DAIRY,
-        unit: InventoryUnit.KG,
-        currentStock: 14.5,
+        unit: 'KG',
+        purchaseUnit: 'BLOCK',
+        conversionFactor: 2.5, // 2.5kg block
+        currentStock: 12.5,
         minStockLevel: 5.0,
+        reorderLevel: 10.0,
+        defaultSupplierId: s1.id,
+        purchaseCost: 28.0,
         costPerUnit: 11.2,
+        isSellingItem: false,
+        expiryTracking: true,
       },
       {
         name: 'Vine-Ripened Roma Tomatoes',
-        sku: 'ING-TOM-001',
+        sku: 'KIT-TOM-001',
+        itemCode: 'KIT-TOM-001',
+        mainCategory: MainInventoryCategory.KITCHEN,
+        subcategory: 'Produce & Greens',
         category: InventoryCategory.PRODUCE,
-        unit: InventoryUnit.KG,
-        currentStock: 22.0,
+        unit: 'KG',
+        purchaseUnit: 'CRATE',
+        conversionFactor: 10,
+        currentStock: 25.0,
         minStockLevel: 8.0,
+        reorderLevel: 15.0,
+        defaultSupplierId: s1.id,
+        purchaseCost: 34.0,
         costPerUnit: 3.4,
+        isSellingItem: false,
+        batchTracking: true,
       },
       {
-        name: 'Prime USDA Ribeye Loins',
-        sku: 'ING-RIBEYE-001',
-        category: InventoryCategory.MEAT,
-        unit: InventoryUnit.KG,
-        currentStock: 28.0,
-        minStockLevel: 10.0,
-        costPerUnit: 24.5,
-      },
-      {
-        name: 'Fresh Chilean Seabass Portions',
-        sku: 'ING-SEABASS-001',
-        category: InventoryCategory.MEAT,
-        unit: InventoryUnit.KG,
-        currentStock: 15.0,
-        minStockLevel: 6.0,
-        costPerUnit: 29.0,
-      },
-      {
-        name: 'Estate Arabica Coffee Beans',
-        sku: 'ING-COFFEE-001',
-        category: InventoryCategory.BEVERAGES,
-        unit: InventoryUnit.KG,
-        currentStock: 35.0,
-        minStockLevel: 10.0,
-        costPerUnit: 18.5,
+        name: 'Premium Jasmine Rice (AAA Grade)',
+        sku: 'KIT-RICE-001',
+        itemCode: 'KIT-RICE-001',
+        mainCategory: MainInventoryCategory.KITCHEN,
+        subcategory: 'Dry Goods & Bakery',
+        category: InventoryCategory.DRY_GOODS,
+        unit: 'KG',
+        purchaseUnit: 'BAG',
+        conversionFactor: 25, // 25kg bag
+        currentStock: 75.0,
+        minStockLevel: 25.0,
+        reorderLevel: 50.0,
+        defaultSupplierId: s1.id,
+        purchaseCost: 45.0,
+        costPerUnit: 1.8,
+        isSellingItem: false,
       },
       {
         name: 'Organic Barista Whole Milk',
-        sku: 'ING-MILK-001',
+        sku: 'KIT-MILK-001',
+        itemCode: 'KIT-MILK-001',
+        mainCategory: MainInventoryCategory.KITCHEN,
+        subcategory: 'Dairy & Cheese',
         category: InventoryCategory.DAIRY,
-        unit: InventoryUnit.L,
+        unit: 'L',
+        purchaseUnit: 'CARTON',
+        conversionFactor: 12,
         currentStock: 48.0,
         minStockLevel: 15.0,
+        reorderLevel: 24.0,
+        defaultSupplierId: s1.id,
+        purchaseCost: 22.8,
         costPerUnit: 1.9,
+        isSellingItem: false,
+        expiryTracking: true,
+      },
+
+      // --- C. OPERATIONAL INVENTORY ---
+      {
+        name: 'Thermal POS Bill Rolls (80mm x 70m)',
+        sku: 'OPS-ROLL-001',
+        itemCode: 'OPS-ROLL-001',
+        mainCategory: MainInventoryCategory.OPERATIONAL,
+        subcategory: 'Stationery & Printing',
+        category: InventoryCategory.OTHER,
+        unit: 'ROLL',
+        purchaseUnit: 'BOX',
+        conversionFactor: 50, // 50 rolls per box
+        currentStock: 120, // 120 rolls on hand
+        minStockLevel: 30,
+        reorderLevel: 50,
+        defaultSupplierId: s4.id,
+        purchaseCost: 42.5, // $0.85 per roll
+        costPerUnit: 0.85,
+        isSellingItem: false,
+        itemType: ItemType.CONSUMABLE,
       },
       {
-        name: 'Tropical Alphonso Mango Puree',
-        sku: 'ING-MANGO-001',
-        category: InventoryCategory.PRODUCE,
-        unit: InventoryUnit.L,
-        currentStock: 6.5, // near threshold!
-        minStockLevel: 5.0,
-        costPerUnit: 4.8,
+        name: 'Multi-Surface Hospital-Grade Sanitizer (5L)',
+        sku: 'OPS-CLEAN-001',
+        itemCode: 'OPS-CLEAN-001',
+        mainCategory: MainInventoryCategory.OPERATIONAL,
+        subcategory: 'Housekeeping & Cleaning',
+        category: InventoryCategory.OTHER,
+        unit: 'L',
+        purchaseUnit: 'CAN',
+        conversionFactor: 5,
+        currentStock: 25.0,
+        minStockLevel: 10.0,
+        reorderLevel: 15.0,
+        defaultSupplierId: s4.id,
+        purchaseCost: 32.0, // $6.40 per L
+        costPerUnit: 6.4,
+        isSellingItem: false,
+        itemType: ItemType.CONSUMABLE,
       },
       {
-        name: 'Eco-Craft Kraft Takeaway Boxes',
-        sku: 'PKG-BOX-001',
-        category: InventoryCategory.PACKAGING,
-        unit: InventoryUnit.PCS,
-        currentStock: 280,
-        minStockLevel: 100,
-        costPerUnit: 0.45,
+        name: 'Industrial Microfiber Wet/Dry Mop System',
+        sku: 'OPS-MOP-001',
+        itemCode: 'OPS-MOP-001',
+        mainCategory: MainInventoryCategory.OPERATIONAL,
+        subcategory: 'Housekeeping & Cleaning',
+        category: InventoryCategory.OTHER,
+        unit: 'PCS',
+        purchaseUnit: 'SET',
+        conversionFactor: 1,
+        currentStock: 8,
+        minStockLevel: 2,
+        reorderLevel: 4,
+        defaultSupplierId: s4.id,
+        purchaseCost: 24.5,
+        costPerUnit: 24.5,
+        isSellingItem: false,
+        itemType: ItemType.CONSUMABLE,
+      },
+      {
+        name: 'Epson TM-T88VI Thermal Receipt Printer',
+        sku: 'OPS-EQ-PRN-001',
+        itemCode: 'OPS-EQ-PRN-001',
+        mainCategory: MainInventoryCategory.OPERATIONAL,
+        subcategory: 'IT & POS Hardware',
+        category: InventoryCategory.OTHER,
+        unit: 'UNIT',
+        purchaseUnit: 'UNIT',
+        conversionFactor: 1,
+        currentStock: 3,
+        minStockLevel: 1,
+        reorderLevel: 2,
+        defaultSupplierId: s4.id,
+        purchaseCost: 260.0,
+        costPerUnit: 260.0,
+        isSellingItem: false,
+        itemType: ItemType.REUSABLE_EQUIPMENT,
+        assetTag: 'AST-PRN-101',
+        serialNumber: 'SN-EPS-88VI-9921',
+        assignedDepartment: 'FRONT_OFFICE',
+      },
+      {
+        name: 'Datalogic 2D Wireless Barcode Scanner',
+        sku: 'OPS-EQ-SCN-001',
+        itemCode: 'OPS-EQ-SCN-001',
+        mainCategory: MainInventoryCategory.OPERATIONAL,
+        subcategory: 'IT & POS Hardware',
+        category: InventoryCategory.OTHER,
+        unit: 'UNIT',
+        purchaseUnit: 'UNIT',
+        conversionFactor: 1,
+        currentStock: 4,
+        minStockLevel: 1,
+        reorderLevel: 2,
+        defaultSupplierId: s4.id,
+        purchaseCost: 145.0,
+        costPerUnit: 145.0,
+        isSellingItem: false,
+        itemType: ItemType.REUSABLE_EQUIPMENT,
+        assetTag: 'AST-SCN-201',
+        serialNumber: 'SN-DLG-2D-4482',
+        assignedDepartment: 'BAR',
+      },
+      {
+        name: 'Karcher Professional Wet & Dry Vacuum Cleaner',
+        sku: 'OPS-EQ-VAC-001',
+        itemCode: 'OPS-EQ-VAC-001',
+        mainCategory: MainInventoryCategory.OPERATIONAL,
+        subcategory: 'Housekeeping & Cleaning',
+        category: InventoryCategory.OTHER,
+        unit: 'UNIT',
+        purchaseUnit: 'UNIT',
+        conversionFactor: 1,
+        currentStock: 2,
+        minStockLevel: 1,
+        reorderLevel: 1,
+        defaultSupplierId: s4.id,
+        purchaseCost: 480.0,
+        costPerUnit: 480.0,
+        isSellingItem: false,
+        itemType: ItemType.REUSABLE_EQUIPMENT,
+        assetTag: 'AST-VAC-301',
+        serialNumber: 'SN-KRC-NT30-1092',
+        assignedDepartment: 'HOUSEKEEPING',
       },
     ];
 
-    const savedItems: Record<string, InventoryItem> = {};
-    for (const data of itemsData) {
-      const item = await invRepo.save(
-        invRepo.create({
-          tenantId,
-          propertyId,
-          ...data,
-        }),
-      );
-      savedItems[data.sku] = item;
-    }
-
-    // 3. Connect Recipes (BOM) to Products
-    const prodRepo = AppDataSource.getRepository(Product);
-    const products = await prodRepo.find({ where: { tenantId, propertyId } });
-    const recipeRepo = AppDataSource.getRepository(RecipeItem);
-
-    for (const prod of products) {
-      if (prod.name.includes('Angus Burger')) {
-        await recipeRepo.save([
-          recipeRepo.create({
+    const savedItemsMap: Record<string, InventoryItem> = {};
+    for (const itemData of seedItemList) {
+      let existing = await invRepo.findOne({ where: { tenantId, propertyId, sku: itemData.sku } });
+      if (!existing) {
+        existing = await invRepo.save(
+          invRepo.create({
             tenantId,
             propertyId,
-            productId: prod.id,
-            inventoryItemId: savedItems['ING-BEEF-001'].id,
-            quantityRequired: 1, // 1 patty
-          }),
-          recipeRepo.create({
-            tenantId,
-            propertyId,
-            productId: prod.id,
-            inventoryItemId: savedItems['ING-BUN-001'].id,
-            quantityRequired: 1, // 1 bun
-          }),
-          recipeRepo.create({
-            tenantId,
-            propertyId,
-            productId: prod.id,
-            inventoryItemId: savedItems['ING-CHED-001'].id,
-            quantityRequired: 0.05, // 50g cheese
-          }),
-          recipeRepo.create({
-            tenantId,
-            propertyId,
-            productId: prod.id,
-            inventoryItemId: savedItems['ING-TOM-001'].id,
-            quantityRequired: 0.04, // 40g tomato
-          }),
-        ]);
-        console.log(`  Linked BOM recipe for: ${prod.name}`);
-      } else if (prod.name.includes('Ribeye')) {
-        await recipeRepo.save([
-          recipeRepo.create({
-            tenantId,
-            propertyId,
-            productId: prod.id,
-            inventoryItemId: savedItems['ING-RIBEYE-001'].id,
-            quantityRequired: 0.3, // 300g
-          }),
-        ]);
-        console.log(`  Linked BOM recipe for: ${prod.name}`);
-      } else if (prod.name.includes('Seabass')) {
-        await recipeRepo.save([
-          recipeRepo.create({
-            tenantId,
-            propertyId,
-            productId: prod.id,
-            inventoryItemId: savedItems['ING-SEABASS-001'].id,
-            quantityRequired: 0.25, // 250g
-          }),
-        ]);
-        console.log(`  Linked BOM recipe for: ${prod.name}`);
-      } else if (prod.name.includes('Mango Smoothie')) {
-        await recipeRepo.save([
-          recipeRepo.create({
-            tenantId,
-            propertyId,
-            productId: prod.id,
-            inventoryItemId: savedItems['ING-MANGO-001'].id,
-            quantityRequired: 0.2, // 200ml
-          }),
-          recipeRepo.create({
-            tenantId,
-            propertyId,
-            productId: prod.id,
-            inventoryItemId: savedItems['ING-MILK-001'].id,
-            quantityRequired: 0.15, // 150ml milk
-          }),
-        ]);
-        console.log(`  Linked BOM recipe for: ${prod.name}`);
-      }
-    }
-
-    // 4. Seed a Sample Purchase Order (PO)
-    const poRepo = AppDataSource.getRepository(PurchaseOrder);
-    const poItemRepo = AppDataSource.getRepository(PurchaseOrderItem);
-
-    const samplePo = await poRepo.save(
-      poRepo.create({
-        tenantId,
-        propertyId,
-        supplierId: s1.id,
-        poNumber: 'PO-2026-0001',
-        status: PurchaseOrderStatus.RECEIVED,
-        totalAmount: 184.5,
-        notes: 'Weekly fresh dairy and produce delivery',
-        expectedDate: new Date(),
-        receivedAt: new Date(),
-      }),
-    );
-
-    await poItemRepo.save([
-      poItemRepo.create({
-        purchaseOrderId: samplePo.id,
-        inventoryItemId: savedItems['ING-CHED-001'].id,
-        quantityOrdered: 10,
-        quantityReceived: 10,
-        unitCost: 11.2,
-        totalCost: 112.0,
-      }),
-      poItemRepo.create({
-        purchaseOrderId: samplePo.id,
-        inventoryItemId: savedItems['ING-MILK-001'].id,
-        quantityOrdered: 30,
-        quantityReceived: 30,
-        unitCost: 1.9,
-        totalCost: 57.0,
-      }),
-    ]);
-
-    // 5. Seed Premium Bar Inventory & Sample Adjustments
-    const barRepo = AppDataSource.getRepository(BarItem);
-    const existingBars = await barRepo.find({ where: { tenantId, propertyId } });
-    if (existingBars.length === 0) {
-      console.log('  Seeding Premium Bar Inventory...');
-      const starterBars = [
-        {
-          name: 'Macallan 12 Double Cask',
-          category: BarCategory.WHISKEY,
-          brand: 'The Macallan',
-          bottleSizeMl: 750,
-          fullBottlesStock: 4,
-          currentBottleRemainingMl: 520,
-          standardPourMl: 30,
-          costPerBottle: 58.0,
-          pricePerPour: 16.0,
-          pricePerBottle: 220.0,
-          parLevelBottles: 3,
-        },
-        {
-          name: 'Grey Goose Premium Vodka',
-          category: BarCategory.VODKA,
-          brand: 'Grey Goose',
-          bottleSizeMl: 1000,
-          fullBottlesStock: 5,
-          currentBottleRemainingMl: 650,
-          standardPourMl: 30,
-          costPerBottle: 32.0,
-          pricePerPour: 12.0,
-          pricePerBottle: 160.0,
-          parLevelBottles: 3,
-        },
-        {
-          name: "Hendrick's Gin",
-          category: BarCategory.GIN,
-          brand: "Hendrick's",
-          bottleSizeMl: 750,
-          fullBottlesStock: 1, // Below par
-          currentBottleRemainingMl: 280,
-          standardPourMl: 30,
-          costPerBottle: 35.0,
-          pricePerPour: 13.0,
-          pricePerBottle: 175.0,
-          parLevelBottles: 3,
-        },
-        {
-          name: 'Don Julio Reposado Tequila',
-          category: BarCategory.TEQUILA,
-          brand: 'Don Julio',
-          bottleSizeMl: 750,
-          fullBottlesStock: 2,
-          currentBottleRemainingMl: 180,
-          standardPourMl: 30,
-          costPerBottle: 48.0,
-          pricePerPour: 15.0,
-          pricePerBottle: 195.0,
-          parLevelBottles: 2,
-        },
-        {
-          name: 'Ron Zacapa 23 Centenario Rum',
-          category: BarCategory.RUM,
-          brand: 'Ron Zacapa',
-          bottleSizeMl: 750,
-          fullBottlesStock: 3,
-          currentBottleRemainingMl: 480,
-          standardPourMl: 30,
-          costPerBottle: 45.0,
-          pricePerPour: 14.0,
-          pricePerBottle: 180.0,
-          parLevelBottles: 2,
-        },
-        {
-          name: 'Veuve Clicquot Brut Champagne',
-          category: BarCategory.WINE,
-          brand: 'Veuve Clicquot',
-          bottleSizeMl: 750,
-          fullBottlesStock: 8,
-          currentBottleRemainingMl: 750,
-          standardPourMl: 150,
-          costPerBottle: 52.0,
-          pricePerPour: 22.0,
-          pricePerBottle: 140.0,
-          parLevelBottles: 4,
-        },
-        {
-          name: 'Campari Bitter Liqueur',
-          category: BarCategory.LIQUEUR,
-          brand: 'Campari',
-          bottleSizeMl: 1000,
-          fullBottlesStock: 1, // Low stock
-          currentBottleRemainingMl: 300,
-          standardPourMl: 30,
-          costPerBottle: 24.0,
-          pricePerPour: 9.5,
-          pricePerBottle: 90.0,
-          parLevelBottles: 2,
-        },
-      ];
-
-      const createdBars: BarItem[] = [];
-      for (const b of starterBars) {
-        const item = await barRepo.save(
-          barRepo.create({
-            tenantId,
-            propertyId,
-            ...b,
+            ...itemData,
             isActive: true,
           }),
         );
-        createdBars.push(item);
       }
+      savedItemsMap[itemData.sku] = existing;
+    }
 
-      // Seed Sample Stock Adjustments (Breakage, Spoilage, Audit count)
-      const adjRepo = AppDataSource.getRepository(BarStockAdjustment);
-      const macallan = createdBars[0];
-      const hendricks = createdBars[2];
+    // 3. Seed Purchase Orders & GRNs if none exist
+    const poRepo = AppDataSource.getRepository(PurchaseOrder);
+    const existingPOs = await poRepo.count({ where: { tenantId, propertyId } });
 
-      await adjRepo.save([
-        adjRepo.create({
+    if (existingPOs === 0) {
+      console.log('  Seeding Purchase Orders, Goods Received Notes & Movements...');
+
+      // PO 1: Bar Beverages (Fully Received via GRN)
+      const po1 = await poRepo.save(
+        poRepo.create({
           tenantId,
           propertyId,
-          barItemId: macallan.id,
-          barItemName: macallan.name,
-          category: macallan.category,
-          adjustmentType: BarAdjustmentType.BREAKAGE,
-          previousFullBottles: 5,
-          newFullBottles: 4,
-          fullBottlesDelta: -1,
-          previousOpenMl: 520,
-          newOpenMl: 520,
-          openMlDelta: 0,
-          netVolumeDeltaMl: -750,
-          costImpact: -58.0,
-          adjustedBy: 'Head Bartender',
-          reason: 'Bottle slipped from speed rail during dinner rush',
-          notes: 'Broken on service floor; incident logged with manager',
+          poNumber: 'PO-2026-0001',
+          supplierId: s3.id,
+          status: PurchaseOrderStatus.FULLY_RECEIVED,
+          inventoryCategory: ProcurementCategory.BAR,
+          deliveryLocation: 'Central Bar Store',
+          paymentTerms: 'Net 30',
+          subtotal: 144.0,
+          discountAmount: 0.0,
+          taxAmount: 7.2,
+          totalAmount: 151.2,
+          notes: 'Standard weekend restock for Bar & Lounge',
+          expectedDate: new Date(Date.now() - 3 * 86400000),
+          receivedAt: new Date(Date.now() - 2 * 86400000),
+          createdByName: 'Bar Manager',
+          approvedByName: 'General Manager',
+          approvedAt: new Date(Date.now() - 3 * 86400000),
+          items: [
+            AppDataSource.getRepository(PurchaseOrderItem).create({
+              inventoryItemId: savedItemsMap['BAR-BEER-001'].id,
+              purchaseUnit: 'CARTON',
+              conversionFactor: 24,
+              quantityOrdered: 4,
+              quantityReceived: 4,
+              quantityRejected: 0,
+              unitCost: 36.0,
+              totalCost: 144.0,
+            }),
+          ],
         }),
-        adjRepo.create({
+      );
+
+      // GRN 1 against PO 1
+      const grnRepo = AppDataSource.getRepository(GoodsReceivedNote);
+      await grnRepo.save(
+        grnRepo.create({
           tenantId,
           propertyId,
-          barItemId: hendricks.id,
-          barItemName: hendricks.name,
-          category: hendricks.category,
-          adjustmentType: BarAdjustmentType.PHYSICAL_AUDIT,
-          previousFullBottles: 2,
-          newFullBottles: 1,
-          fullBottlesDelta: -1,
-          previousOpenMl: 350,
-          newOpenMl: 280,
-          openMlDelta: -70,
-          netVolumeDeltaMl: -820,
-          costImpact: -38.27,
-          adjustedBy: 'Inventory Auditor',
-          reason: 'Weekly Sunday physical stock count discrepancy',
-          notes: 'Unaccounted shortage reconciled in closing audit',
+          grnNumber: 'GRN-2026-0001',
+          purchaseOrderId: po1.id,
+          supplierId: s3.id,
+          inventoryCategory: 'BAR',
+          receivedDate: new Date(Date.now() - 2 * 86400000),
+          deliveryNoteNumber: 'DN-ARTISAN-8921',
+          status: GRNStatus.RECEIVED,
+          totalReceivedItems: 1,
+          totalAcceptedQuantity: 4,
+          totalRejectedQuantity: 0,
+          totalAmount: 144.0,
+          receivedByName: 'Bar Supervisor',
+          notes: 'Delivered in good condition with cold chain verified',
+          items: [
+            AppDataSource.getRepository(GoodsReceivedNoteItem).create({
+              purchaseOrderItemId: po1.items[0].id,
+              inventoryItemId: savedItemsMap['BAR-BEER-001'].id,
+              quantityOrdered: 4,
+              quantityPreviouslyReceived: 0,
+              quantityReceiving: 4,
+              quantityAccepted: 4,
+              quantityRejected: 0,
+              unitCost: 36.0,
+              totalCost: 144.0,
+              batchNumber: 'HN-2026-B9',
+            }),
+          ],
+        }),
+      );
+
+      // PO 2: Kitchen Supplies (Partially Received via GRN)
+      const po2 = await poRepo.save(
+        poRepo.create({
+          tenantId,
+          propertyId,
+          poNumber: 'PO-2026-0002',
+          supplierId: s1.id,
+          status: PurchaseOrderStatus.PARTIALLY_RECEIVED,
+          inventoryCategory: ProcurementCategory.KITCHEN,
+          deliveryLocation: 'Executive Kitchen Cold Store',
+          paymentTerms: 'Net 30',
+          subtotal: 182.0,
+          discountAmount: 0.0,
+          taxAmount: 9.1,
+          totalAmount: 191.1,
+          notes: 'Fresh dairy and roma tomatoes for banquet dinner',
+          expectedDate: new Date(Date.now() - 1 * 86400000),
+          createdByName: 'Head Chef',
+          approvedByName: 'General Manager',
+          approvedAt: new Date(Date.now() - 2 * 86400000),
+          items: [
+            AppDataSource.getRepository(PurchaseOrderItem).create({
+              inventoryItemId: savedItemsMap['KIT-CHED-001'].id,
+              purchaseUnit: 'BLOCK',
+              conversionFactor: 2.5,
+              quantityOrdered: 4, // 4 blocks = 10kg
+              quantityReceived: 3, // 3 received, 1 rejected/remaining
+              quantityRejected: 1,
+              unitCost: 28.0,
+              totalCost: 112.0,
+            }),
+            AppDataSource.getRepository(PurchaseOrderItem).create({
+              inventoryItemId: savedItemsMap['KIT-TOM-001'].id,
+              purchaseUnit: 'CRATE',
+              conversionFactor: 10,
+              quantityOrdered: 2, // 2 crates = 20kg
+              quantityReceived: 2,
+              quantityRejected: 0,
+              unitCost: 34.0,
+              totalCost: 68.0,
+            }),
+          ],
+        }),
+      );
+
+      // GRN 2 against PO 2 (With 1 rejected cheese block due to damaged vacuum packaging)
+      await grnRepo.save(
+        grnRepo.create({
+          tenantId,
+          propertyId,
+          grnNumber: 'GRN-2026-0002',
+          purchaseOrderId: po2.id,
+          supplierId: s1.id,
+          inventoryCategory: 'KITCHEN',
+          receivedDate: new Date(Date.now() - 1 * 86400000),
+          deliveryNoteNumber: 'DN-PRIME-4431',
+          status: GRNStatus.RECEIVED,
+          totalReceivedItems: 2,
+          totalAcceptedQuantity: 5,
+          totalRejectedQuantity: 1,
+          totalAmount: 152.0,
+          receivedByName: 'Kitchen Receiving Clerk',
+          notes: '1 Block Cheddar rejected due to punctured vacuum seal; replacement requested',
+          items: [
+            AppDataSource.getRepository(GoodsReceivedNoteItem).create({
+              purchaseOrderItemId: po2.items[0].id,
+              inventoryItemId: savedItemsMap['KIT-CHED-001'].id,
+              quantityOrdered: 4,
+              quantityPreviouslyReceived: 0,
+              quantityReceiving: 4,
+              quantityAccepted: 3,
+              quantityRejected: 1,
+              rejectionReason: 'Punctured vacuum seal / damaged packaging',
+              unitCost: 28.0,
+              totalCost: 84.0,
+              batchNumber: 'CH-WISC-44',
+            }),
+            AppDataSource.getRepository(GoodsReceivedNoteItem).create({
+              purchaseOrderItemId: po2.items[1].id,
+              inventoryItemId: savedItemsMap['KIT-TOM-001'].id,
+              quantityOrdered: 2,
+              quantityPreviouslyReceived: 0,
+              quantityReceiving: 2,
+              quantityAccepted: 2,
+              quantityRejected: 0,
+              unitCost: 34.0,
+              totalCost: 68.0,
+              batchNumber: 'TOM-ROMA-08',
+            }),
+          ],
+        }),
+      );
+
+      // PO 3: Operational Supplies (Approved, Pending GRN)
+      await poRepo.save(
+        poRepo.create({
+          tenantId,
+          propertyId,
+          poNumber: 'PO-2026-0003',
+          supplierId: s4.id,
+          status: PurchaseOrderStatus.APPROVED,
+          inventoryCategory: ProcurementCategory.OPERATIONAL,
+          deliveryLocation: 'Central Operations Depot',
+          paymentTerms: 'Due on Receipt',
+          subtotal: 170.0,
+          discountAmount: 10.0,
+          taxAmount: 8.0,
+          totalAmount: 168.0,
+          notes: 'Bill rolls and cleaning detergent stock-up for monthly operations',
+          expectedDate: new Date(Date.now() + 2 * 86400000),
+          createdByName: 'Purchasing Officer',
+          approvedByName: 'Financial Controller',
+          approvedAt: new Date(),
+          items: [
+            AppDataSource.getRepository(PurchaseOrderItem).create({
+              inventoryItemId: savedItemsMap['OPS-ROLL-001'].id,
+              purchaseUnit: 'BOX',
+              conversionFactor: 50,
+              quantityOrdered: 4, // 4 boxes = 200 rolls
+              quantityReceived: 0,
+              quantityRejected: 0,
+              unitCost: 42.5,
+              totalCost: 170.0,
+            }),
+          ],
+        }),
+      );
+
+      // 4. Seed Operational Issuance History
+      const issRepo = AppDataSource.getRepository(OperationalStockIssuance);
+      await issRepo.save(
+        issRepo.create({
+          tenantId,
+          propertyId,
+          issuanceNumber: 'ISS-2026-0001',
+          issuanceDate: new Date(Date.now() - 1 * 86400000),
+          department: 'FRONT_OFFICE',
+          issuedByName: 'Storekeeper John',
+          receivedByName: 'Front Desk Receptionist Sarah',
+          totalItems: 1,
+          totalQuantity: 20,
+          status: IssuanceStatus.COMPLETED,
+          notes: 'Monthly roll requisition for 4 check-in POS terminals',
+          items: [
+            AppDataSource.getRepository(OperationalStockIssuanceItem).create({
+              inventoryItemId: savedItemsMap['OPS-ROLL-001'].id,
+              quantity: 20,
+              unitCost: 0.85,
+              totalCost: 17.0,
+              itemType: ItemType.CONSUMABLE,
+              purpose: 'Front Desk Check-in terminals',
+            }),
+          ],
+        }),
+      );
+
+      await issRepo.save(
+        issRepo.create({
+          tenantId,
+          propertyId,
+          issuanceNumber: 'ISS-2026-0002',
+          issuanceDate: new Date(),
+          department: 'BAR',
+          issuedByName: 'Storekeeper John',
+          receivedByName: 'Head Bartender Leo',
+          totalItems: 2,
+          totalQuantity: 11,
+          status: IssuanceStatus.COMPLETED,
+          notes: 'Receipt rolls and wireless scanner assignment',
+          items: [
+            AppDataSource.getRepository(OperationalStockIssuanceItem).create({
+              inventoryItemId: savedItemsMap['OPS-ROLL-001'].id,
+              quantity: 10,
+              unitCost: 0.85,
+              totalCost: 8.5,
+              itemType: ItemType.CONSUMABLE,
+              purpose: 'Main Bar register',
+            }),
+            AppDataSource.getRepository(OperationalStockIssuanceItem).create({
+              inventoryItemId: savedItemsMap['OPS-EQ-SCN-001'].id,
+              quantity: 1,
+              unitCost: 145.0,
+              totalCost: 145.0,
+              itemType: ItemType.REUSABLE_EQUIPMENT,
+              assetTag: 'AST-SCN-201',
+              serialNumber: 'SN-DLG-2D-4482',
+              purpose: 'Bar stock-take scanner',
+            }),
+          ],
+        }),
+      );
+
+      // 5. Seed Movements
+      const smRepo = AppDataSource.getRepository(StockMovement);
+      await smRepo.save([
+        smRepo.create({
+          tenantId,
+          propertyId,
+          inventoryItemId: savedItemsMap['BAR-BEER-001'].id,
+          inventoryCategory: 'BAR',
+          movementType: StockMovementType.PURCHASE_RECEIPT,
+          quantity: 96,
+          quantityIn: 96,
+          quantityOut: 0,
+          previousStock: 0,
+          newStock: 96,
+          unitCost: 1.5,
+          referenceId: 'GRN-2026-0001',
+          reason: 'GRN-2026-0001 against PO-2026-0001 (4 Cartons accepted)',
+          createdByName: 'Bar Supervisor',
+        }),
+        smRepo.create({
+          tenantId,
+          propertyId,
+          inventoryItemId: savedItemsMap['OPS-ROLL-001'].id,
+          inventoryCategory: 'OPERATIONAL',
+          movementType: StockMovementType.OPERATIONAL_ISSUANCE,
+          quantity: -20,
+          quantityIn: 0,
+          quantityOut: 20,
+          previousStock: 150,
+          newStock: 130,
+          unitCost: 0.85,
+          referenceId: 'ISS-2026-0001',
+          department: 'FRONT_OFFICE',
+          reason: 'Issued to FRONT_OFFICE (Received by Front Desk Receptionist Sarah)',
+          createdByName: 'Storekeeper John',
+        }),
+        smRepo.create({
+          tenantId,
+          propertyId,
+          inventoryItemId: savedItemsMap['OPS-ROLL-001'].id,
+          inventoryCategory: 'OPERATIONAL',
+          movementType: StockMovementType.OPERATIONAL_ISSUANCE,
+          quantity: -10,
+          quantityIn: 0,
+          quantityOut: 10,
+          previousStock: 130,
+          newStock: 120,
+          unitCost: 0.85,
+          referenceId: 'ISS-2026-0002',
+          department: 'BAR',
+          reason: 'Issued to BAR (Received by Head Bartender Leo)',
+          createdByName: 'Storekeeper John',
         }),
       ]);
-
-      // Seed Sample Pour Logs
-      const pourRepo = AppDataSource.getRepository(BarPourLog);
-      await pourRepo.save([
-        pourRepo.create({
-          tenantId,
-          propertyId,
-          barItemId: macallan.id,
-          barItemName: macallan.name,
-          category: macallan.category,
-          pourType: PourType.SALE,
-          millilitersPoured: 60,
-          servingsCount: 2,
-          totalSaleAmount: 32.0,
-          costAmount: 4.64,
-          bartenderName: 'Alex Rivera',
-          notes: 'Table 6 Double Macallan Neat',
-        }),
-        pourRepo.create({
-          tenantId,
-          propertyId,
-          barItemId: hendricks.id,
-          barItemName: hendricks.name,
-          category: hendricks.category,
-          pourType: PourType.WASTAGE,
-          millilitersPoured: 45,
-          servingsCount: 1,
-          totalSaleAmount: 0.0,
-          costAmount: 2.1,
-          bartenderName: 'Sarah Jenkins',
-          notes: 'Cocktail shaker spill during order preparation',
-        }),
-      ]);
-
-      console.log('  Bar Inventory, Sample Incidents & Pours Seeded!');
     }
   }
 
-  console.log('--- Phase 3 Inventory & Recipe Seed Complete! ---');
+  console.log('--- Inventory Seed Complete ---');
   await AppDataSource.destroy();
 }
 
 seedInventory().catch((err) => {
-  console.error('Seed error:', err);
+  console.error('Inventory seed failed:', err);
   process.exit(1);
 });

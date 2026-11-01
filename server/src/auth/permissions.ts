@@ -86,6 +86,36 @@ export const SYSTEM_PERMISSIONS: PermissionDefinition[] = [
     description: 'Stock balances, ingredient recipe deductions, and suppliers',
   },
   {
+    id: 'inventory_items',
+    label: 'Inventory Item Management',
+    category: 'Analytics & Admin',
+    description: 'Create, edit, and deactivate inventory items across Bar, Kitchen, and Operations',
+  },
+  {
+    id: 'purchase_orders',
+    label: 'Purchase Order Management',
+    category: 'Analytics & Admin',
+    description: 'Create, edit, approve, and cancel supplier purchase orders',
+  },
+  {
+    id: 'grn_receiving',
+    label: 'Goods Received Notes (GRN)',
+    category: 'Analytics & Admin',
+    description: 'Receive goods against purchase orders, accept/reject deliveries, and update stock',
+  },
+  {
+    id: 'operational_issuance',
+    label: 'Operational Stock Issuance',
+    category: 'Analytics & Admin',
+    description: 'Issue operational supplies and equipment to hotel departments',
+  },
+  {
+    id: 'stock_adjustments',
+    label: 'Stock Adjustments & Audit',
+    category: 'Analytics & Admin',
+    description: 'Perform stock adjustments, view stock movements, and audit inventory transactions',
+  },
+  {
     id: 'reports',
     label: 'Financial Reports',
     category: 'Analytics & Admin',
@@ -113,6 +143,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'pms_reservations',
     'pms_front_desk',
     'inventory',
+    'inventory_items',
+    'purchase_orders',
+    'grn_receiving',
+    'operational_issuance',
+    'stock_adjustments',
     'reports',
     'settings',
   ],
@@ -129,6 +164,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'pms_reservations',
     'pms_front_desk',
     'inventory',
+    'inventory_items',
+    'purchase_orders',
+    'grn_receiving',
+    'operational_issuance',
+    'stock_adjustments',
     'reports',
   ],
   [UserRole.CASHIER]: [
@@ -140,6 +180,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   [UserRole.KITCHEN]: [
     'kitchen',
     'orders',
+    'inventory',
   ],
 };
 
@@ -151,4 +192,11 @@ export function resolveUserPermissions(user: { role: UserRole; permissions?: str
     return user.permissions;
   }
   return DEFAULT_ROLE_PERMISSIONS[user.role] || [];
+}
+
+export function hasPermission(user: { role: UserRole; permissions?: string[] | null }, permission: string): boolean {
+  if (!user) return false;
+  if (user.role === UserRole.SUPER_ADMIN || user.role === UserRole.TENANT_ADMIN) return true;
+  const userPerms = resolveUserPermissions(user);
+  return userPerms.includes(permission) || userPerms.includes('inventory');
 }

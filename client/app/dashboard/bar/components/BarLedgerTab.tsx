@@ -74,7 +74,7 @@ export default function BarLedgerTab({ items }: BarLedgerTabProps) {
             <DollarSign className="w-4 h-4 text-[#10B981]" />
           </div>
           <div className="text-2xl font-bold text-[#047857]">
-            ${totalRevenue.toFixed(2)}
+            Rs. {totalRevenue.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
           </div>
           <div className="text-[10px] text-[#065F46] mt-1">From guest drink sales</div>
         </div>
@@ -85,7 +85,7 @@ export default function BarLedgerTab({ items }: BarLedgerTabProps) {
             <TrendingDown className="w-4 h-4 text-[#EF4444]" />
           </div>
           <div className="text-2xl font-bold text-[#B91C1C]">
-            ${totalLossCost.toFixed(2)}
+            Rs. {totalLossCost.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
           </div>
           <div className="text-[10px] text-[#991B1B] mt-1">Breakage, spills & audit adjustments</div>
         </div>
@@ -218,7 +218,7 @@ export default function BarLedgerTab({ items }: BarLedgerTabProps) {
                       <td className="py-3 px-3 text-right">
                         {Number(ev.revenueAmount) > 0 ? (
                           <span className="font-bold text-[#16A34A]">
-                            +${Number(ev.revenueAmount).toFixed(2)}
+                            +Rs. {Number(ev.revenueAmount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                           </span>
                         ) : (
                           <span className="text-[#94A3B8]">—</span>
@@ -233,8 +233,8 @@ export default function BarLedgerTab({ items }: BarLedgerTabProps) {
                             }`}
                           >
                             {Number(ev.costImpact) >= 0
-                              ? `+$${Number(ev.costImpact).toFixed(2)}`
-                              : `-$${Math.abs(Number(ev.costImpact)).toFixed(2)}`}
+                              ? `+Rs. ${Number(ev.costImpact).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`
+                              : `-Rs. ${Math.abs(Number(ev.costImpact)).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`}
                           </span>
                         ) : (
                           <span className="text-[#94A3B8]">—</span>

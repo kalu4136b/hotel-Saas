@@ -338,7 +338,7 @@ export default function MenuCatalogPage() {
                 <div className="mt-4 pt-3 border-t border-[#F1F5F9] flex items-center justify-between">
                   <div>
                     <div className="text-base font-extrabold font-mono text-[#00C48C]">
-                      ${Number(p.price).toFixed(2)}
+                      Rs. {Number(p.price).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </div>
                     <div className="text-[10px] text-[#94A3B8]">
                       +{Number(p.taxRate)}% Tax
@@ -450,7 +450,7 @@ export default function MenuCatalogPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-[#334155] mb-1">Price ($)</label>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">Price (Rs.)</label>
                     <input
                       type="number"
                       step="0.01"

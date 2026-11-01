@@ -106,15 +106,15 @@ export default function DashboardOverviewPage() {
               Today&apos;s Gross Revenue
             </div>
             <div className="text-2xl font-bold text-[#0F172A] mono mt-0.5">
-              ${stats?.revenue?.todayTotal?.toFixed(2) || '0.00'}
+              Rs. {stats?.revenue?.todayTotal?.toLocaleString('en-LK', { minimumFractionDigits: 2 }) || '0.00'}
             </div>
             <div className="text-[11px] text-[#64748B] mt-1 flex items-center gap-2">
               <span className="font-semibold text-emerald-700">
-                Cash: ${stats?.revenue?.cashSales?.toFixed(2) || '0.00'}
+                Cash: Rs. {stats?.revenue?.cashSales?.toLocaleString('en-LK', { minimumFractionDigits: 2 }) || '0.00'}
               </span>
               <span>•</span>
               <span className="font-semibold text-cyan-700">
-                Card: ${stats?.revenue?.cardSales?.toFixed(2) || '0.00'}
+                Card: Rs. {stats?.revenue?.cardSales?.toLocaleString('en-LK', { minimumFractionDigits: 2 }) || '0.00'}
               </span>
             </div>
           </div>
@@ -309,7 +309,7 @@ export default function DashboardOverviewPage() {
                     </div>
                     <div className="text-right">
                       <div className="text-xs font-bold text-[#0F172A] mono">
-                        ${Number(prod.revenue).toFixed(2)}
+                        Rs. {Number(prod.revenue).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </div>
                       <div className="text-[10px] text-[#64748B]">
                         {prod.unitsSold} sold
@@ -406,7 +406,7 @@ export default function DashboardOverviewPage() {
                         {ord.items?.length || 0} items
                       </td>
                       <td className="py-3 px-2 font-bold text-[#0F172A] mono">
-                        ${Number(ord.totalAmount).toFixed(2)}
+                        Rs. {Number(ord.totalAmount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-3 px-2">
                         <span

@@ -11,7 +11,7 @@ export function getSocket(): Socket {
   }
 
   if (!socket) {
-    const token = authStorage.getToken();
+    const token = authStorage.getTenantToken() || authStorage.getToken('tenant');
     const property = authStorage.getProperty();
 
     socket = io(WS_URL, {

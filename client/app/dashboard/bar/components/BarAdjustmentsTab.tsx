@@ -137,8 +137,8 @@ export default function BarAdjustmentsTab({
     if (
       !confirm(
         `Reconcile ${stocktakeVariances.length} inventory variances with a net financial impact of ${
-          totalStocktakeCostVariance >= 0 ? '+$' : '-$'
-        }${Math.abs(totalStocktakeCostVariance).toFixed(2)}?`
+          totalStocktakeCostVariance >= 0 ? '+Rs. ' : '-Rs. '
+        }${Math.abs(totalStocktakeCostVariance).toLocaleString('en-LK', { minimumFractionDigits: 2 })}?`
       )
     ) {
       return;
@@ -278,8 +278,8 @@ export default function BarAdjustmentsTab({
                   }`}
                 >
                   {totalStocktakeCostVariance >= 0
-                    ? `+$${totalStocktakeCostVariance.toFixed(2)}`
-                    : `-$${Math.abs(totalStocktakeCostVariance).toFixed(2)}`}
+                    ? `+Rs. ${totalStocktakeCostVariance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`
+                    : `-Rs. ${Math.abs(totalStocktakeCostVariance).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`}
                 </div>
               </div>
 
@@ -451,7 +451,7 @@ export default function BarAdjustmentsTab({
                             <span
                               className={`font-black ${costImpact < 0 ? 'text-[#B91C1C]' : 'text-[#15803D]'}`}
                             >
-                              {costImpact >= 0 ? `+$${costImpact.toFixed(2)}` : `-$${Math.abs(costImpact).toFixed(2)}`}
+                              {costImpact >= 0 ? `+Rs. ${costImpact.toLocaleString('en-LK', { minimumFractionDigits: 2 })}` : `-Rs. ${Math.abs(costImpact).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`}
                             </span>
                           ) : (
                             <span className="text-[#94A3B8]">—</span>
@@ -642,8 +642,8 @@ export default function BarAdjustmentsTab({
                             }`}
                           >
                             {Number(adj.costImpact) >= 0
-                              ? `+$${Number(adj.costImpact).toFixed(2)}`
-                              : `-$${Math.abs(Number(adj.costImpact)).toFixed(2)}`}
+                              ? `+Rs. ${Number(adj.costImpact).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`
+                              : `-Rs. ${Math.abs(Number(adj.costImpact)).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`}
                           </span>
                         </td>
                         <td className="py-3 px-3 font-medium text-[#0F172A]">

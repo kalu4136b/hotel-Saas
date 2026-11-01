@@ -618,7 +618,7 @@ export default function BarPage() {
             <DollarSign className="w-4 h-4 text-[#10B981]" />
           </div>
           <div className="text-2xl font-bold text-[#047857]">
-            ${analytics?.summary?.totalSales ? Number(analytics.summary.totalSales).toFixed(2) : '0.00'}
+            Rs. {analytics?.summary?.totalSales ? Number(analytics.summary.totalSales).toLocaleString('en-LK', { minimumFractionDigits: 2 }) : '0.00'}
           </div>
           <div className="text-[10px] text-[#065F46] mt-1">
             {analytics?.summary?.totalServings || 0} drinks served
@@ -916,7 +916,7 @@ export default function BarPage() {
                         <div className="p-2 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
                           <div className="text-[10px] text-[#64748B]">Price / Shot ({item.standardPourMl}ml)</div>
                           <div className="font-bold text-[#059669] mono">
-                            ${Number(item.pricePerPour).toFixed(2)}
+                            Rs. {Number(item.pricePerPour).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                           </div>
                         </div>
 
@@ -1072,7 +1072,7 @@ export default function BarPage() {
                       </td>
 
                       <td className="py-3 px-4 font-mono font-bold text-[#059669]">
-                        ${Number(log.totalSaleAmount || 0).toFixed(2)}
+                        Rs. {Number(log.totalSaleAmount || 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </td>
 
                       <td className="py-3 px-4 text-[#475569] font-medium">
@@ -1126,7 +1126,7 @@ export default function BarPage() {
                           {item.volumeMl} ml poured
                         </div>
                         <div className="text-[10px] font-bold text-[#059669]">
-                          ${Number(item.sales || 0).toFixed(2)} sales
+                          Rs. {Number(item.sales || 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })} sales
                         </div>
                       </div>
                     </div>
@@ -1158,7 +1158,7 @@ export default function BarPage() {
 
                       <div className="text-right">
                         <div className="text-sm font-bold text-[#059669] font-mono">
-                          ${Number(cat.sales || 0).toFixed(2)}
+                          Rs. {Number(cat.sales || 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                         </div>
                         <div className="text-[10px] text-[#64748B]">{cat.servings || 0} drinks</div>
                       </div>
@@ -1453,7 +1453,7 @@ export default function BarPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                  Cost per Bottle ($)
+                  Cost per Bottle (Rs.)
                 </label>
                 <input
                   type="number"
@@ -1653,7 +1653,7 @@ export default function BarPage() {
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
                 <div>
-                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Cost / Bottle ($)</label>
+                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Cost / Bottle (Rs.)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -1667,7 +1667,7 @@ export default function BarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Price / Shot ($)</label>
+                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Price / Shot (Rs.)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -1681,7 +1681,7 @@ export default function BarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Price / Bottle ($)</label>
+                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Price / Bottle (Rs.)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -1909,7 +1909,7 @@ export default function BarPage() {
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
                 <div>
-                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Cost / Bottle ($)</label>
+                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Cost / Bottle (Rs.)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -1923,7 +1923,7 @@ export default function BarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Price / Shot ($)</label>
+                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Price / Shot (Rs.)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -1937,7 +1937,7 @@ export default function BarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Price / Bottle ($)</label>
+                  <label className="block text-xs font-semibold text-[#0F172A] mb-1">Price / Bottle (Rs.)</label>
                   <input
                     type="number"
                     step="0.01"

@@ -33,50 +33,207 @@ export interface AuthResponse {
 }
 
 export const authStorage = {
-  getToken(): string | null {
+  // Scoped Token Resolution:
+  // If requesting a Super Admin endpoint or on /admin, prioritize admin token.
+  // If requesting a Tenant endpoint or on /dashboard, prioritize tenant token.
+  getToken(forScope?: 'admin' | 'tenant'): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('hotel_saas_token');
+
+    if (forScope === 'admin') {
+      return (
+        localStorage.getItem('hotel_saas_admin_token') ||
+        localStorage.getItem('hotel_saas_token')
+      );
+    }
+    if (forScope === 'tenant') {
+      return (
+        localStorage.getItem('hotel_saas_tenant_token') ||
+        localStorage.getItem('hotel_saas_token')
+      );
+    }
+
+    // Auto-detect based on current URL path if in browser
+    const path = window.location.pathname;
+    if (path.startsWith('/admin')) {
+      return (
+        localStorage.getItem('hotel_saas_admin_token') ||
+        localStorage.getItem('hotel_saas_token')
+      );
+    }
+    if (path.startsWith('/dashboard')) {
+      return (
+        localStorage.getItem('hotel_saas_tenant_token') ||
+        localStorage.getItem('hotel_saas_token')
+      );
+    }
+
+    return (
+      localStorage.getItem('hotel_saas_tenant_token') ||
+      localStorage.getItem('hotel_saas_admin_token') ||
+      localStorage.getItem('hotel_saas_token')
+    );
   },
+
   setSession(data: AuthResponse) {
     if (typeof window === 'undefined') return;
+
+    if (data.user?.role === 'SUPER_ADMIN') {
+      // Store in dedicated admin slots
+      localStorage.setItem('hotel_saas_admin_token', data.accessToken);
+      localStorage.setItem('hotel_saas_admin_user', JSON.stringify(data.user));
+    } else {
+      // Store in dedicated tenant slots
+      localStorage.setItem('hotel_saas_tenant_token', data.accessToken);
+      localStorage.setItem('hotel_saas_tenant_user', JSON.stringify(data.user));
+      if (data.tenant) {
+        localStorage.setItem('hotel_saas_tenant_tenant', JSON.stringify(data.tenant));
+      }
+      if (data.property) {
+        localStorage.setItem('hotel_saas_tenant_property', JSON.stringify(data.property));
+      }
+    }
+
+    // Always update active general session as fallback
     localStorage.setItem('hotel_saas_token', data.accessToken);
     localStorage.setItem('hotel_saas_user', JSON.stringify(data.user));
     localStorage.setItem('hotel_saas_tenant', JSON.stringify(data.tenant));
     localStorage.setItem('hotel_saas_property', JSON.stringify(data.property));
   },
-  getUser(): UserSession | null {
+
+  getUser(forScope?: 'admin' | 'tenant'): UserSession | null {
     if (typeof window === 'undefined') return null;
-    const item = localStorage.getItem('hotel_saas_user');
+
+    if (forScope === 'admin') {
+      const item = localStorage.getItem('hotel_saas_admin_user');
+      if (item) return JSON.parse(item);
+    }
+    if (forScope === 'tenant') {
+      const item = localStorage.getItem('hotel_saas_tenant_user');
+      if (item) return JSON.parse(item);
+    }
+
+    // Auto-detect scope by path
+    const path = window.location.pathname;
+    if (path.startsWith('/admin')) {
+      const item = localStorage.getItem('hotel_saas_admin_user');
+      if (item) return JSON.parse(item);
+    }
+    if (path.startsWith('/dashboard')) {
+      const item = localStorage.getItem('hotel_saas_tenant_user');
+      if (item) return JSON.parse(item);
+    }
+
+    const item =
+      localStorage.getItem('hotel_saas_user') ||
+      localStorage.getItem('hotel_saas_tenant_user') ||
+      localStorage.getItem('hotel_saas_admin_user');
     return item ? JSON.parse(item) : null;
   },
+
+  getAdminUser(): UserSession | null {
+    if (typeof window === 'undefined') return null;
+    const item = localStorage.getItem('hotel_saas_admin_user');
+    return item ? JSON.parse(item) : null;
+  },
+
+  getTenantUser(): UserSession | null {
+    if (typeof window === 'undefined') return null;
+    const item = localStorage.getItem('hotel_saas_tenant_user');
+    return item ? JSON.parse(item) : null;
+  },
+
+  getAdminToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('hotel_saas_admin_token');
+  },
+
+  getTenantToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('hotel_saas_tenant_token');
+  },
+
   getProperty(): PropertySession | null {
     if (typeof window === 'undefined') return null;
-    const item = localStorage.getItem('hotel_saas_property');
+    const item =
+      localStorage.getItem('hotel_saas_tenant_property') ||
+      localStorage.getItem('hotel_saas_property');
     return item ? JSON.parse(item) : null;
   },
+
   setProperty(property: any) {
     if (typeof window === 'undefined') return;
+    localStorage.setItem('hotel_saas_tenant_property', JSON.stringify(property));
     localStorage.setItem('hotel_saas_property', JSON.stringify(property));
   },
+
   getTenant(): TenantSession | null {
     if (typeof window === 'undefined') return null;
-    const item = localStorage.getItem('hotel_saas_tenant');
+    const item =
+      localStorage.getItem('hotel_saas_tenant_tenant') ||
+      localStorage.getItem('hotel_saas_tenant');
     return item ? JSON.parse(item) : null;
   },
+
+  clearAdminSession() {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('hotel_saas_admin_token');
+    localStorage.removeItem('hotel_saas_admin_user');
+  },
+
+  clearTenantSession() {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('hotel_saas_tenant_token');
+    localStorage.removeItem('hotel_saas_tenant_user');
+    localStorage.removeItem('hotel_saas_tenant_tenant');
+    localStorage.removeItem('hotel_saas_tenant_property');
+  },
+
   clearSession() {
     if (typeof window === 'undefined') return;
     localStorage.removeItem('hotel_saas_token');
     localStorage.removeItem('hotel_saas_user');
     localStorage.removeItem('hotel_saas_tenant');
     localStorage.removeItem('hotel_saas_property');
+    localStorage.removeItem('hotel_saas_admin_token');
+    localStorage.removeItem('hotel_saas_admin_user');
+    localStorage.removeItem('hotel_saas_tenant_token');
+    localStorage.removeItem('hotel_saas_tenant_user');
+    localStorage.removeItem('hotel_saas_tenant_tenant');
+    localStorage.removeItem('hotel_saas_tenant_property');
   },
 };
+
+export function formatCurrency(
+  amount: number | string | undefined | null,
+  currency?: string
+): string {
+  const num = Number(amount) || 0;
+  let propCurrency = 'LKR';
+  try {
+    propCurrency = authStorage.getProperty()?.currency || 'LKR';
+  } catch (e) {
+    propCurrency = 'LKR';
+  }
+  const curr = currency || propCurrency || 'LKR';
+  const formatted = num.toLocaleString('en-LK', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  if (curr === 'LKR') {
+    return `Rs. ${formatted}`;
+  }
+  return `${curr} ${formatted}`;
+}
 
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = authStorage.getToken();
+  const isSuperAdminCall = endpoint.startsWith('/api/super-admin');
+  const token = isSuperAdminCall
+    ? authStorage.getAdminToken() || authStorage.getToken('admin')
+    : authStorage.getTenantToken() || authStorage.getToken('tenant');
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
@@ -96,6 +253,18 @@ export async function apiRequest<T = any>(
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
+    // If unauthorized and not the login endpoint itself, clean up the stale session
+    if (res.status === 401 && !endpoint.includes('/api/auth/login')) {
+      if (isSuperAdminCall) {
+        authStorage.clearAdminSession();
+      } else {
+        authStorage.clearTenantSession();
+      }
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login';
+      }
+    }
+
     const errorMsg =
       (Array.isArray(data.message) ? data.message.join(', ') : data.message) ||
       `HTTP error ${res.status}: ${res.statusText}`;
@@ -106,23 +275,6 @@ export async function apiRequest<T = any>(
 }
 
 export const authApi = {
-  async register(body: {
-    fullName: string;
-    username: string;
-    email: string;
-    password: string;
-    phone?: string;
-    propertyName?: string;
-    currency?: string;
-  }): Promise<AuthResponse> {
-    const response = await apiRequest<AuthResponse>('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
-    authStorage.setSession(response);
-    return response;
-  },
-
   async login(body: {
     usernameOrEmail: string;
     password: string;
@@ -139,11 +291,19 @@ export const authApi = {
     return apiRequest('/api/auth/me', { method: 'GET' });
   },
 
-  async logout() {
+  async logout(scope?: 'admin' | 'tenant') {
     try {
       await apiRequest('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // Ignore network / token errors on logout
     } finally {
-      authStorage.clearSession();
+      if (scope === 'admin') {
+        authStorage.clearAdminSession();
+      } else if (scope === 'tenant') {
+        authStorage.clearTenantSession();
+      } else {
+        authStorage.clearSession();
+      }
     }
   },
 };
@@ -589,11 +749,20 @@ export const pmsApi = {
 };
 
 export const inventoryApi = {
-  async getItems(category?: string, search?: string, lowStock?: boolean) {
+  // Items
+  async getItems(
+    category?: string,
+    search?: string,
+    lowStock?: boolean,
+    itemType?: string,
+    subcategory?: string,
+  ) {
     const params = new URLSearchParams();
     if (category) params.append('category', category);
+    if (subcategory) params.append('subcategory', subcategory);
     if (search) params.append('search', search);
     if (lowStock) params.append('lowStock', 'true');
+    if (itemType) params.append('itemType', itemType);
     const q = params.toString() ? `?${params.toString()}` : '';
     return apiRequest(`/api/inventory/items${q}`, { method: 'GET' });
   },
@@ -602,15 +771,7 @@ export const inventoryApi = {
     return apiRequest(`/api/inventory/items/${id}`, { method: 'GET' });
   },
 
-  async createItem(data: {
-    name: string;
-    sku?: string;
-    category: string;
-    unit: string;
-    currentStock?: number;
-    minStockLevel?: number;
-    costPerUnit?: number;
-  }) {
+  async createItem(data: any) {
     return apiRequest('/api/inventory/items', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -624,14 +785,21 @@ export const inventoryApi = {
     });
   },
 
+  async deleteItem(id: string) {
+    return apiRequest(`/api/inventory/items/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
   async adjustStock(
     id: string,
     data: {
       quantity: number;
-      movementType: string;
+      movementType?: string;
       unitCost?: number;
       reason: string;
       referenceId?: string;
+      department?: string;
     },
   ) {
     return apiRequest(`/api/inventory/items/${id}/adjust`, {
@@ -640,11 +808,169 @@ export const inventoryApi = {
     });
   },
 
-  async getMovements(itemId?: string) {
-    const q = itemId ? `?itemId=${itemId}` : '';
+  // Purchase Orders (PO)
+  async getPurchaseOrders(params?: {
+    status?: string;
+    category?: string;
+    supplierId?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.append('status', params.status);
+    if (params?.category) qs.append('category', params.category);
+    if (params?.supplierId) qs.append('supplierId', params.supplierId);
+    if (params?.search) qs.append('search', params.search);
+    if (params?.startDate) qs.append('startDate', params.startDate);
+    if (params?.endDate) qs.append('endDate', params.endDate);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/inventory/purchase-orders${q}`, { method: 'GET' });
+  },
+
+  async getPurchaseOrder(id: string) {
+    return apiRequest(`/api/inventory/purchase-orders/${id}`, { method: 'GET' });
+  },
+
+  async createPurchaseOrder(data: any) {
+    return apiRequest('/api/inventory/purchase-orders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updatePurchaseOrder(id: string, data: any) {
+    return apiRequest(`/api/inventory/purchase-orders/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async approvePurchaseOrder(id: string) {
+    return apiRequest(`/api/inventory/purchase-orders/${id}/approve`, {
+      method: 'POST',
+    });
+  },
+
+  async cancelPurchaseOrder(id: string, reason?: string) {
+    return apiRequest(`/api/inventory/purchase-orders/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  async receivePurchaseOrder(id: string) {
+    return apiRequest(`/api/inventory/purchase-orders/${id}/receive`, {
+      method: 'POST',
+    });
+  },
+
+  // Goods Received Notes (GRN)
+  async getGRNs(params?: {
+    poId?: string;
+    supplierId?: string;
+    category?: string;
+    status?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const qs = new URLSearchParams();
+    if (params?.poId) qs.append('poId', params.poId);
+    if (params?.supplierId) qs.append('supplierId', params.supplierId);
+    if (params?.category) qs.append('category', params.category);
+    if (params?.status) qs.append('status', params.status);
+    if (params?.search) qs.append('search', params.search);
+    if (params?.startDate) qs.append('startDate', params.startDate);
+    if (params?.endDate) qs.append('endDate', params.endDate);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/inventory/grns${q}`, { method: 'GET' });
+  },
+
+  async getGRN(id: string) {
+    return apiRequest(`/api/inventory/grns/${id}`, { method: 'GET' });
+  },
+
+  async createGRN(data: {
+    purchaseOrderId: string;
+    deliveryNoteNumber?: string;
+    receivedDate?: string;
+    notes?: string;
+    items: Array<{
+      purchaseOrderItemId?: string;
+      inventoryItemId: string;
+      quantityReceiving: number;
+      quantityAccepted: number;
+      quantityRejected?: number;
+      rejectionReason?: string;
+      unitCost: number;
+      batchNumber?: string;
+      expiryDate?: string;
+    }>;
+  }) {
+    return apiRequest('/api/inventory/grns', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Operational Issuance
+  async getIssuances(params?: {
+    department?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const qs = new URLSearchParams();
+    if (params?.department) qs.append('department', params.department);
+    if (params?.search) qs.append('search', params.search);
+    if (params?.startDate) qs.append('startDate', params.startDate);
+    if (params?.endDate) qs.append('endDate', params.endDate);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/inventory/issuances${q}`, { method: 'GET' });
+  },
+
+  async getIssuance(id: string) {
+    return apiRequest(`/api/inventory/issuances/${id}`, { method: 'GET' });
+  },
+
+  async createIssuance(data: {
+    department: string;
+    receivedByName: string;
+    notes?: string;
+    items: Array<{
+      inventoryItemId: string;
+      quantity: number;
+      purpose?: string;
+      assetTag?: string;
+      serialNumber?: string;
+    }>;
+  }) {
+    return apiRequest('/api/inventory/issuances', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Stock Movements Audit
+  async getMovements(params?: {
+    itemId?: string;
+    category?: string;
+    movementType?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const qs = new URLSearchParams();
+    if (params?.itemId) qs.append('itemId', params.itemId);
+    if (params?.category) qs.append('category', params.category);
+    if (params?.movementType) qs.append('movementType', params.movementType);
+    if (params?.startDate) qs.append('startDate', params.startDate);
+    if (params?.endDate) qs.append('endDate', params.endDate);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
     return apiRequest(`/api/inventory/movements${q}`, { method: 'GET' });
   },
 
+  // Recipe (BOM)
   async getRecipe(productId: string) {
     return apiRequest(`/api/inventory/recipes/${productId}`, { method: 'GET' });
   },
@@ -659,16 +985,20 @@ export const inventoryApi = {
     });
   },
 
+  // Suppliers
   async getSuppliers() {
     return apiRequest('/api/inventory/suppliers', { method: 'GET' });
   },
 
   async createSupplier(data: {
     name: string;
+    supplierCode?: string;
     contactPerson?: string;
     email?: string;
     phone?: string;
     address?: string;
+    paymentTerms?: string;
+    taxNumber?: string;
   }) {
     return apiRequest('/api/inventory/suppliers', {
       method: 'POST',
@@ -676,31 +1006,38 @@ export const inventoryApi = {
     });
   },
 
-  async getPurchaseOrders(status?: string) {
-    const q = status ? `?status=${status}` : '';
-    return apiRequest(`/api/inventory/purchase-orders${q}`, { method: 'GET' });
-  },
-
-  async createPurchaseOrder(data: {
-    supplierId: string;
-    expectedDate?: string;
-    notes?: string;
-    items: Array<{
-      inventoryItemId: string;
-      quantityOrdered: number;
-      unitCost: number;
-    }>;
-  }) {
-    return apiRequest('/api/inventory/purchase-orders', {
-      method: 'POST',
+  async updateSupplier(id: string, data: any) {
+    return apiRequest(`/api/inventory/suppliers/${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     });
   },
 
-  async receivePurchaseOrder(id: string) {
-    return apiRequest(`/api/inventory/purchase-orders/${id}/receive`, {
-      method: 'POST',
-    });
+  // Reports
+  async getSummaryStats() {
+    return apiRequest('/api/inventory/reports/summary', { method: 'GET' });
+  },
+
+  async getStockReport(category?: string) {
+    const q = category ? `?category=${category}` : '';
+    return apiRequest(`/api/inventory/reports/stock${q}`, { method: 'GET' });
+  },
+
+  async getValuationReport() {
+    return apiRequest('/api/inventory/reports/valuation', { method: 'GET' });
+  },
+
+  async getLowStockReport(category?: string) {
+    const q = category ? `?category=${category}` : '';
+    return apiRequest(`/api/inventory/reports/low-stock${q}`, { method: 'GET' });
+  },
+
+  async getDepartmentIssuanceReport(params?: { startDate?: string; endDate?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.startDate) qs.append('startDate', params.startDate);
+    if (params?.endDate) qs.append('endDate', params.endDate);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/inventory/reports/department-issuance${q}`, { method: 'GET' });
   },
 };
 
@@ -993,6 +1330,164 @@ export const barApi = {
     return apiRequest(`/api/bar/ledger${q}`, { method: 'GET' });
   },
 };
+
+export const channelManagerApi = {
+  async getDashboard() {
+    return apiRequest('/api/channel-manager/dashboard', { method: 'GET' });
+  },
+
+  async getConnections() {
+    return apiRequest('/api/channel-manager/connections', { method: 'GET' });
+  },
+
+  async getConnection(channelCode: string) {
+    return apiRequest(`/api/channel-manager/connections/${channelCode}`, {
+      method: 'GET',
+    });
+  },
+
+  async updateConnection(channelCode: string, data: any) {
+    return apiRequest(`/api/channel-manager/connections/${channelCode}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async testConnection(channelCode: string) {
+    return apiRequest(`/api/channel-manager/connections/${channelCode}/test`, {
+      method: 'POST',
+    });
+  },
+
+  async disconnectChannel(channelCode: string) {
+    return apiRequest(
+      `/api/channel-manager/connections/${channelCode}/disconnect`,
+      { method: 'POST' },
+    );
+  },
+
+  async reconnectChannel(channelCode: string) {
+    return apiRequest(
+      `/api/channel-manager/connections/${channelCode}/reconnect`,
+      { method: 'POST' },
+    );
+  },
+
+  async getRoomMappings(connectionId: string) {
+    return apiRequest(
+      `/api/channel-manager/connections/${connectionId}/room-mappings`,
+      { method: 'GET' },
+    );
+  },
+
+  async saveRoomMapping(connectionId: string, data: any) {
+    return apiRequest(
+      `/api/channel-manager/connections/${connectionId}/room-mappings`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    );
+  },
+
+  async deleteRoomMapping(connectionId: string, mappingId: string) {
+    return apiRequest(
+      `/api/channel-manager/connections/${connectionId}/room-mappings/${mappingId}`,
+      { method: 'DELETE' },
+    );
+  },
+
+  async autoSuggestRooms(connectionId: string) {
+    return apiRequest(
+      `/api/channel-manager/connections/${connectionId}/auto-suggest-rooms`,
+      { method: 'GET' },
+    );
+  },
+
+  async getRatePlanMappings(connectionId: string) {
+    return apiRequest(
+      `/api/channel-manager/connections/${connectionId}/rate-plan-mappings`,
+      { method: 'GET' },
+    );
+  },
+
+  async saveRatePlanMapping(connectionId: string, data: any) {
+    return apiRequest(
+      `/api/channel-manager/connections/${connectionId}/rate-plan-mappings`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    );
+  },
+
+  async deleteRatePlanMapping(connectionId: string, mappingId: string) {
+    return apiRequest(
+      `/api/channel-manager/connections/${connectionId}/rate-plan-mappings/${mappingId}`,
+      { method: 'DELETE' },
+    );
+  },
+
+  async getPricingRules(connectionId: string) {
+    return apiRequest(
+      `/api/channel-manager/connections/${connectionId}/pricing-rules`,
+      { method: 'GET' },
+    );
+  },
+
+  async savePricingRule(connectionId: string, data: any) {
+    return apiRequest(
+      `/api/channel-manager/connections/${connectionId}/pricing-rules`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    );
+  },
+
+  async deletePricingRule(connectionId: string, ruleId: string) {
+    return apiRequest(
+      `/api/channel-manager/connections/${connectionId}/pricing-rules/${ruleId}`,
+      { method: 'DELETE' },
+    );
+  },
+
+  async getAvailabilityGrid(days?: number) {
+    const q = days ? `?days=${days}` : '';
+    return apiRequest(`/api/channel-manager/availability-grid${q}`, {
+      method: 'GET',
+    });
+  },
+
+  async triggerSync(channelCode: string, jobType?: string) {
+    return apiRequest(`/api/channel-manager/connections/${channelCode}/sync`, {
+      method: 'POST',
+      body: JSON.stringify({ jobType }),
+    });
+  },
+
+  async getReservations(channelCode?: string, search?: string) {
+    const qs = new URLSearchParams();
+    if (channelCode) qs.append('channelCode', channelCode);
+    if (search) qs.append('search', search);
+    const q = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/channel-manager/reservations${q}`, {
+      method: 'GET',
+    });
+  },
+
+  async getLogs(limit?: number) {
+    const q = limit ? `?limit=${limit}` : '';
+    return apiRequest(`/api/channel-manager/logs${q}`, { method: 'GET' });
+  },
+
+  async retryJob(jobId: string) {
+    return apiRequest(`/api/channel-manager/logs/${jobId}/retry`, {
+      method: 'POST',
+    });
+  },
+};
+
 
 
 

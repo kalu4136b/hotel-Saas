@@ -1,14 +1,10 @@
-import AuthCard from '@/components/AuthCard';
+import { redirect } from 'next/navigation';
 
 export const metadata = {
-  title: 'Join Us — Antigravity Hotel SaaS',
-  description: 'Create your hotel SaaS tenant account and property console.',
+  title: 'Sign In — Antigravity Hotel SaaS',
+  description: 'Self-registration is disabled. Please sign in with your authorized credentials.',
 };
 
 export default function SignupPage() {
-  return (
-    <main className="min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-[#F8FAFC]">
-      <AuthCard initialMode="signup" />
-    </main>
-  );
+  redirect('/login');
 }

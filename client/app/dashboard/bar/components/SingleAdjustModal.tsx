@@ -300,7 +300,7 @@ export default function SingleAdjustModal({
             <div>
               <span className="text-[#64748B] font-medium">Financial Impact: </span>
               <span className={`font-black ${previewCost < 0 ? 'text-[#DC2626]' : 'text-[#16A34A]'}`}>
-                {previewCost >= 0 ? `+$${previewCost.toFixed(2)}` : `-$${Math.abs(previewCost).toFixed(2)}`}
+                {previewCost >= 0 ? `+Rs. ${previewCost.toLocaleString('en-LK', { minimumFractionDigits: 2 })}` : `-Rs. ${Math.abs(previewCost).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`}
               </span>
             </div>
           </div>

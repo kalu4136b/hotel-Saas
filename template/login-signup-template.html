@@ -520,31 +520,22 @@ body{
 .divider:not(:empty)::before{margin-right:12px}
 .divider:not(:empty)::after{margin-left:12px}
 
-/* Google Sign-in Button */
-.btn-google{
-  width:100%;
-  padding:12px 14px;
-  border-radius:var(--radius-btn);
-  background:#FFFFFF;
-  border:1px solid var(--border-color);
-  color:var(--text-main);
-  font-family:var(--font);
-  font-size:13.5px;
-  font-weight:700;
-  cursor:pointer;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
-  transition:var(--transition);
-  box-shadow:0 1px 3px rgba(0,0,0,0.03);
-}
-.btn-google:hover{
+/* Enterprise Notice */
+.enterprise-notice{
+  margin-top:20px;
+  padding:14px;
   background:var(--bg-page);
-  border-color:var(--text-light);
+  border:1px solid var(--border-color);
+  border-radius:var(--radius-btn);
+  font-size:12px;
+  color:var(--text-muted);
+  text-align:center;
+  line-height:1.45;
 }
-.google-icon{
-  width:18px;height:18px;
+.enterprise-notice strong{
+  color:var(--text-main);
+  display:block;
+  margin-bottom:4px;
 }
 
 /* Legal Footer */
@@ -630,28 +621,25 @@ body{
     <!-- Middle Catchphrase -->
     <div class="hero-content">
       <div class="hero-pill">
-        <span>Join Us to Build 🤩</span>
+        <span>Enterprise PMS Platform 🏨</span>
       </div>
-      <h2 class="hero-title" id="heroTitle">Start your Journey</h2>
-      <p class="hero-subtitle" id="heroSubtitle">Follow these simple steps to set up your account and access your hotel suite management console.</p>
+      <h2 class="hero-title" id="heroTitle">Hotel Management Console</h2>
+      <p class="hero-subtitle" id="heroSubtitle">Unified command center for front desk, room reservations, POS registers, bar stock, and revenue analytics.</p>
     </div>
 
-    <!-- 3-Step Flow Cards matching screenshot -->
+    <!-- Capability Cards -->
     <div class="hero-steps" id="stepsContainer">
-      <!-- Step 1 (Active) -->
       <div class="step-card active" data-step="1">
         <div class="step-num">1</div>
-        <div class="step-desc">Register your account</div>
+        <div class="step-desc">PMS &amp; Front Desk Operations</div>
       </div>
-      <!-- Step 2 -->
       <div class="step-card inactive" data-step="2">
         <div class="step-num">2</div>
-        <div class="step-desc">Set up your profile information</div>
+        <div class="step-desc">High-Speed POS &amp; Bar Terminal</div>
       </div>
-      <!-- Step 3 -->
       <div class="step-card inactive" data-step="3">
         <div class="step-num">3</div>
-        <div class="step-desc">Verify your identity through passport/ID</div>
+        <div class="step-desc">Real-Time Revenue Telemetry</div>
       </div>
     </div>
   </div>
@@ -662,96 +650,17 @@ body{
       
       <!-- Heading -->
       <div class="auth-mode-nav">
-        <h1 class="auth-heading" id="formHeader">Join Us</h1>
+        <h1 class="auth-heading" id="formHeader">Welcome Back</h1>
       </div>
 
-      <!-- ================= SIGN UP FORM (DEFAULT) ================= -->
-      <form class="auth-form fade-in" id="signupForm" onsubmit="event.preventDefault(); handleSignupSubmit();">
-        
-        <!-- Phone Number Field -->
-        <div class="field-group">
-          <label class="field-label">Phone number</label>
-          <div class="phone-wrap">
-            <div class="flag-badge" id="flagSelector" title="Click to change country">
-              <span>🇦🇲</span>
-              <span id="countryCode">+374</span>
-            </div>
-            <input type="tel" id="signupPhone" placeholder="0000 00 00" required autocomplete="tel">
-          </div>
-        </div>
-
-        <!-- Name and Username Row -->
-        <div class="field-row">
-          <div class="field-group">
-            <label class="field-label">Full Name</label>
-            <div class="input-wrap">
-              <input type="text" id="signupFullName" class="input-ctl" placeholder="Juliette Karapetyan" required autocomplete="name">
-            </div>
-          </div>
-
-          <div class="field-group">
-            <label class="field-label">Username</label>
-            <div class="input-wrap">
-              <input type="text" id="signupUsername" class="input-ctl" placeholder="julietux" required autocomplete="username">
-              <span class="input-action valid-check" id="usernameCheck">
-                <i class="fa-solid fa-check"></i>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Password Field -->
-        <div class="field-group">
-          <label class="field-label">Password</label>
-          <div class="input-wrap">
-            <input type="password" id="signupPassword" class="input-ctl" placeholder="••••••••••••••••" required autocomplete="new-password">
-            <button type="button" class="input-action" onclick="togglePasswordVisibility('signupPassword', this)" aria-label="Toggle password visibility">
-              <i class="fa-regular fa-eye-slash"></i>
-            </button>
-          </div>
-          <p class="helper-text">
-            At least 12 characters, no more than 20 characters.<br>
-            Uppercase letters, lowercase letters, numbers, and symbols.
-          </p>
-        </div>
-
-        <!-- Submit Button -->
-        <button type="submit" class="btn-submit" id="btnContinue">Continue</button>
-
-        <!-- Switch to Log In -->
-        <div class="auth-switch">
-          Already have an account? <button type="button" onclick="switchAuthMode('login')">Log in</button>
-        </div>
-
-        <!-- Divider -->
-        <div class="divider">Or</div>
-
-        <!-- Google OAuth -->
-        <button type="button" class="btn-google" onclick="handleGoogleAuth()">
-          <svg class="google-icon" viewBox="0 0 24 24">
-            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.68-5.17 3.68-9.09z"/>
-            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.37 24 12 24z"/>
-            <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/>
-            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
-          </svg>
-          <span>Sign up with Google</span>
-        </button>
-
-        <!-- Terms Footer -->
-        <p class="legal-footer">
-          By signing up I confirm that I carefully have read and agree to the Ninth<br>
-          <a href="#">Privacy Policy</a> and <a href="#">Terms of Service</a>.
-        </p>
-      </form>
-
       <!-- ================= LOG IN FORM ================= -->
-      <form class="auth-form hidden fade-in" id="loginForm" onsubmit="event.preventDefault(); handleLoginSubmit();">
+      <form class="auth-form fade-in" id="loginForm" onsubmit="event.preventDefault(); handleLoginSubmit();">
         
         <!-- Username or Email -->
         <div class="field-group">
           <label class="field-label">Username or Email</label>
           <div class="input-wrap">
-            <input type="text" id="loginUsername" class="input-ctl" placeholder="julietux or juliet@domain.com" required autocomplete="username">
+            <input type="text" id="loginUsername" class="input-ctl" placeholder="admin@domain.com or novotel_admin" required autocomplete="username">
           </div>
         </div>
 
@@ -776,26 +685,13 @@ body{
         </div>
 
         <!-- Submit Button -->
-        <button type="submit" class="btn-submit">Sign In to PMS</button>
+        <button type="submit" class="btn-submit">Sign In to PMS Console</button>
 
-        <!-- Switch to Sign Up -->
-        <div class="auth-switch">
-          Don't have an account yet? <button type="button" onclick="switchAuthMode('signup')">Join us</button>
+        <!-- Enterprise Notice -->
+        <div class="enterprise-notice">
+          <strong>Restricted Enterprise Access</strong>
+          Public self-registration is disabled. New hotel tenants and staff credentials are provisioned exclusively by Platform Administration.
         </div>
-
-        <!-- Divider -->
-        <div class="divider">Or</div>
-
-        <!-- Google OAuth -->
-        <button type="button" class="btn-google" onclick="handleGoogleAuth()">
-          <svg class="google-icon" viewBox="0 0 24 24">
-            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3h3.86c2.26-2.09 3.68-5.17 3.68-9.09z"/>
-            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.37 24 12 24z"/>
-            <path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/>
-            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
-          </svg>
-          <span>Continue with Google</span>
-        </button>
 
       </form>
 
@@ -897,25 +793,10 @@ document.getElementById('themeToggleBtn').addEventListener('click', function(){
   }
 });
 
-// Form Submissions
-function handleSignupSubmit(){
-  const btn = document.getElementById('btnContinue');
-  btn.textContent = 'Creating Account...';
-  btn.style.opacity = '0.7';
-  setTimeout(() => {
-    alert('Account created successfully! Welcome to Ninth / Antigravity PMS.');
-    btn.textContent = 'Continue';
-    btn.style.opacity = '1';
-  }, 900);
-}
-
+// Form Submission
 function handleLoginSubmit(){
   alert('Signed in successfully! Redirecting to Antigravity Hospitality Dashboard...');
   window.location.href = '/';
-}
-
-function handleGoogleAuth(){
-  alert('Connecting to Google Identity Services...');
 }
 </script>
 

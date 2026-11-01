@@ -30,6 +30,7 @@ import {
   Wine,
   ShieldAlert,
   ShieldCheck,
+  Globe,
 } from 'lucide-react';
 import { authStorage, authApi, posApi } from '@/lib/api';
 import {
@@ -56,13 +57,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [loadingShift, setLoadingShift] = useState(false);
 
   useEffect(() => {
-    const token = authStorage.getToken();
+    const token = authStorage.getTenantToken() || authStorage.getToken('tenant');
     if (!token) {
+      // If only Super Admin is logged in, redirect to platform console
+      if (authStorage.getAdminToken()) {
+        router.replace('/admin');
+        return;
+      }
       router.push('/login');
       return;
     }
 
-    const currentUser = authStorage.getUser();
+    const currentUser = authStorage.getTenantUser() || authStorage.getUser('tenant');
     const currentProperty = authStorage.getProperty();
     const currentTenant = authStorage.getTenant();
     setUser(currentUser);
@@ -80,12 +86,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   // If staff user without dashboard overview lands on /dashboard, redirect to their first allowed station
   useEffect(() => {
-    if (user && pathname === '/dashboard') {
-      if (user.role === 'SUPER_ADMIN') {
-        router.push('/admin');
+    if (user) {
+      if (user.role === 'SUPER_ADMIN' && !authStorage.getTenantToken()) {
+        router.replace('/admin');
         return;
       }
-      if (!isRoutePermitted('/dashboard', user, tenant)) {
+      if (pathname === '/dashboard' && !isRoutePermitted('/dashboard', user, tenant)) {
         const destination = getFirstAllowedRoute(user, tenant);
         router.push(destination);
       }
@@ -107,7 +113,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   const handleLogout = async () => {
-    await authApi.logout();
+    await authApi.logout('tenant');
     router.push('/login');
   };
 
@@ -144,6 +150,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       href: '/dashboard/pms/front-desk',
       icon: Key,
       badge: 'PMS',
+    },
+    {
+      label: 'Channel Manager (OTA)',
+      href: '/dashboard/channel-manager',
+      icon: Globe,
+      badge: 'OTA',
     },
     {
       label: 'POS Sales Terminal',
@@ -360,7 +372,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 {property?.name || 'Grand Azure Hotel & Resort'}
               </span>
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white text-[#64748B] border border-[#E2E8F0]">
-                {property?.currency || 'USD'}
+                {property?.currency || 'LKR'}
               </span>
             </div>
           </div>
@@ -447,7 +459,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <form onSubmit={handleOpenShift} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-[#0F172A] mb-1.5">
-                  Starting Cash Float ($)
+                  Starting Cash Float (Rs.)
                 </label>
                 <input
                   type="number"
@@ -456,7 +468,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   value={startingFloat}
                   onChange={(e) => setStartingFloat(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] text-xs font-bold text-[#0F172A] focus:bg-white focus:border-[#00C48C] outline-none"
-                  placeholder="100.00"
+                  placeholder="10000.00"
                 />
               </div>
 

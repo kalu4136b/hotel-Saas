@@ -196,7 +196,7 @@ function FrontDeskContent() {
     if (!activeFolio) return;
     if (Number(activeFolio.balanceDue) > 0.05) {
       alert(
-        `Cannot check out with an outstanding balance of $${Number(activeFolio.balanceDue).toFixed(2)}. Please settle folio first.`
+        `Cannot check out with an outstanding balance of Rs. ${Number(activeFolio.balanceDue).toLocaleString('en-LK', { minimumFractionDigits: 2 })}. Please settle folio first.`
       );
       return;
     }
@@ -370,7 +370,7 @@ function FrontDeskContent() {
                           {res.roomType?.name}
                         </td>
                         <td className="px-5 py-3.5 font-mono font-bold text-[#00C48C]">
-                          ${res.depositPaid || '0.00'}
+                          Rs. {res.depositPaid ? Number(res.depositPaid).toLocaleString('en-LK', { minimumFractionDigits: 2 }) : '0.00'}
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <button
@@ -531,13 +531,13 @@ function FrontDeskContent() {
                     <div>
                       <div className="text-[10px] font-bold text-[#64748B] uppercase">Total Charges</div>
                       <div className="text-base font-extrabold font-mono text-[#0F172A]">
-                        ${Number(activeFolio.totalCharges).toFixed(2)}
+                        Rs. {Number(activeFolio.totalCharges).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </div>
                     </div>
                     <div>
                       <div className="text-[10px] font-bold text-[#64748B] uppercase">Payments Received</div>
                       <div className="text-base font-extrabold font-mono text-[#00C48C]">
-                        ${Number(activeFolio.totalPayments).toFixed(2)}
+                        Rs. {Number(activeFolio.totalPayments).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </div>
                     </div>
                     <div>
@@ -547,7 +547,7 @@ function FrontDeskContent() {
                           Number(activeFolio.balanceDue) > 0 ? 'text-rose-600' : 'text-[#00C48C]'
                         }`}
                       >
-                        ${Number(activeFolio.balanceDue).toFixed(2)}
+                        Rs. {Number(activeFolio.balanceDue).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </div>
                     </div>
                   </div>
@@ -583,7 +583,7 @@ function FrontDeskContent() {
                               </td>
                               <td className="px-3.5 py-2">{item.description}</td>
                               <td className="px-3.5 py-2 text-right font-mono font-bold text-[#0F172A]">
-                                ${Number(item.amount).toFixed(2)}
+                                Rs. {Number(item.amount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                               </td>
                             </tr>
                           ))}
@@ -634,7 +634,7 @@ function FrontDeskContent() {
                                   {pmt.receiptNumber || '—'}
                                 </td>
                                 <td className="px-3.5 py-2 text-right font-mono font-bold text-[#00C48C]">
-                                  ${Number(pmt.amount).toFixed(2)}
+                                  Rs. {Number(pmt.amount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                                 </td>
                               </tr>
                             ))
@@ -711,7 +711,7 @@ function FrontDeskContent() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[#334155] mb-1">Charge Amount ($)</label>
+                  <label className="block text-xs font-bold text-[#334155] mb-1">Charge Amount (Rs.)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -763,7 +763,7 @@ function FrontDeskContent() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[#334155] mb-1">Amount Paid ($)</label>
+                  <label className="block text-xs font-bold text-[#334155] mb-1">Amount Paid (Rs.)</label>
                   <input
                     type="number"
                     step="0.01"

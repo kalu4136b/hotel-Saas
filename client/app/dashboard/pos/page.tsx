@@ -108,7 +108,7 @@ function POSTerminalContent() {
 
     setFeedbackMsg({
       type: 'success',
-      text: `Order ${order.orderNumber} for Table ${tableName} loaded ($${Number(order.totalAmount).toFixed(2)}). Ready for payment.`,
+      text: `Order ${order.orderNumber} for Table ${tableName} loaded (Rs. ${Number(order.totalAmount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}). Ready for payment.`,
     });
   };
 
@@ -324,7 +324,7 @@ function POSTerminalContent() {
       setAmountTendered(Number(bill.grandTotal).toFixed(2));
       setFeedbackMsg({
         type: 'success',
-        text: `Bill ${bill.billNumber} generated ($${Number(bill.grandTotal).toFixed(2)}). Ready for payment.`,
+        text: `Bill ${bill.billNumber} generated (Rs. ${Number(bill.grandTotal).toLocaleString('en-LK', { minimumFractionDigits: 2 })}). Ready for payment.`,
       });
       return bill;
     } catch (err: any) {
@@ -539,7 +539,7 @@ function POSTerminalContent() {
 
                   <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#F1F5F9]">
                     <span className="text-sm font-bold text-[#0F172A] mono">
-                      ${Number(prod.price).toFixed(2)}
+                      Rs. {Number(prod.price).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </span>
                     <button
                       type="button"
@@ -712,7 +712,7 @@ function POSTerminalContent() {
                       {item.productName}
                     </div>
                     <div className="text-[11px] text-[#64748B] mono">
-                      ${item.price.toFixed(2)} each
+                      Rs. {item.price.toLocaleString('en-LK', { minimumFractionDigits: 2 })} each
                     </div>
                   </div>
 
@@ -735,8 +735,8 @@ function POSTerminalContent() {
                       </button>
                     </div>
 
-                    <span className="font-bold text-[#0F172A] mono w-14 text-right">
-                      ${(item.price * item.quantity).toFixed(2)}
+                    <span className="font-bold text-[#0F172A] mono w-20 text-right">
+                      Rs. {(item.price * item.quantity).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </span>
 
                     <button
@@ -755,15 +755,15 @@ function POSTerminalContent() {
           <div className="space-y-1.5 pt-3 border-t border-[#E2E8F0] text-xs">
             <div className="flex justify-between text-[#64748B]">
               <span>Subtotal</span>
-              <span className="mono">${subtotal.toFixed(2)}</span>
+              <span className="mono">Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between text-[#64748B]">
               <span>Tax (10% VAT)</span>
-              <span className="mono">${tax.toFixed(2)}</span>
+              <span className="mono">Rs. {tax.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between text-sm font-extrabold text-[#0F172A] pt-1.5 border-t border-[#E2E8F0]">
               <span>Total Payable</span>
-              <span className="mono text-[#00C48C]">${total.toFixed(2)}</span>
+              <span className="mono text-[#00C48C]">Rs. {total.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
             </div>
           </div>
 
@@ -828,7 +828,7 @@ function POSTerminalContent() {
                   className="w-full py-3 px-4 rounded-xl bg-[#00C48C] hover:bg-[#00B07D] text-white text-xs font-extrabold transition-all shadow-sm flex items-center justify-center gap-2 mt-2"
                 >
                   <CreditCard className="w-4 h-4" />
-                  <span>Settle Payment (${total.toFixed(2)})</span>
+                  <span>Settle Payment (Rs. {total.toLocaleString('en-LK', { minimumFractionDigits: 2 })})</span>
                 </button>
               </>
             )}
@@ -866,7 +866,7 @@ function POSTerminalContent() {
             <div className="p-3.5 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] mb-4 text-center">
               <div className="text-xs text-[#64748B]">Total Amount Due</div>
               <div className="text-2xl font-bold text-[#00C48C] mono">
-                ${total.toFixed(2)}
+                Rs. {total.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
               </div>
             </div>
 
@@ -916,7 +916,7 @@ function POSTerminalContent() {
               {paymentMethod === 'CASH' && (
                 <div>
                   <label className="block text-xs font-semibold text-[#0F172A] mb-1">
-                    Amount Tendered ($)
+                    Amount Tendered (Rs.)
                   </label>
                   <input
                     type="number"
@@ -928,7 +928,7 @@ function POSTerminalContent() {
                   />
                   {Number(amountTendered) >= total && (
                     <div className="mt-2 text-xs font-bold text-[#00C48C]">
-                      Change to give: ${(Number(amountTendered) - total).toFixed(2)}
+                      Change to give: Rs. {(Number(amountTendered) - total).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </div>
                   )}
                 </div>
@@ -974,7 +974,7 @@ function POSTerminalContent() {
                       <div className="mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-[11px] text-blue-800 flex items-start gap-2">
                         <Key className="w-4 h-4 mt-0.5 shrink-0 text-blue-600" />
                         <div>
-                          <strong>Folio Charge Routing:</strong> ${total.toFixed(2)} will be posted directly to this guest folio and billed at checkout.
+                          <strong>Folio Charge Routing:</strong> Rs. {total.toLocaleString('en-LK', { minimumFractionDigits: 2 })} will be posted directly to this guest folio and billed at checkout.
                         </div>
                       </div>
                     </div>
@@ -1035,7 +1035,7 @@ function POSTerminalContent() {
                     <span>
                       {i.quantity}x {i.productName}
                     </span>
-                    <span>${(i.price * i.quantity).toFixed(2)}</span>
+                    <span>Rs. {(i.price * i.quantity).toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
                   </div>
                 ))}
               </div>
@@ -1043,15 +1043,15 @@ function POSTerminalContent() {
               <div className="border-t border-dashed border-[#E2E8F0] pt-2 text-left text-xs space-y-1">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span>${subtotal.toFixed(2)}</span>
+                  <span>Rs. {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>VAT (10%):</span>
-                  <span>${tax.toFixed(2)}</span>
+                  <span>Rs. {tax.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between font-bold text-sm pt-1">
                   <span>TOTAL PAID:</span>
-                  <span>${settledPayment.amountPaid.toFixed(2)}</span>
+                  <span>Rs. {settledPayment.amountPaid.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between text-[11px] text-[#64748B]">
                   <span>Method:</span>
@@ -1069,7 +1069,7 @@ function POSTerminalContent() {
                 {settledPayment.changeGiven > 0 && (
                   <div className="flex justify-between text-[11px] text-[#00C48C]">
                     <span>Change Given:</span>
-                    <span>${settledPayment.changeGiven.toFixed(2)}</span>
+                    <span>Rs. {settledPayment.changeGiven.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
               </div>

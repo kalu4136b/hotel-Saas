@@ -201,7 +201,7 @@ export default function ReportsPage() {
                 Net Revenue In Scope
               </span>
               <div className="text-xl font-bold text-[#0F172A] mono mt-1">
-                ${totalRevenueAllDays.toFixed(2)}
+                Rs. {totalRevenueAllDays.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
               </div>
             </div>
             <div className="bg-white rounded-2xl p-4 border border-[#E2E8F0] shadow-xs">
@@ -217,9 +217,9 @@ export default function ReportsPage() {
                 Average Ticket Size
               </span>
               <div className="text-xl font-bold text-[#0F172A] mono mt-1">
-                $
+                Rs.{' '}
                 {totalPaidOrders > 0
-                  ? (totalRevenueAllDays / totalPaidOrders).toFixed(2)
+                  ? (totalRevenueAllDays / totalPaidOrders).toLocaleString('en-LK', { minimumFractionDigits: 2 })
                   : '0.00'}
               </div>
             </div>
@@ -255,16 +255,16 @@ export default function ReportsPage() {
                           {r.paidOrders} of {r.totalOrders}
                         </td>
                         <td className="py-3 px-4 mono text-[#64748B]">
-                          ${r.grossSales.toFixed(2)}
+                          Rs. {r.grossSales.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-4 mono text-[#64748B]">
-                          ${r.totalDiscounts.toFixed(2)}
+                          Rs. {r.totalDiscounts.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-4 mono text-[#64748B]">
-                          ${r.totalTaxes.toFixed(2)}
+                          Rs. {r.totalTaxes.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-4 mono font-extrabold text-[#00C48C]">
-                          ${r.netRevenue.toFixed(2)}
+                          Rs. {r.netRevenue.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     ))
@@ -284,7 +284,7 @@ export default function ReportsPage() {
               Total Tender Collected
             </span>
             <div className="text-xl font-bold text-[#0F172A] mono mt-1">
-              ${totalPaymentsCollected.toFixed(2)}
+              Rs. {totalPaymentsCollected.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
             </div>
           </div>
 
@@ -315,10 +315,10 @@ export default function ReportsPage() {
                         {p.transactionCount} payments
                       </td>
                       <td className="py-3 px-4 mono text-[#64748B]">
-                        ${p.totalChange.toFixed(2)}
+                        Rs. {p.totalChange.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-3 px-4 mono font-extrabold text-[#00C48C]">
-                        ${p.totalAmount.toFixed(2)}
+                        Rs. {p.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))
@@ -374,10 +374,10 @@ export default function ReportsPage() {
                         {item.unitsSold}
                       </td>
                       <td className="py-3 px-4 mono text-[#64748B]">
-                        ${Number(item.avgPrice).toFixed(2)}
+                        Rs. {Number(item.avgPrice).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-3 px-4 mono font-extrabold text-[#00C48C]">
-                        ${Number(item.totalRevenue).toFixed(2)}
+                        Rs. {Number(item.totalRevenue).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))
@@ -416,7 +416,7 @@ export default function ReportsPage() {
                     </td>
                     <td className="py-3 px-4 text-[#64748B]">{c.tableNumber}</td>
                     <td className="py-3 px-4 mono font-bold text-red-600">
-                      ${c.totalAmount.toFixed(2)}
+                      Rs. {c.totalAmount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-3 px-4 text-[#64748B] italic">
                       {c.reason}

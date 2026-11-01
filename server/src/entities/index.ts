@@ -25,7 +25,17 @@ export * from './recipe-item.entity';
 export * from './stock-movement.entity';
 export * from './supplier.entity';
 export * from './purchase-order.entity';
+export * from './goods-received-note.entity';
+export * from './operational-issuance.entity';
 export * from './bar-item.entity';
 export * from './bar-pour-log.entity';
 export * from './bar-stock-adjustment.entity';
+export * from './channel-connection.entity';
+export * from './channel-room-mapping.entity';
+export * from './channel-rate-plan-mapping.entity';
+export * from './channel-pricing-rule.entity';
+export * from './channel-sync-job.entity';
+export * from './channel-sync-log.entity';
+export * from './channel-reservation.entity';
+export * from './channel-webhook-event.entity';
 

@@ -406,7 +406,7 @@ export default function RoomsPage() {
                     {/* Pricing */}
                     <div className="text-xs font-semibold text-[#0F172A] my-2">
                       <span className="font-mono text-sm font-bold text-[#00C48C]">
-                        ${room.roomType?.basePricePerNight}
+                        Rs. {Number(room.roomType?.basePricePerNight).toLocaleString('en-LK')}
                       </span>{' '}
                       <span className="text-[10px] text-[#64748B] font-normal">/ night</span>
                     </div>
@@ -514,7 +514,7 @@ export default function RoomsPage() {
                     >
                       {roomTypes.map((rt) => (
                         <option key={rt.id} value={rt.id}>
-                          {rt.name} (${rt.basePricePerNight}/night)
+                          {rt.name} (Rs. {Number(rt.basePricePerNight).toLocaleString('en-LK')}/night)
                         </option>
                       ))}
                     </select>
@@ -579,7 +579,7 @@ export default function RoomsPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-[#334155] mb-1">Nightly Rate ($)</label>
+                    <label className="block text-xs font-bold text-[#334155] mb-1">Nightly Rate (Rs.)</label>
                     <input
                       type="number"
                       step="0.01"

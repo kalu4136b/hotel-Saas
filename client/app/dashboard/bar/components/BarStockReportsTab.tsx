@@ -276,12 +276,12 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                 <DollarSign className="w-4 h-4 text-[#3B82F6]" />
               </div>
               <div className="text-2xl font-bold text-[#0F172A]">
-                ${valuationData?.summary?.totalInventoryCostValue ? Number(valuationData.summary.totalInventoryCostValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                Rs. {valuationData?.summary?.totalInventoryCostValue ? Number(valuationData.summary.totalInventoryCostValue).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
               </div>
               <div className="text-[10px] text-[#64748B] mt-1 flex items-center gap-2">
-                <span>Cellar: ${valuationData?.summary?.totalCellarCostValue ? Number(valuationData.summary.totalCellarCostValue).toFixed(0) : '0'}</span>
+                <span>Cellar: Rs. {valuationData?.summary?.totalCellarCostValue ? Number(valuationData.summary.totalCellarCostValue).toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : '0'}</span>
                 <span>•</span>
-                <span>Open: ${valuationData?.summary?.totalOpenCostValue ? Number(valuationData.summary.totalOpenCostValue).toFixed(0) : '0'}</span>
+                <span>Open: Rs. {valuationData?.summary?.totalOpenCostValue ? Number(valuationData.summary.totalOpenCostValue).toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : '0'}</span>
               </div>
             </div>
 
@@ -291,7 +291,7 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                 <TrendingUp className="w-4 h-4 text-[#16A34A]" />
               </div>
               <div className="text-2xl font-bold text-[#15803D]">
-                ${valuationData?.summary?.totalPotentialRetailValue ? Number(valuationData.summary.totalPotentialRetailValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                Rs. {valuationData?.summary?.totalPotentialRetailValue ? Number(valuationData.summary.totalPotentialRetailValue).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
               </div>
               <div className="text-[10px] text-[#166534] mt-1">
                 From ~{valuationData?.summary?.totalLitersOnHand || 0} Liters on hand
@@ -304,7 +304,7 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                 <Sparkles className="w-4 h-4 text-[#A855F7]" />
               </div>
               <div className="text-2xl font-bold text-[#6B21A8]">
-                ${valuationData?.summary?.totalPotentialGrossProfit ? Number(valuationData.summary.totalPotentialGrossProfit).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                Rs. {valuationData?.summary?.totalPotentialGrossProfit ? Number(valuationData.summary.totalPotentialGrossProfit).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
               </div>
               <div className="text-[10px] font-bold text-[#7E22CE] mt-1">
                 {valuationData?.summary?.overallMarginPercent || 0}% Gross Margin
@@ -335,7 +335,7 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                 {valuationData.categoryBreakdown.map((c: any) => (
                   <div key={c.category} className="p-3 rounded-xl bg-[#F8FAFC] border border-[#F1F5F9]">
                     <div className="text-[11px] font-bold text-[#0F172A]">{c.category}</div>
-                    <div className="text-base font-bold text-[#D97706] mt-0.5">${Number(c.costValue).toFixed(0)}</div>
+                    <div className="text-base font-bold text-[#D97706] mt-0.5">Rs. {Number(c.costValue).toLocaleString('en-LK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
                     <div className="text-[10px] text-[#64748B] mt-1 flex items-center justify-between">
                       <span>{c.bottles} btls</span>
                       <span>{c.liters} L</span>
@@ -445,16 +445,16 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                             {item.totalLiters} L
                           </td>
                           <td className="py-3 px-3 text-right text-[#64748B]">
-                            ${Number(item.costPerBottle).toFixed(2)}
+                            Rs. {Number(item.costPerBottle).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-3 px-3 text-right font-bold text-[#0F172A]">
-                            ${Number(item.totalCostValue).toFixed(2)}
+                            Rs. {Number(item.totalCostValue).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-3 px-3 text-right text-[#059669]">
-                            ${Number(item.pricePerPour).toFixed(2)}
+                            Rs. {Number(item.pricePerPour).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-3 px-3 text-right font-bold text-[#16A34A]">
-                            ${Number(item.potentialRetailValue).toFixed(2)}
+                            Rs. {Number(item.potentialRetailValue).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-3 px-4 text-right">
                             <span
@@ -640,7 +640,7 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                 <ShieldAlert className="w-4 h-4 text-[#EF4444]" />
               </div>
               <div className="text-2xl font-bold text-[#B91C1C]">
-                ${shrinkageData?.summary?.totalShrinkageCost ? Number(shrinkageData.summary.totalShrinkageCost).toFixed(2) : '0.00'}
+                Rs. {shrinkageData?.summary?.totalShrinkageCost ? Number(shrinkageData.summary.totalShrinkageCost).toLocaleString('en-LK', { minimumFractionDigits: 2 }) : '0.00'}
               </div>
               <div className="text-[10px] text-[#991B1B] mt-1">
                 {shrinkageData?.summary?.totalShrinkageLiters || 0} Liters unaccounted/lost
@@ -653,7 +653,7 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                 <Droplets className="w-4 h-4 text-[#D97706]" />
               </div>
               <div className="text-2xl font-bold text-[#0F172A]">
-                ${shrinkageData?.summary?.spillageCost ? Number(shrinkageData.summary.spillageCost).toFixed(2) : '0.00'}
+                Rs. {shrinkageData?.summary?.spillageCost ? Number(shrinkageData.summary.spillageCost).toLocaleString('en-LK', { minimumFractionDigits: 2 }) : '0.00'}
               </div>
               <div className="text-[10px] text-[#64748B] mt-1">
                 {shrinkageData?.summary?.spillageMl || 0} ml spilled during service
@@ -666,7 +666,7 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                 <XCircle className="w-4 h-4 text-[#EF4444]" />
               </div>
               <div className="text-2xl font-bold text-[#0F172A]">
-                ${shrinkageData?.summary?.breakageCost ? Number(shrinkageData.summary.breakageCost).toFixed(2) : '0.00'}
+                Rs. {shrinkageData?.summary?.breakageCost ? Number(shrinkageData.summary.breakageCost).toLocaleString('en-LK', { minimumFractionDigits: 2 }) : '0.00'}
               </div>
               <div className="text-[10px] text-[#64748B] mt-1">
                 {shrinkageData?.summary?.breakageMl || 0} ml dropped / shattered
@@ -679,7 +679,7 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                 <AlertTriangle className="w-4 h-4 text-[#8B5CF6]" />
               </div>
               <div className="text-2xl font-bold text-[#0F172A]">
-                ${shrinkageData?.summary?.auditShortageCost ? Number(shrinkageData.summary.auditShortageCost).toFixed(2) : '0.00'}
+                Rs. {shrinkageData?.summary?.auditShortageCost ? Number(shrinkageData.summary.auditShortageCost).toLocaleString('en-LK', { minimumFractionDigits: 2 }) : '0.00'}
               </div>
               <div className="text-[10px] text-[#64748B] mt-1">
                 {shrinkageData?.summary?.auditShortageMl || 0} ml stocktake variance
@@ -749,7 +749,7 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                           -{inc.volumeMl} ml
                         </td>
                         <td className="py-3 px-3 text-right font-extrabold text-[#B91C1C]">
-                          -${Number(inc.costImpact).toFixed(2)}
+                          -Rs. {Number(inc.costImpact).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 px-3 font-medium text-[#0F172A]">
                           {inc.responsiblePerson || 'Bartender'}
@@ -788,7 +788,7 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
             <div className="text-right">
               <div className="text-xs font-semibold text-[#92400E]">Total Capital Required</div>
               <div className="text-2xl font-black text-[#92400E]">
-                ${valuationData?.summary?.totalReorderEstimatedCost ? Number(valuationData.summary.totalReorderEstimatedCost).toFixed(2) : '0.00'}
+                Rs. {valuationData?.summary?.totalReorderEstimatedCost ? Number(valuationData.summary.totalReorderEstimatedCost).toLocaleString('en-LK', { minimumFractionDigits: 2 }) : '0.00'}
               </div>
             </div>
           </div>
@@ -851,10 +851,10 @@ export default function BarStockReportsTab({ categories }: BarStockReportsTabPro
                             +{item.reorderSuggestedBottles} Bottles
                           </td>
                           <td className="py-3 px-3 text-right text-[#64748B]">
-                            ${Number(item.costPerBottle).toFixed(2)}
+                            Rs. {Number(item.costPerBottle).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="py-3 px-4 text-right font-black text-[#0F172A]">
-                            ${Number(item.reorderCost).toFixed(2)}
+                            Rs. {Number(item.reorderCost).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
                       ))

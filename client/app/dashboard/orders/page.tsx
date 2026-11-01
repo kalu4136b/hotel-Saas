@@ -152,13 +152,13 @@ export default function OrdersPage() {
                         {ord.items?.map((i: any) => `${i.quantity}x ${i.productName}`).join(', ')}
                       </td>
                       <td className="py-3.5 px-4 mono text-[#64748B]">
-                        ${Number(ord.subtotal).toFixed(2)}
+                        Rs. {Number(ord.subtotal).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-3.5 px-4 mono text-[#64748B]">
-                        ${Number(ord.taxAmount).toFixed(2)}
+                        Rs. {Number(ord.taxAmount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-3.5 px-4 mono font-extrabold text-[#0F172A]">
-                        ${Number(ord.totalAmount).toFixed(2)}
+                        Rs. {Number(ord.totalAmount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-3.5 px-4">
                         <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border shadow-2xs ${badge}`}>
@@ -214,11 +214,11 @@ export default function OrdersPage() {
                       {item.quantity}x {item.productName}
                     </span>
                     <span className="block text-[11px] text-[#64748B]">
-                      ${Number(item.unitPrice).toFixed(2)} each
+                      Rs. {Number(item.unitPrice).toLocaleString('en-LK', { minimumFractionDigits: 2 })} each
                     </span>
                   </div>
                   <span className="font-bold text-[#0F172A] mono">
-                    ${Number(item.totalAmount).toFixed(2)}
+                    Rs. {Number(item.totalAmount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               ))}
@@ -227,16 +227,16 @@ export default function OrdersPage() {
             <div className="space-y-1.5 pt-3 border-t border-[#E2E8F0] text-xs">
               <div className="flex justify-between text-[#64748B]">
                 <span>Subtotal</span>
-                <span className="mono">${Number(selectedOrder.subtotal).toFixed(2)}</span>
+                <span className="mono">Rs. {Number(selectedOrder.subtotal).toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-[#64748B]">
                 <span>Tax (10%)</span>
-                <span className="mono">${Number(selectedOrder.taxAmount).toFixed(2)}</span>
+                <span className="mono">Rs. {Number(selectedOrder.taxAmount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between text-sm font-extrabold text-[#0F172A] pt-1.5 border-t border-[#E2E8F0]">
                 <span>Total Amount</span>
                 <span className="mono text-[#00C48C]">
-                  ${Number(selectedOrder.totalAmount).toFixed(2)}
+                  Rs. {Number(selectedOrder.totalAmount).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
