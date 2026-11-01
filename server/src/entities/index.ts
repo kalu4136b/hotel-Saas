@@ -38,4 +38,8 @@ export * from './channel-sync-job.entity';
 export * from './channel-sync-log.entity';
 export * from './channel-reservation.entity';
 export * from './channel-webhook-event.entity';
-
+export * from './ai-conversation.entity';
+export * from './ai-message.entity';
+export * from './ai-action-confirmation.entity';
+export * from './ai-knowledge-document.entity';
+export * from './ai-tool-audit-log.entity';

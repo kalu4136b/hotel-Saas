@@ -1488,6 +1488,46 @@ export const channelManagerApi = {
   },
 };
 
+export const aiAssistantApi = {
+  async sendMessage(data: {
+    message: string;
+    conversationId?: string;
+    inputModality?: 'text' | 'voice';
+    currentPage?: string;
+  }) {
+    return apiRequest('/api/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async confirmAction(actionConfirmationId: string, decision: 'CONFIRM' | 'REJECT') {
+    return apiRequest('/api/ai/confirm-action', {
+      method: 'POST',
+      body: JSON.stringify({ actionConfirmationId, decision }),
+    });
+  },
+
+  async getConversations() {
+    return apiRequest('/api/ai/conversations', {
+      method: 'GET',
+    });
+  },
+
+  async getMessages(conversationId: string) {
+    return apiRequest(`/api/ai/conversations/${conversationId}/messages`, {
+      method: 'GET',
+    });
+  },
+
+  async getSuggestions(currentPage?: string) {
+    const q = currentPage ? `?currentPage=${encodeURIComponent(currentPage)}` : '';
+    return apiRequest(`/api/ai/suggestions${q}`, {
+      method: 'GET',
+    });
+  },
+};
+
 
 
 
