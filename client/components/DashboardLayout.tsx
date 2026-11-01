@@ -38,6 +38,7 @@ import {
   getUserPermissions,
   getFirstAllowedRoute,
 } from '@/lib/permissions';
+import AiAssistantDrawer from './AiAssistantDrawer';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -492,6 +493,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </div>
       )}
+
+      {/* Embedded AI Operations Assistant Drawer & Floating Trigger */}
+      <AiAssistantDrawer />
     </div>
   );
 }

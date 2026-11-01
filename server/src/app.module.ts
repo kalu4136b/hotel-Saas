@@ -57,8 +57,14 @@ import {
   ChannelSyncLog,
   ChannelReservation,
   ChannelWebhookEvent,
+  AiConversation,
+  AiMessage,
+  AiActionConfirmation,
+  AiKnowledgeDocument,
+  AiToolAuditLog,
 } from './entities';
 import { ChannelManagerModule } from './channel-manager/channel-manager.module';
+import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 
 @Module({
   imports: [
@@ -117,6 +123,11 @@ import { ChannelManagerModule } from './channel-manager/channel-manager.module';
         ChannelSyncLog,
         ChannelReservation,
         ChannelWebhookEvent,
+        AiConversation,
+        AiMessage,
+        AiActionConfirmation,
+        AiKnowledgeDocument,
+        AiToolAuditLog,
       ],
       synchronize: true,
       logging: ['error', 'warn'],
@@ -132,6 +143,7 @@ import { ChannelManagerModule } from './channel-manager/channel-manager.module';
     SuperAdminModule,
     BarModule,
     ChannelManagerModule,
+    AiAssistantModule,
   ],
   controllers: [AppController],
   providers: [AppService],
