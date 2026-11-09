@@ -11,13 +11,15 @@ import {
   Request,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PermissionsGuard, RequirePermissions } from '../auth/permissions.guard';
 import { PosService } from './pos.service';
 import { OrderType, OrderStatus } from '../entities/order.entity';
 import { KOTStatus } from '../entities/kot-status.enum';
 import { PaymentMethod } from '../entities/payment.entity';
 
 @Controller('api/pos')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions('pos', 'orders', 'tables', 'menu', 'kitchen', 'bar')
 export class PosController {
   constructor(private readonly posService: PosService) {}
 

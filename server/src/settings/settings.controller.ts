@@ -10,12 +10,13 @@ import {
   Request,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PermissionsGuard, RequirePermissions } from '../auth/permissions.guard';
 import { SettingsService } from './settings.service';
 import { UserRole } from '../entities/user.entity';
 import { SYSTEM_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS } from '../auth/permissions';
 
 @Controller('api/settings')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
@@ -32,6 +33,7 @@ export class SettingsController {
     return this.settingsService.getProperty(req.user.tenantId, req.user.propertyId);
   }
 
+  @RequirePermissions('settings')
   @Put('property')
   async updateProperty(
     @Request() req: any,
@@ -54,11 +56,13 @@ export class SettingsController {
     );
   }
 
+  @RequirePermissions('settings')
   @Get('users')
   async getUsers(@Request() req: any) {
     return this.settingsService.getUsers(req.user.tenantId);
   }
 
+  @RequirePermissions('settings')
   @Post('users')
   async createUser(
     @Request() req: any,
@@ -81,6 +85,7 @@ export class SettingsController {
     );
   }
 
+  @RequirePermissions('settings')
   @Patch('users/:id')
   async updateUser(
     @Request() req: any,
@@ -102,6 +107,7 @@ export class SettingsController {
     );
   }
 
+  @RequirePermissions('settings')
   @Patch('users/:id/status')
   async toggleUserStatus(
     @Request() req: any,
@@ -116,6 +122,7 @@ export class SettingsController {
     );
   }
 
+  @RequirePermissions('settings')
   @Get('audit-logs')
   async getAuditLogs(@Request() req: any) {
     return this.settingsService.getAuditLogs(req.user.tenantId, req.user.propertyId);

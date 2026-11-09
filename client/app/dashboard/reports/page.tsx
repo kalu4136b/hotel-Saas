@@ -22,6 +22,29 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState('');
   const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    const applyUrlTab = (searchStr?: string) => {
+      const params = new URLSearchParams(searchStr ?? window.location.search);
+      const tab = params.get('tab')?.toLowerCase() as any;
+      const validTabs = ['daily', 'payments', 'items', 'cancellations'];
+      if (tab && validTabs.includes(tab)) {
+        setActiveTab(tab);
+      }
+    };
+    applyUrlTab();
+    const handleNavTab = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.href?.includes('?')) {
+        applyUrlTab('?' + detail.href.split('?')[1]);
+      }
+    };
+    window.addEventListener('hotel-nav-tab', handleNavTab);
+    window.addEventListener('popstate', () => applyUrlTab());
+    return () => {
+      window.removeEventListener('hotel-nav-tab', handleNavTab);
+    };
+  }, []);
+
   // Report Data States
   const [dailySales, setDailySales] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);

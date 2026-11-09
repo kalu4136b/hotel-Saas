@@ -46,6 +46,19 @@ export function getSocket(): Socket {
   return socket;
 }
 
+export function disconnectSocket() {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('hotel-saas-logout', () => {
+    disconnectSocket();
+  });
+}
+
 /**
  * Play an audible kitchen bell chime using HTML5 Web Audio API synthesis.
  * Does not require external .mp3 files or network assets.

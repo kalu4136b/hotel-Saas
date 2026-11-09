@@ -82,6 +82,15 @@ body {
   animation: floatGlow 12s ease-in-out infinite alternate;
 }
 
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* ================= PRINT STYLESHEET ================= */
 @media print {
   /* Hide application sidebar, headers, and UI chrome */

@@ -9,11 +9,16 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      process.env.CORS_ORIGIN || 'http://localhost:3000',
+    ],
     credentials: true,
   },
 })
@@ -23,8 +28,32 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger('EventsGateway');
 
+  constructor(private readonly jwtService: JwtService) {}
+
   handleConnection(client: Socket) {
-    this.logger.log(`Client connected: ${client.id}`);
+    try {
+      const rawToken =
+        client.handshake?.auth?.token ||
+        (client.handshake?.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+
+      if (!rawToken) {
+        this.logger.warn(`Rejected unauthenticated socket connection: ${client.id}`);
+        client.disconnect(true);
+        return;
+      }
+
+      const payload = this.jwtService.verify(rawToken);
+      client.data.user = payload;
+
+      if (payload?.propertyId) {
+        const room = `property_${payload.propertyId}`;
+        client.join(room);
+      }
+      this.logger.log(`Authenticated socket connected: ${client.id} (user: ${payload?.username})`);
+    } catch (err: any) {
+      this.logger.warn(`Socket JWT verification failed (${client.id}): ${err?.message}`);
+      client.disconnect(true);
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -36,7 +65,16 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { propertyId: string },
   ) {
-    if (data?.propertyId) {
+    const user = client.data?.user;
+    if (!user) {
+      client.disconnect(true);
+      return;
+    }
+
+    if (
+      data?.propertyId &&
+      (user.role === 'SUPER_ADMIN' || user.propertyId === data.propertyId)
+    ) {
       const room = `property_${data.propertyId}`;
       client.join(room);
       this.logger.log(`Socket ${client.id} joined room ${room}`);
@@ -44,35 +82,30 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  // Kitchen Order Ticket (KOT) Events
+  // Kitchen Order Ticket (KOT) Events — scoped strictly to the tenant property room
   notifyNewKot(propertyId: string, kot: any) {
     const room = `property_${propertyId}`;
     this.server.to(room).emit('events:kot:new', kot);
-    // Also emit broadcast as fallback
-    this.server.emit('events:kot:new', kot);
     this.logger.log(`Dispatched events:kot:new for property ${propertyId} (KOT #${kot.kotNumber})`);
   }
 
   notifyKotStatusUpdate(propertyId: string, kot: any) {
     const room = `property_${propertyId}`;
     this.server.to(room).emit('events:kot:updated', kot);
-    this.server.emit('events:kot:updated', kot);
     this.logger.log(`Dispatched events:kot:updated for property ${propertyId} (KOT #${kot.kotNumber})`);
   }
 
-  // Room & Housekeeping Events
+  // Room & Housekeeping Events — scoped strictly to the tenant property room
   notifyRoomStatusUpdate(propertyId: string, roomData: any) {
     const room = `property_${propertyId}`;
     this.server.to(room).emit('events:room:updated', roomData);
-    this.server.emit('events:room:updated', roomData);
     this.logger.log(`Dispatched events:room:updated for Room ${roomData.roomNumber}`);
   }
 
-  // Guest Folio Events
+  // Guest Folio Events — scoped strictly to the tenant property room
   notifyFolioUpdate(propertyId: string, folioData: any) {
     const room = `property_${propertyId}`;
     this.server.to(room).emit('events:folio:updated', folioData);
-    this.server.emit('events:folio:updated', folioData);
     this.logger.log(`Dispatched events:folio:updated for Folio #${folioData.id || ''}`);
   }
 }

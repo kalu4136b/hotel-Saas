@@ -17,6 +17,14 @@ export class ChatRequestDto {
   @IsOptional()
   @IsString()
   currentPage?: string;
+
+  @IsOptional()
+  @IsString()
+  provider?: string;
+
+  @IsOptional()
+  @IsString()
+  model?: string;
 }
 
 export class ConfirmActionDto {

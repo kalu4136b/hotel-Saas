@@ -64,6 +64,41 @@ export default function InventoryDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  useEffect(() => {
+    const applyUrlTab = (searchStr?: string) => {
+      const params = new URLSearchParams(searchStr ?? window.location.search);
+      const tab = params.get('tab')?.toUpperCase() as InventoryTabType | undefined;
+      const validTabs: InventoryTabType[] = [
+        'OVERVIEW',
+        'BAR',
+        'KITCHEN',
+        'OPERATIONAL',
+        'PURCHASE_ORDERS',
+        'GRN',
+        'ISSUANCES',
+        'MOVEMENTS',
+        'RECIPES',
+        'SUPPLIERS',
+        'REPORTS',
+      ];
+      if (tab && validTabs.includes(tab)) {
+        setActiveTab(tab);
+      }
+    };
+    applyUrlTab();
+    const handleNavTab = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.href?.includes('?')) {
+        applyUrlTab('?' + detail.href.split('?')[1]);
+      }
+    };
+    window.addEventListener('hotel-nav-tab', handleNavTab);
+    window.addEventListener('popstate', () => applyUrlTab());
+    return () => {
+      window.removeEventListener('hotel-nav-tab', handleNavTab);
+    };
+  }, []);
+
   // Core Data State
   const [items, setItems] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);

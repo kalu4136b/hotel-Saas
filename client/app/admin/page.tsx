@@ -123,6 +123,7 @@ export default function SuperAdminPortalPage() {
       'reports',
       'settings',
       'dashboard',
+      'ai_copilot',
     ],
     adminFullName: '',
     adminUsername: '',
@@ -1068,8 +1069,14 @@ export default function SuperAdminPortalPage() {
                                     className="mt-0.5 accent-[#00C48C] rounded"
                                   />
                                   <div className="min-w-0 flex-1">
-                                    <div className="text-[11px] font-bold leading-tight">
-                                      {mod.label}
+                                    <div className="text-[11px] font-bold leading-tight flex items-center gap-1.5">
+                                      {mod.id === 'ai_copilot' && <Sparkles className="w-3 h-3 text-[#00C48C]" />}
+                                      <span className="truncate">{mod.label}</span>
+                                      {mod.id === 'ai_copilot' && (
+                                        <span className="text-[8.5px] px-1 py-0.2 rounded bg-emerald-50 text-emerald-700 font-extrabold border border-emerald-200">
+                                          AI Suite
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="text-[9.5px] text-[#64748B] truncate">
                                       {mod.description}
@@ -1315,8 +1322,14 @@ export default function SuperAdminPortalPage() {
                                     className="mt-0.5 accent-[#00C48C] rounded"
                                   />
                                   <div className="min-w-0 flex-1">
-                                    <div className="text-[11px] font-bold leading-tight">
-                                      {mod.label}
+                                    <div className="text-[11px] font-bold leading-tight flex items-center gap-1.5">
+                                      {mod.id === 'ai_copilot' && <Sparkles className="w-3 h-3 text-[#00C48C]" />}
+                                      <span className="truncate">{mod.label}</span>
+                                      {mod.id === 'ai_copilot' && (
+                                        <span className="text-[8.5px] px-1 py-0.2 rounded bg-emerald-50 text-emerald-700 font-extrabold border border-emerald-200">
+                                          AI Suite
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="text-[9.5px] text-[#64748B] truncate">
                                       {mod.description}

@@ -115,6 +115,10 @@ export class SettingsService {
   ) {
     const userRepo = this.dataSource.getRepository(User);
 
+    if (dto.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Cannot assign platform SUPER_ADMIN role to tenant staff');
+    }
+
     const existing = await userRepo.findOne({
       where: [{ email: dto.email.toLowerCase() }, { username: dto.username.toLowerCase() }],
     });
@@ -191,14 +195,22 @@ export class SettingsService {
     if (dto.fullName) user.fullName = dto.fullName.trim();
     if (dto.phone !== undefined) user.phone = dto.phone;
     if (dto.role) {
+      if (dto.role === UserRole.SUPER_ADMIN) {
+        throw new ForbiddenException('Cannot promote tenant user to platform SUPER_ADMIN');
+      }
+      if (user.role !== dto.role) {
+        user.tokenVersion = (user.tokenVersion || 0) + 1;
+      }
       user.role = dto.role;
     }
     if (dto.permissions !== undefined) {
       user.permissions = dto.permissions;
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
     }
     if (dto.password && dto.password.trim().length >= 6) {
       const salt = await bcrypt.genSalt(10);
       user.passwordHash = await bcrypt.hash(dto.password, salt);
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
     }
 
     const saved = await userRepo.save(user);
@@ -236,6 +248,9 @@ export class SettingsService {
     if (!user) throw new NotFoundException('User not found');
 
     user.isActive = isActive;
+    if (!isActive) {
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
+    }
     await userRepo.save(user);
 
     return { id: user.id, isActive: user.isActive };

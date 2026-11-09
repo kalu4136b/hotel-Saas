@@ -18,13 +18,16 @@ import {
   RoomType,
   AiToolAuditLog,
   Supplier,
+  UserRole,
 } from '../../entities';
 
 export interface ToolExecutionUser {
   id: string;
   tenantId: string;
   propertyId: string;
-  role: string;
+  role: UserRole | string;
+  permissions?: string[] | null;
+  tenantModules?: string[] | string | null;
 }
 
 export interface ToolExecutionResult {

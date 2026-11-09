@@ -73,6 +73,9 @@ export class User {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
+  @Column({ type: 'int', default: 0 })
+  tokenVersion: number;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   avatarUrl: string;
 

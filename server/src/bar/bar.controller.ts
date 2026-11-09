@@ -11,6 +11,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PermissionsGuard, RequirePermissions } from '../auth/permissions.guard';
 import {
   BarService,
   CreateBarItemDto,
@@ -23,7 +24,8 @@ import {
 } from './bar.service';
 
 @Controller('api/bar')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions('bar', 'pos', 'inventory')
 export class BarController {
   constructor(private readonly barService: BarService) {}
 

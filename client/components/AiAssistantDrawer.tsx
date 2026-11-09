@@ -23,14 +23,32 @@ import {
   ArrowRight,
   ShieldCheck,
   Check,
+  Cpu,
 } from 'lucide-react';
-import { aiAssistantApi, authStorage } from '@/lib/api';
+import { aiAssistantApi, authApi, authStorage } from '@/lib/api';
+import { getTenantModules, getUserPermissions } from '@/lib/permissions';
+
+export interface AiModelOption {
+  id: string;
+  modelId: string;
+  name: string;
+  providerName?: string;
+  badge: string;
+  description: string;
+  status?: 'AVAILABLE' | 'COMING_SOON' | 'DEPRECATED';
+  isSelectable?: boolean;
+  isDefault?: boolean;
+  accessStatus?: 'READY' | 'COMING_SOON' | 'UPGRADE_REQUIRED' | 'DISABLED_BY_ADMIN' | 'RESTRICTED_ROLE';
+  restrictionReason?: string;
+}
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   detectedLanguage?: string;
+  providerUsed?: string;
+  modelUsed?: string;
   inputModality?: 'text' | 'voice';
   createdAt?: string;
   suggestedFollowUps?: string[];
@@ -62,7 +80,7 @@ export default function AiAssistantDrawer() {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<'AUTO' | 'EN' | 'SI'>('AUTO');
-  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
@@ -70,6 +88,136 @@ export default function AiAssistantDrawer() {
   const [conversationsList, setConversationsList] = useState<any[]>([]);
   const [showHistoryDropdown, setShowHistoryDropdown] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // Model Selection
+  const [availableModels, setAvailableModels] = useState<AiModelOption[]>([
+    {
+      id: 'internal',
+      modelId: 'builtin-rule-nlp',
+      name: 'Hotel Ops Engine',
+      providerName: 'Internal',
+      badge: 'Always Free / Offline',
+      description: 'Deterministic instantaneous PMS, POS, and Channel Manager engine.',
+      status: 'AVAILABLE',
+      isSelectable: true,
+      isDefault: true,
+      accessStatus: 'READY',
+    },
+    {
+      id: 'gemini',
+      modelId: 'gemini-3.5-flash',
+      name: 'Google Gemini',
+      providerName: 'Google AI Studio',
+      badge: 'Gemini 3.5 Flash',
+      description: 'Official Google Gemini model with fast multilingual & multimodal capabilities.',
+      status: 'AVAILABLE',
+      isSelectable: true,
+      accessStatus: 'READY',
+    },
+    {
+      id: 'groq',
+      modelId: 'qwen/qwen3.8-27b',
+      name: 'Groq Cloud',
+      providerName: 'Groq Cloud LPU',
+      badge: 'Qwen 3.8 27B',
+      description: 'Ultra-fast LPU inference hosting Qwen 3.8 27B model.',
+      status: 'AVAILABLE',
+      isSelectable: true,
+      accessStatus: 'READY',
+    },
+    {
+      id: 'openai',
+      modelId: 'gpt-4o-mini',
+      name: 'OpenAI GPT',
+      providerName: 'OpenAI',
+      badge: 'Coming Soon',
+      description: 'Industry-standard reasoning and conversational intelligence.',
+      status: 'COMING_SOON',
+      isSelectable: false,
+      accessStatus: 'COMING_SOON',
+      restrictionReason: 'Model integration in progress. Coming soon.',
+    },
+    {
+      id: 'claude',
+      modelId: 'claude-3-5-sonnet',
+      name: 'Anthropic Claude',
+      providerName: 'Anthropic',
+      badge: 'Coming Soon',
+      description: 'Advanced nuance, structured reasoning, and deep analysis.',
+      status: 'COMING_SOON',
+      isSelectable: false,
+      accessStatus: 'COMING_SOON',
+      restrictionReason: 'Model integration in progress. Coming soon.',
+    },
+    {
+      id: 'deepseek',
+      modelId: 'deepseek-chat',
+      name: 'DeepSeek',
+      providerName: 'DeepSeek',
+      badge: 'Coming Soon',
+      description: 'High-speed reasoning and operations assistant.',
+      status: 'COMING_SOON',
+      isSelectable: false,
+      accessStatus: 'COMING_SOON',
+      restrictionReason: 'Model integration in progress. Coming soon.',
+    },
+  ]);
+  const [selectedModelId, setSelectedModelId] = useState<string>('internal');
+  const [canSelectModel, setCanSelectModel] = useState<boolean>(true);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const userPickedModelRef = useRef(false);
+
+  // User & RBAC Permissions State
+  const [user, setUser] = useState<any>(null);
+  const [tenant, setTenant] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const u = authStorage.getUser('tenant') || authStorage.getUser();
+    const t = authStorage.getTenant();
+    setUser(u);
+    setTenant(t);
+
+    // Refresh modules & permissions from the server so changes made by the platform admin
+    // (e.g. enabling the AI Co-Pilot module) apply without needing to log out and back in.
+    if (u && u.role !== 'SUPER_ADMIN') {
+      authApi
+        .getMe()
+        .then((me: any) => {
+          if (me?.tenant) {
+            setTenant((prev: any) => ({ ...(prev || {}), modules: me.tenant.modules ?? prev?.modules }));
+          }
+          if (me?.user) {
+            setUser((prev: any) => ({
+              ...(prev || {}),
+              role: me.user.role ?? prev?.role,
+              permissions: me.user.permissions ?? prev?.permissions,
+            }));
+          }
+        })
+        .catch(() => {
+          // Keep cached session data
+        });
+    }
+
+    const handleToggle = () => setIsOpen((prev) => !prev);
+    const handleOpen = () => setIsOpen(true);
+    window.addEventListener('toggle-ai-assistant', handleToggle);
+    window.addEventListener('open-ai-assistant', handleOpen);
+    return () => {
+      window.removeEventListener('toggle-ai-assistant', handleToggle);
+      window.removeEventListener('open-ai-assistant', handleOpen);
+    };
+  }, []);
+
+  const tenantModules = getTenantModules(tenant);
+  const userPerms = getUserPermissions(user, tenantModules);
+  const isModuleEnabled = tenantModules.includes('ai_copilot');
+  const canViewAi = !user || user.role === 'SUPER_ADMIN' || userPerms.includes('ai_view');
+  const canChat = !user || user.role === 'SUPER_ADMIN' || userPerms.includes('ai_chat');
+  const canSelectModelPerm = !user || user.role === 'SUPER_ADMIN' || userPerms.includes('ai_model_select');
+  const canUseVoice = !user || user.role === 'SUPER_ADMIN' || userPerms.includes('ai_voice');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -100,17 +248,47 @@ export default function AiAssistantDrawer() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  // Focus input when opening
+  // Focus input & load metadata when opening
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 250);
       loadSuggestions();
       loadConversations();
+      loadAvailableModels();
     } else {
       stopSpeaking();
       stopRecording();
+      setShowModelDropdown(false);
     }
   }, [isOpen, pathname]);
+
+  // Load available models & active status
+  const loadAvailableModels = useCallback(async () => {
+    try {
+      const res: any = await aiAssistantApi.getModels();
+      if (res?.models?.length) {
+        const models: AiModelOption[] = res.models;
+        setAvailableModels(models);
+        setCanSelectModel(res.canSelectModel ?? true);
+
+        setSelectedModelId((current) => {
+          const currentModel = models.find((m) => m.id === current);
+          const tenantDefault =
+            models.find((m) => m.id === res.defaultProviderId && m.isSelectable) ||
+            models.find((m) => m.isDefault && m.isSelectable);
+
+          // Until the user explicitly picks a model, follow the hotel's default model
+          if (!userPickedModelRef.current && tenantDefault) return tenantDefault.id;
+          // Keep the user's choice while it stays selectable
+          if (currentModel?.isSelectable) return current;
+          // Otherwise fall back to the default / first selectable model
+          return tenantDefault?.id || models.find((m) => m.isSelectable)?.id || 'internal';
+        });
+      }
+    } catch {
+      // Keep static defaults
+    }
+  }, []);
 
   // Load contextual suggestions based on current route
   const loadSuggestions = useCallback(async () => {
@@ -270,6 +448,8 @@ export default function AiAssistantDrawer() {
         conversationId: activeConversationId || undefined,
         inputModality: modality,
         currentPage: pathname,
+        provider: selectedModelId,
+        model: availableModels.find((m) => m.id === selectedModelId)?.modelId,
       });
 
       if (response) {
@@ -283,6 +463,8 @@ export default function AiAssistantDrawer() {
           role: 'assistant',
           content: response.content,
           detectedLanguage: response.detectedLanguage,
+          providerUsed: response.providerUsed,
+          modelUsed: response.modelUsed,
           suggestedFollowUps: response.suggestedFollowUps,
           pendingAction: response.pendingAction,
           toolResult: response.toolResult,
@@ -381,6 +563,15 @@ export default function AiAssistantDrawer() {
             role: m.role,
             content: m.content,
             detectedLanguage: m.language,
+            providerUsed:
+              m.providerId === 'gemini'
+                ? 'Google Gemini'
+                : m.providerId === 'groq'
+                ? 'Groq Cloud'
+                : m.providerId === 'internal'
+                ? 'Hotel Ops Engine'
+                : m.providerId || undefined,
+            modelUsed: m.modelId || undefined,
             createdAt: m.createdAt,
             pendingAction: m.actionConfirmation
               ? {
@@ -521,6 +712,10 @@ export default function AiAssistantDrawer() {
 
   const property = authStorage.getProperty();
 
+  if (mounted && (!isModuleEnabled || !canViewAi)) {
+    return null;
+  }
+
   return (
     <>
       {/* 1. FLOATING ACTION TRIGGER WIDGET */}
@@ -657,40 +852,158 @@ export default function AiAssistantDrawer() {
           </div>
         </div>
 
-        {/* SUBHEADER: Language Selector & Speech Status */}
-        <div className="px-5 py-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-semibold text-[#64748B]">Language:</span>
-            <div className="inline-flex rounded-lg border border-[#E2E8F0] bg-white p-0.5">
+        {/* SUBHEADER: AI Model & Language Selector */}
+        <div className="px-5 py-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between gap-2 text-xs">
+          {/* 1. Model Selector Control */}
+          <div className="relative flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#64748B] flex items-center gap-1 shrink-0">
+                <Sparkles className="w-3.5 h-3.5 text-[#00C48C]" />
+                <span>Model:</span>
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setShowModelDropdown((prev) => !prev)}
+                className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-white border border-[#CBD5E1] hover:border-[#00C48C] text-[#0F172A] shadow-xs text-xs font-bold transition group min-w-[180px] sm:min-w-[215px]"
+                title={
+                  canSelectModel && canSelectModelPerm
+                    ? 'Click to switch AI Model'
+                    : 'View active AI model (role restricted from switching)'
+                }
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="w-2 h-2 rounded-full bg-[#00C48C] animate-pulse shrink-0" />
+                  <span className="truncate">
+                    {availableModels.find((m) => m.id === selectedModelId)?.name || 'AI Model'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[9.5px] px-1.5 py-0.2 rounded font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {availableModels.find((m) => m.id === selectedModelId)?.badge || 'Active'}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-[#64748B] group-hover:text-[#00C48C] transition" />
+                </div>
+              </button>
+            </div>
+
+            {/* Model Selection Dropdown Menu */}
+            {showModelDropdown && (
+              <div className="absolute left-0 mt-2 w-84 sm:w-92 bg-white rounded-2xl shadow-2xl border border-[#E2E8F0] py-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="px-3.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#64748B] border-b border-[#F1F5F9] flex items-center justify-between">
+                  <span>Select Operational AI Model</span>
+                  <span className="text-[9px] text-[#94A3B8] font-normal">Active per chat session</span>
+                </div>
+                <div className="p-1.5 space-y-1 max-h-72 overflow-y-auto">
+                  {availableModels.map((model) => {
+                    const isComingSoon = model.status === 'COMING_SOON';
+                    const roleCanSwitch = canSelectModel && canSelectModelPerm;
+                    const isSelectable =
+                      !isComingSoon &&
+                      model.isSelectable !== false &&
+                      (roleCanSwitch || model.isDefault || selectedModelId === model.id);
+                    const isSelected = selectedModelId === model.id;
+
+                    return (
+                      <button
+                        key={model.id}
+                        disabled={!isSelectable}
+                        onClick={() => {
+                          if (!isSelectable) return;
+                          userPickedModelRef.current = true;
+                          setSelectedModelId(model.id);
+                          setShowModelDropdown(false);
+                        }}
+                        className={`w-full text-left p-2.5 rounded-xl text-xs transition flex items-start gap-2.5 ${
+                          !isSelectable
+                            ? 'opacity-50 bg-[#F8FAFC]/70 cursor-not-allowed'
+                            : isSelected
+                            ? 'bg-emerald-50/90 border border-[#00C48C] shadow-2xs'
+                            : 'hover:bg-[#F8FAFC] border border-transparent'
+                        }`}
+                      >
+                        <div
+                          className={`mt-0.5 p-1.5 rounded-lg shrink-0 ${
+                            isComingSoon
+                              ? 'bg-slate-100 text-slate-400'
+                              : isSelected
+                              ? 'bg-[#00C48C] text-white'
+                              : 'bg-[#F1F5F9] text-[#64748B]'
+                          }`}
+                        >
+                          {model.id === 'internal' ? (
+                            <Cpu className="w-3.5 h-3.5" />
+                          ) : (
+                            <Sparkles className="w-3.5 h-3.5" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-[#0F172A] text-xs truncate">
+                              {model.name}
+                            </span>
+                            <span
+                              className={`text-[9.5px] px-1.5 py-0.2 rounded font-mono font-bold shrink-0 ${
+                                isComingSoon
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : isSelected
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {model.badge}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-[#64748B] mt-0.5 leading-snug line-clamp-2">
+                            {model.restrictionReason || model.description}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <Check className="w-4 h-4 text-[#00C48C] shrink-0 mt-1" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 2. Compact Language Selector & Voice Speaking Indicator */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div
+              className="inline-flex rounded-lg border border-[#E2E8F0] bg-white p-0.5"
+              title="Voice & response language preference"
+            >
               {(['AUTO', 'EN', 'SI'] as const).map((lang) => (
                 <button
                   key={lang}
+                  type="button"
                   onClick={() => setPreferredLanguage(lang)}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                  className={`px-1.5 py-0.5 rounded-md text-[9.5px] font-bold transition-all ${
                     preferredLanguage === lang
-                      ? 'bg-[#00C48C] text-white shadow-sm'
+                      ? 'bg-[#00C48C] text-white shadow-2xs'
                       : 'text-[#64748B] hover:text-[#0F172A]'
                   }`}
                 >
-                  {lang === 'AUTO' ? 'Auto' : lang === 'EN' ? 'English' : 'සිංහල'}
+                  {lang === 'AUTO' ? 'Auto' : lang === 'EN' ? 'EN' : 'සිං'}
                 </button>
               ))}
             </div>
-          </div>
 
-          {isSpeaking && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[#00C48C] font-semibold animate-pulse">
-              <span className="w-2 h-2 rounded-full bg-[#00C48C]"></span>
-              <span>Speaking response...</span>
-              <button
-                onClick={stopSpeaking}
-                className="p-1 rounded bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A]"
-                title="Stop speaking"
-              >
-                <Square className="w-2.5 h-2.5 fill-current" />
-              </button>
-            </div>
-          )}
+            {isSpeaking && (
+              <div className="flex items-center gap-1.5 text-[11px] text-[#00C48C] font-semibold animate-pulse shrink-0">
+                <span className="w-2 h-2 rounded-full bg-[#00C48C]"></span>
+                <button
+                  onClick={stopSpeaking}
+                  className="p-1 rounded bg-[#F1F5F9] hover:bg-[#E2E8F0] text-[#0F172A]"
+                  title="Stop speaking"
+                >
+                  <Square className="w-2.5 h-2.5 fill-current" />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* CHAT MESSAGES STREAM */}
@@ -740,6 +1053,11 @@ export default function AiAssistantDrawer() {
                     <>
                       <Bot className="w-3 h-3 text-[#00C48C]" />
                       <span className="font-semibold text-[#475569]">AI Co-Pilot</span>
+                      {msg.providerUsed && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-[9px] font-semibold text-emerald-700 border border-emerald-200">
+                          {msg.providerUsed}
+                        </span>
+                      )}
                       {msg.detectedLanguage && (
                         <span className="px-1 py-0.2 rounded bg-[#F1F5F9] font-mono text-[9px] text-[#64748B]">
                           {msg.detectedLanguage}
@@ -845,7 +1163,11 @@ export default function AiAssistantDrawer() {
                   {/* Play audio button for assistant responses */}
                   {msg.role === 'assistant' && (
                     <div className="mt-2 pt-1 border-t border-[#F1F5F9] flex items-center justify-between text-[10px] text-[#94A3B8]">
-                      <span>Hotel Ops Engine</span>
+                      <span>
+                        {msg.providerUsed
+                          ? `${msg.providerUsed}${msg.modelUsed ? ` • ${msg.modelUsed}` : ''}`
+                          : 'Hotel Ops Engine'}
+                      </span>
                       <button
                         onClick={() => speakText(msg.content, msg.detectedLanguage)}
                         title="Replay Voice"
@@ -917,25 +1239,39 @@ export default function AiAssistantDrawer() {
               ref={inputRef}
               rows={2}
               value={inputText}
+              disabled={!canChat}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  handleSendMessage();
+                  if (canChat) handleSendMessage();
                 }
               }}
-              placeholder="Ask anything or dictation (e.g. 'Show today arrivals' / 'Ada bookings keeyakda?')..."
-              className="flex-1 bg-transparent resize-none border-0 p-1 text-xs text-[#0F172A] placeholder-[#94A3B8] focus:outline-none"
+              placeholder={
+                !canChat
+                  ? 'Your staff role does not have permission to execute AI chat messages.'
+                  : "Ask anything or dictation (e.g. 'Show today arrivals' / 'Ada bookings keeyakda?')..."
+              }
+              className="flex-1 bg-transparent resize-none border-0 p-1 text-xs text-[#0F172A] placeholder-[#94A3B8] focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
             />
 
             <div className="flex items-center gap-1.5 pb-0.5">
               {/* Push-to-Talk / Dictation Button */}
               <button
                 type="button"
+                disabled={!canUseVoice || !canChat}
                 onClick={isRecording ? stopRecording : startRecording}
-                title={isRecording ? 'Stop Recording' : 'Start Voice Dictation'}
+                title={
+                  !canUseVoice
+                    ? 'Staff role restricted from using voice assistant'
+                    : isRecording
+                    ? 'Stop Recording'
+                    : 'Start Voice Dictation'
+                }
                 className={`p-2 rounded-xl transition-all ${
-                  isRecording
+                  !canUseVoice || !canChat
+                    ? 'opacity-40 cursor-not-allowed bg-slate-100 text-slate-400'
+                    : isRecording
                     ? 'bg-rose-500 text-white animate-bounce'
                     : 'bg-white border border-[#E2E8F0] text-[#64748B] hover:text-[#00C48C] hover:border-[#00C48C]'
                 }`}
@@ -947,7 +1283,7 @@ export default function AiAssistantDrawer() {
               <button
                 type="button"
                 onClick={() => handleSendMessage()}
-                disabled={!inputText.trim() || isLoading}
+                disabled={!inputText.trim() || isLoading || !canChat}
                 className="p-2 rounded-xl bg-[#00C48C] hover:bg-[#00A877] text-white transition-all disabled:opacity-40 disabled:hover:bg-[#00C48C] shadow-sm"
               >
                 <Send className="w-4 h-4" />
@@ -957,7 +1293,7 @@ export default function AiAssistantDrawer() {
 
           <div className="mt-2 flex items-center justify-between text-[10px] text-[#94A3B8] px-1">
             <span>Press <strong>Enter</strong> to send • <strong>Shift+Enter</strong> for newline</span>
-            <span>Multilingual • Safe Execution</span>
+            <span>Active Model: <strong className="text-[#0F172A]">{availableModels.find((m) => m.id === selectedModelId)?.name || 'AI Engine'}</strong></span>
           </div>
         </div>
       </div>

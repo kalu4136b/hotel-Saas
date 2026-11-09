@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PermissionsGuard, RequirePermissions } from '../auth/permissions.guard';
 import { ChannelManagerService } from './channel-manager.service';
 import { ChannelCode, SyncJobType } from '../entities';
 import { ICalAdapter } from './adapters/ical.adapter';
@@ -31,7 +32,8 @@ export class ChannelManagerController {
   /**
    * 1. Dashboard metrics
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Get('dashboard')
   async getDashboard(@Req() req: any) {
     const { tenantId, propertyId } = req.user;
@@ -41,7 +43,8 @@ export class ChannelManagerController {
   /**
    * 2. Channel connections
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Get('connections')
   async getConnections(@Req() req: any) {
     const { tenantId, propertyId } = req.user;
@@ -49,14 +52,16 @@ export class ChannelManagerController {
     return overview.channels;
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Get('connections/:channelCode')
   async getConnection(@Req() req: any, @Param('channelCode') channelCode: ChannelCode) {
     const { tenantId, propertyId } = req.user;
     return this.channelManagerService.getConnection(tenantId, propertyId, channelCode);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Put('connections/:channelCode')
   async updateConnection(
     @Req() req: any,
@@ -77,21 +82,24 @@ export class ChannelManagerController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Post('connections/:channelCode/test')
   async testConnection(@Req() req: any, @Param('channelCode') channelCode: ChannelCode) {
     const { tenantId, propertyId } = req.user;
     return this.channelManagerService.testConnection(tenantId, propertyId, channelCode);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Post('connections/:channelCode/disconnect')
   async disconnectChannel(@Req() req: any, @Param('channelCode') channelCode: ChannelCode) {
     const { tenantId, propertyId } = req.user;
     return this.channelManagerService.disconnectChannel(tenantId, propertyId, channelCode);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Post('connections/:channelCode/reconnect')
   async reconnectChannel(@Req() req: any, @Param('channelCode') channelCode: ChannelCode) {
     const { tenantId, propertyId } = req.user;
@@ -101,32 +109,40 @@ export class ChannelManagerController {
   /**
    * 3. Room mappings
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Get('connections/:connectionId/room-mappings')
   async getRoomMappings(@Req() req: any, @Param('connectionId') connectionId: string) {
     const { tenantId, propertyId } = req.user;
     return this.channelManagerService.getRoomMappings(tenantId, propertyId, connectionId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Post('connections/:connectionId/room-mappings')
   async saveRoomMapping(
+    @Req() req: any,
     @Param('connectionId') connectionId: string,
     @Body() body: any,
   ) {
-    return this.channelManagerService.saveRoomMapping(connectionId, body);
+    const { tenantId, propertyId } = req.user;
+    return this.channelManagerService.saveRoomMapping(tenantId, propertyId, connectionId, body);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Delete('connections/:connectionId/room-mappings/:mappingId')
   async deleteRoomMapping(
+    @Req() req: any,
     @Param('connectionId') connectionId: string,
     @Param('mappingId') mappingId: string,
   ) {
-    return this.channelManagerService.deleteRoomMapping(connectionId, mappingId);
+    const { tenantId, propertyId } = req.user;
+    return this.channelManagerService.deleteRoomMapping(tenantId, propertyId, connectionId, mappingId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Get('connections/:connectionId/auto-suggest-rooms')
   async autoSuggestRooms(@Req() req: any, @Param('connectionId') connectionId: string) {
     const { tenantId, propertyId } = req.user;
@@ -140,61 +156,78 @@ export class ChannelManagerController {
   /**
    * 4. Rate plan mappings
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Get('connections/:connectionId/rate-plan-mappings')
-  async getRatePlanMappings(@Param('connectionId') connectionId: string) {
-    return this.channelManagerService.getRatePlanMappings(connectionId);
+  async getRatePlanMappings(@Req() req: any, @Param('connectionId') connectionId: string) {
+    const { tenantId, propertyId } = req.user;
+    return this.channelManagerService.getRatePlanMappings(tenantId, propertyId, connectionId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Post('connections/:connectionId/rate-plan-mappings')
   async saveRatePlanMapping(
+    @Req() req: any,
     @Param('connectionId') connectionId: string,
     @Body() body: any,
   ) {
-    return this.channelManagerService.saveRatePlanMapping(connectionId, body);
+    const { tenantId, propertyId } = req.user;
+    return this.channelManagerService.saveRatePlanMapping(tenantId, propertyId, connectionId, body);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Delete('connections/:connectionId/rate-plan-mappings/:mappingId')
   async deleteRatePlanMapping(
+    @Req() req: any,
     @Param('connectionId') connectionId: string,
     @Param('mappingId') mappingId: string,
   ) {
-    return this.channelManagerService.deleteRatePlanMapping(connectionId, mappingId);
+    const { tenantId, propertyId } = req.user;
+    return this.channelManagerService.deleteRatePlanMapping(tenantId, propertyId, connectionId, mappingId);
   }
 
   /**
    * 5. Pricing rules
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Get('connections/:connectionId/pricing-rules')
-  async getPricingRules(@Param('connectionId') connectionId: string) {
-    return this.channelManagerService.getPricingRules(connectionId);
+  async getPricingRules(@Req() req: any, @Param('connectionId') connectionId: string) {
+    const { tenantId, propertyId } = req.user;
+    return this.channelManagerService.getPricingRules(tenantId, propertyId, connectionId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Post('connections/:connectionId/pricing-rules')
   async savePricingRule(
+    @Req() req: any,
     @Param('connectionId') connectionId: string,
     @Body() body: any,
   ) {
-    return this.channelManagerService.savePricingRule(connectionId, body);
+    const { tenantId, propertyId } = req.user;
+    return this.channelManagerService.savePricingRule(tenantId, propertyId, connectionId, body);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Delete('connections/:connectionId/pricing-rules/:ruleId')
   async deletePricingRule(
+    @Req() req: any,
     @Param('connectionId') connectionId: string,
     @Param('ruleId') ruleId: string,
   ) {
-    return this.channelManagerService.deletePricingRule(connectionId, ruleId);
+    const { tenantId, propertyId } = req.user;
+    return this.channelManagerService.deletePricingRule(tenantId, propertyId, connectionId, ruleId);
   }
 
   /**
    * 6. Availability & restrictions calendar
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Get('availability-grid')
   async getAvailabilityGrid(@Req() req: any, @Query('days') days?: string) {
     const { tenantId, propertyId } = req.user;
@@ -208,7 +241,8 @@ export class ChannelManagerController {
   /**
    * 7. Trigger sync
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Post('connections/:channelCode/sync')
   async triggerSync(
     @Req() req: any,
@@ -227,7 +261,8 @@ export class ChannelManagerController {
   /**
    * 8. Channel reservations
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Get('reservations')
   async getReservations(
     @Req() req: any,
@@ -246,7 +281,8 @@ export class ChannelManagerController {
   /**
    * 9. Sync logs & retry
    */
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Get('logs')
   async getSyncLogs(@Req() req: any, @Query('limit') limit?: string) {
     const { tenantId, propertyId } = req.user;
@@ -257,7 +293,8 @@ export class ChannelManagerController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('channel_manager')
   @Post('logs/:jobId/retry')
   async retryJob(@Req() req: any, @Param('jobId') jobId: string) {
     const { tenantId, propertyId } = req.user;
@@ -282,7 +319,6 @@ export class ChannelManagerController {
         roomTypeId,
         status: In([ReservationStatus.CONFIRMED, ReservationStatus.CHECKED_IN]),
       },
-      relations: { guest: true },
     });
 
     const icsContent = this.icalAdapter.generateIcsFeed(
@@ -293,7 +329,8 @@ export class ChannelManagerController {
         reservationNumber: r.reservationNumber,
         checkInDate: r.checkInDate,
         checkOutDate: r.checkOutDate,
-        guestName: r.guest?.fullName,
+        // Mask guest PII on public iCal calendar feeds
+        guestName: 'Reserved Stay',
       })),
     );
 

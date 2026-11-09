@@ -96,7 +96,28 @@ export const PLATFORM_MODULES: PlatformModuleInfo[] = [
     category: 'Operations & Management',
     description: 'Real-time business performance, revenue cards, and today’s stats',
   },
+  {
+    id: 'ai_copilot',
+    label: 'AI Hotel Operations Co-Pilot',
+    category: 'Operations & Management',
+    description:
+      'Autonomous trilingual AI assistant for room turnaround, reservations, stock alerts, voice dictation, and multi-model LLM chat.',
+  },
+  {
+    id: 'hrm',
+    label: 'HRM, Shift Roster & Payroll Suite',
+    category: 'Operations & Management',
+    description:
+      'Employee directory, hotel duty roster, daily attendance, leave management, salary advances, EPF/ETF, and 10% service charge payroll.',
+  },
 ];
+
+export interface AiTierDefinition {
+  aiTier: 'TIER_1_BASIC' | 'TIER_2_SPECIFIC' | 'TIER_3_ALL';
+  subscribedProviders: string[];
+  monthlyRequestLimit: number;
+  monthlyTokenLimit: number;
+}
 
 export interface PricingPackageDefinition {
   id: string;
@@ -109,6 +130,7 @@ export interface PricingPackageDefinition {
   maxProperties: number;
   maxRooms: number | null;
   maxStaff: number | null;
+  aiTier?: AiTierDefinition;
   popular?: boolean;
 }
 
@@ -131,10 +153,17 @@ export const PRICING_PACKAGES: Record<string, PricingPackageDefinition> = {
       'reports',
       'settings',
       'dashboard',
+      'ai_copilot',
     ],
     maxProperties: 1,
     maxRooms: 0,
     maxStaff: 5,
+    aiTier: {
+      aiTier: 'TIER_1_BASIC',
+      subscribedProviders: ['internal'],
+      monthlyRequestLimit: 1000,
+      monthlyTokenLimit: 500000,
+    },
   },
   PMS_BOUTIQUE: {
     id: 'PMS_BOUTIQUE',
@@ -152,10 +181,17 @@ export const PRICING_PACKAGES: Record<string, PricingPackageDefinition> = {
       'reports',
       'settings',
       'dashboard',
+      'ai_copilot',
     ],
     maxProperties: 1,
     maxRooms: 25,
     maxStaff: 8,
+    aiTier: {
+      aiTier: 'TIER_1_BASIC',
+      subscribedProviders: ['internal'],
+      monthlyRequestLimit: 1500,
+      monthlyTokenLimit: 750000,
+    },
   },
   HOSPITALITY_PRO: {
     id: 'HOSPITALITY_PRO',
@@ -178,13 +214,21 @@ export const PRICING_PACKAGES: Record<string, PricingPackageDefinition> = {
       'pms_reservations',
       'pms_front_desk',
       'inventory',
+      'hrm',
       'reports',
       'settings',
       'dashboard',
+      'ai_copilot',
     ],
     maxProperties: 2,
     maxRooms: 60,
     maxStaff: 20,
+    aiTier: {
+      aiTier: 'TIER_2_SPECIFIC',
+      subscribedProviders: ['internal', 'gemini', 'groq'],
+      monthlyRequestLimit: 5000,
+      monthlyTokenLimit: 2500000,
+    },
   },
   ENTERPRISE_SUITE: {
     id: 'ENTERPRISE_SUITE',
@@ -205,13 +249,21 @@ export const PRICING_PACKAGES: Record<string, PricingPackageDefinition> = {
       'pms_reservations',
       'pms_front_desk',
       'inventory',
+      'hrm',
       'reports',
       'settings',
       'dashboard',
+      'ai_copilot',
     ],
     maxProperties: 10,
     maxRooms: null,
     maxStaff: null,
+    aiTier: {
+      aiTier: 'TIER_3_ALL',
+      subscribedProviders: ['internal', 'gemini', 'groq', 'openai', 'claude', 'deepseek'],
+      monthlyRequestLimit: 25000,
+      monthlyTokenLimit: 10000000,
+    },
   },
   CUSTOM: {
     id: 'CUSTOM',
@@ -230,9 +282,16 @@ export const PRICING_PACKAGES: Record<string, PricingPackageDefinition> = {
       'reports',
       'settings',
       'dashboard',
+      'ai_copilot',
     ],
     maxProperties: 1,
     maxRooms: 30,
     maxStaff: 10,
+    aiTier: {
+      aiTier: 'TIER_2_SPECIFIC',
+      subscribedProviders: ['internal', 'gemini', 'groq'],
+      monthlyRequestLimit: 3000,
+      monthlyTokenLimit: 1500000,
+    },
   },
 };

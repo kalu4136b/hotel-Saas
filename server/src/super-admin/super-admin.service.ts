@@ -23,6 +23,7 @@ import {
   PLATFORM_MODULES,
   PricingPackageDefinition,
 } from './packages.config';
+import { syncAiEntitlementWithPlan } from '../ai-assistant/services/ai-entitlement.service';
 
 export class CreateTenantDto {
   name: string;
@@ -473,6 +474,11 @@ export class SuperAdminService {
 
     await tenantRepo.save(tenant);
 
+    // Keep AI Co-Pilot entitlement (tier, providers, quotas) aligned with the new plan
+    if (dto.subscriptionPlan) {
+      await syncAiEntitlementWithPlan(this.dataSource, tenant.id);
+    }
+
     return {
       success: true,
       tenant,
@@ -495,6 +501,7 @@ export class SuperAdminService {
 
     const salt = await bcrypt.genSalt(10);
     adminUser.passwordHash = await bcrypt.hash(newPassword, salt);
+    adminUser.tokenVersion = (adminUser.tokenVersion || 0) + 1;
     await userRepo.save(adminUser);
 
     return {

@@ -10,11 +10,13 @@ import {
   Request,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PermissionsGuard, RequirePermissions } from '../auth/permissions.guard';
 import { PmsService } from './pms.service';
 import { CleanlinessStatus, RoomStatus, FolioChargeType } from '../entities';
 
 @Controller('api/pms')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions('pms_hub', 'pms_rooms', 'pms_housekeeping', 'pms_reservations', 'pms_front_desk', 'pos')
 export class PmsController {
   constructor(private readonly pmsService: PmsService) {}
 

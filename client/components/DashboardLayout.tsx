@@ -31,12 +31,18 @@ import {
   ShieldAlert,
   ShieldCheck,
   Globe,
+  Star,
+  ChevronLeft,
+  PieChart,
+  ArrowLeftRight,
+  Users,
 } from 'lucide-react';
 import { authStorage, authApi, posApi } from '@/lib/api';
 import {
   isRoutePermitted,
   getUserPermissions,
   getFirstAllowedRoute,
+  getTenantModules,
 } from '@/lib/permissions';
 import AiAssistantDrawer from './AiAssistantDrawer';
 
@@ -76,6 +82,32 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     setProperty(currentProperty);
     setTenant(currentTenant);
 
+    // Validate live session & refresh permissions/tenant status from server
+    authApi
+      .getMe()
+      .then((profile) => {
+        if (profile && currentUser) {
+          const updatedUser = {
+            ...currentUser,
+            role: profile.role ?? currentUser.role,
+            permissions: profile.permissions ?? (currentUser as any).permissions,
+          };
+          setUser(updatedUser);
+          if (profile.tenant && currentTenant) {
+            const updatedTenant = {
+              ...currentTenant,
+              status: profile.tenant.status ?? (currentTenant as any).status,
+              plan: profile.tenant.plan ?? (currentTenant as any).plan,
+              modules: profile.tenant.modules ?? (currentTenant as any).modules,
+            };
+            setTenant(updatedTenant);
+          }
+        }
+      })
+      .catch(() => {
+        // 401 handler in apiFetch already clears session and redirects
+      });
+
     // Fetch active shift
     if (currentUser?.role !== 'SUPER_ADMIN') {
       posApi
@@ -85,16 +117,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [router]);
 
-  // If staff user without dashboard overview lands on /dashboard, redirect to their first allowed station
+  // Enforce route-level RBAC and module entitlements across all /dashboard routes
   useEffect(() => {
     if (user) {
       if (user.role === 'SUPER_ADMIN' && !authStorage.getTenantToken()) {
         router.replace('/admin');
         return;
       }
-      if (pathname === '/dashboard' && !isRoutePermitted('/dashboard', user, tenant)) {
+      if (pathname && !isRoutePermitted(pathname, user, tenant)) {
         const destination = getFirstAllowedRoute(user, tenant);
-        router.push(destination);
+        if (destination !== pathname) {
+          router.replace(destination);
+        }
       }
     }
   }, [user, tenant, pathname, router]);
@@ -118,96 +152,247 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     router.push('/login');
   };
 
-  const navItems = [
+  const [currentSearch, setCurrentSearch] = useState('');
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [favorites, setFavorites] = useState<string[]>([
+    '/dashboard/pos',
+    '/dashboard/pms/reservations',
+    '/dashboard/pms/front-desk',
+  ]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setCurrentSearch(window.location.search);
+      try {
+        const savedFavs = localStorage.getItem('hotel_saas_nav_favorites');
+        if (savedFavs) {
+          const parsed = JSON.parse(savedFavs);
+          if (Array.isArray(parsed)) setFavorites(parsed);
+        }
+      } catch {
+        // Ignore
+      }
+      const handleNavChange = (e: Event) => {
+        const detail = (e as CustomEvent)?.detail;
+        if (detail?.href) {
+          const qIndex = detail.href.indexOf('?');
+          setCurrentSearch(qIndex >= 0 ? detail.href.slice(qIndex) : '');
+        } else {
+          setCurrentSearch(window.location.search);
+        }
+      };
+      window.addEventListener('hotel-nav-tab', handleNavChange);
+      window.addEventListener('popstate', handleNavChange);
+      return () => {
+        window.removeEventListener('hotel-nav-tab', handleNavChange);
+        window.removeEventListener('popstate', handleNavChange);
+      };
+    }
+  }, [pathname]);
+
+  const toggleFavorite = (e: React.MouseEvent, href: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFavorites((prev) => {
+      const next = prev.includes(href)
+        ? prev.filter((item) => item !== href)
+        : [...prev, href];
+      try {
+        localStorage.setItem('hotel_saas_nav_favorites', JSON.stringify(next));
+      } catch {
+        // Ignore
+      }
+      return next;
+    });
+  };
+
+  interface SubModuleItem {
+    label: string;
+    href: string;
+    badge?: string;
+    requiredPermission?: string;
+  }
+
+  interface MainModuleGroup {
+    id: string;
+    label: string;
+    icon: any;
+    href?: string;
+    subModules?: SubModuleItem[];
+  }
+
+  const mainModules: MainModuleGroup[] = [
     {
-      label: 'Dashboard Overview',
-      href: '/dashboard',
-      icon: LayoutDashboard,
-    },
-    {
-      label: 'PMS Hub Overview',
-      href: '/dashboard/pms',
-      icon: Building2,
-      badge: 'PMS',
-    },
-    {
-      label: 'Rooms & Inventory',
-      href: '/dashboard/pms/rooms',
-      icon: BedDouble,
-    },
-    {
-      label: 'Housekeeping Station',
-      href: '/dashboard/pms/housekeeping',
-      icon: Sparkles,
-      badge: 'Live',
-    },
-    {
-      label: 'Reservations & Stays',
-      href: '/dashboard/pms/reservations',
-      icon: CalendarCheck,
-    },
-    {
-      label: 'Front Desk Folios',
-      href: '/dashboard/pms/front-desk',
-      icon: Key,
-      badge: 'PMS',
-    },
-    {
-      label: 'Channel Manager (OTA)',
-      href: '/dashboard/channel-manager',
-      icon: Globe,
-      badge: 'OTA',
-    },
-    {
-      label: 'POS Sales Terminal',
-      href: '/dashboard/pos',
-      icon: UtensilsCrossed,
-      badge: 'Terminal',
-    },
-    {
-      label: 'Kitchen Display (KDS)',
-      href: '/dashboard/kitchen',
-      icon: ChefHat,
-    },
-    {
-      label: 'Orders & Bills',
-      href: '/dashboard/orders',
-      icon: Receipt,
-    },
-    {
-      label: 'Dining Tables',
-      href: '/dashboard/tables',
+      id: 'dashboard',
+      label: 'Dashboard',
       icon: Grid,
+      href: '/dashboard',
     },
     {
+      id: 'pms',
+      label: 'Property & Lodging',
+      icon: Building2,
+      subModules: [
+        { label: 'PMS Hub Overview', href: '/dashboard/pms', badge: 'Hub' },
+        { label: 'Rooms & Inventory', href: '/dashboard/pms/rooms' },
+        { label: 'Reservations & Stays', href: '/dashboard/pms/reservations' },
+        { label: 'Front Desk Folios', href: '/dashboard/pms/front-desk' },
+        { label: 'Housekeeping Station', href: '/dashboard/pms/housekeeping', badge: 'Live' },
+      ],
+    },
+    {
+      id: 'channel_manager',
+      label: 'Channel Manager',
+      icon: Globe,
+      subModules: [
+        { label: 'OTA Overview', href: '/dashboard/channel-manager', badge: 'OTA' },
+        { label: 'Connected Channels', href: '/dashboard/channel-manager/channels' },
+        { label: 'Room & Rate Mappings', href: '/dashboard/channel-manager/mappings' },
+        { label: 'Pricing & Rate Rules', href: '/dashboard/channel-manager/pricing' },
+        { label: 'Availability Calendar', href: '/dashboard/channel-manager/inventory' },
+        { label: 'OTA Reservations', href: '/dashboard/channel-manager/reservations' },
+        { label: 'Sync Activity Logs', href: '/dashboard/channel-manager/logs' },
+      ],
+    },
+    {
+      id: 'pos_operations',
+      label: 'POS & Dining',
+      icon: ArrowLeftRight,
+      subModules: [
+        { label: 'POS Sales Terminal', href: '/dashboard/pos', badge: 'POS' },
+        { label: 'Orders & Bills', href: '/dashboard/orders' },
+        { label: 'Dining Tables', href: '/dashboard/tables' },
+        { label: 'Kitchen Display (KDS)', href: '/dashboard/kitchen', badge: 'KDS' },
+        { label: 'Menu & Products', href: '/dashboard/menu' },
+      ],
+    },
+    {
+      id: 'bar_beverage',
       label: 'Bar & Beverage',
-      href: '/dashboard/bar',
       icon: Wine,
-      badge: 'Bar',
+      subModules: [
+        { label: 'Speed Rail & Bottle Rack', href: '/dashboard/bar?tab=RACK', badge: 'Bar' },
+        { label: 'Pour & Spillage Logs', href: '/dashboard/bar?tab=POURS' },
+        { label: 'Stock Variance Reports', href: '/dashboard/bar?tab=STOCK_REPORTS' },
+        { label: 'Bottle Adjustments', href: '/dashboard/bar?tab=ADJUSTMENTS' },
+        { label: 'Bar Stock Ledger', href: '/dashboard/bar?tab=LEDGER' },
+        { label: 'Beverage Analytics', href: '/dashboard/bar?tab=ANALYTICS' },
+      ],
     },
     {
-      label: 'Menu & Products',
-      href: '/dashboard/menu',
-      icon: MenuSquare,
-    },
-    {
-      label: 'Inventory & Recipes',
-      href: '/dashboard/inventory',
+      id: 'inventory_warehouses',
+      label: 'Inventory & Stores',
       icon: Boxes,
-      badge: 'BOM',
+      subModules: [
+        { label: 'Inventory Overview', href: '/dashboard/inventory?tab=OVERVIEW' },
+        { label: 'Bar Stock', href: '/dashboard/inventory?tab=BAR', requiredPermission: 'inventory_items' },
+        { label: 'Kitchen Stock', href: '/dashboard/inventory?tab=KITCHEN', requiredPermission: 'inventory_items' },
+        { label: 'Operational Stock', href: '/dashboard/inventory?tab=OPERATIONAL', requiredPermission: 'inventory_items' },
+        { label: 'Purchase Orders (PO)', href: '/dashboard/inventory?tab=PURCHASE_ORDERS', requiredPermission: 'purchase_orders' },
+        { label: 'Goods Received (GRN)', href: '/dashboard/inventory?tab=GRN', requiredPermission: 'grn_receiving' },
+        { label: 'Dept. Issuances', href: '/dashboard/inventory?tab=ISSUANCES', requiredPermission: 'operational_issuance' },
+        { label: 'Stock Adjustments', href: '/dashboard/inventory?tab=MOVEMENTS', requiredPermission: 'stock_adjustments' },
+        { label: 'Recipes & BOM', href: '/dashboard/inventory?tab=RECIPES', badge: 'BOM' },
+        { label: 'Suppliers', href: '/dashboard/inventory?tab=SUPPLIERS' },
+      ],
     },
     {
-      label: 'Financial Reports',
-      href: '/dashboard/reports',
-      icon: Receipt,
-      badge: 'SQL',
+      id: 'hrm_payroll',
+      label: 'HRM & Payroll',
+      icon: Users,
+      subModules: [
+        { label: 'HRM Overview', href: '/dashboard/hrm?tab=OVERVIEW', badge: 'HR' },
+        { label: 'Employees & Profiles', href: '/dashboard/hrm?tab=EMPLOYEES', requiredPermission: 'hrm_employees' },
+        { label: 'Departments & Roles', href: '/dashboard/hrm?tab=DEPARTMENTS', requiredPermission: 'hrm_employees' },
+        { label: 'Shift & Duty Roster', href: '/dashboard/hrm?tab=ROSTER', requiredPermission: 'hrm_roster' },
+        { label: 'Attendance & Timesheets', href: '/dashboard/hrm?tab=ATTENDANCE', requiredPermission: 'hrm_attendance' },
+        { label: 'Leave Management', href: '/dashboard/hrm?tab=LEAVES', requiredPermission: 'hrm_leaves' },
+        { label: 'Salary Advances', href: '/dashboard/hrm?tab=ADVANCES', requiredPermission: 'hrm_payroll' },
+        { label: 'Payroll & Payslips', href: '/dashboard/hrm?tab=PAYROLL', badge: 'EPF', requiredPermission: 'hrm_payroll' },
+      ],
     },
     {
-      label: 'Settings & Staff',
-      href: '/dashboard/settings',
+      id: 'financials',
+      label: 'Financials & Reports',
+      icon: PieChart,
+      subModules: [
+        { label: 'Daily Revenue Summary', href: '/dashboard/reports?tab=daily', badge: 'SQL' },
+        { label: 'Payment Collections', href: '/dashboard/reports?tab=payments' },
+        { label: 'Item Sales Breakdown', href: '/dashboard/reports?tab=items' },
+        { label: 'Voids & Cancellations', href: '/dashboard/reports?tab=cancellations' },
+        { label: 'Inventory Valuation', href: '/dashboard/inventory?tab=REPORTS' },
+      ],
+    },
+    {
+      id: 'settings_admin',
+      label: 'Settings & Admin',
       icon: Settings,
+      subModules: [
+        { label: 'Property & Tax Profile', href: '/dashboard/settings?tab=property' },
+        { label: 'Staff & Permissions', href: '/dashboard/settings?tab=staff' },
+        { label: 'AI Co-Pilot Settings', href: '/dashboard/settings?tab=ai', requiredPermission: 'ai_manage_settings' },
+        { label: 'Security Audit Logs', href: '/dashboard/settings?tab=audit' },
+      ],
     },
   ];
+
+  const isSubModuleActive = (href: string) => {
+    const [targetPath, targetQuery] = href.split('?');
+    if (pathname !== targetPath) return false;
+    if (!targetQuery) {
+      return !currentSearch || currentSearch === '';
+    }
+    const targetParams = new URLSearchParams(targetQuery);
+    const currentParams = new URLSearchParams(currentSearch);
+    const targetTab = targetParams.get('tab')?.toLowerCase();
+    const currentTab = currentParams.get('tab')?.toLowerCase();
+    if (!currentTab) {
+      // Default tab match when no ?tab= is in URL yet
+      return (
+        (targetPath === '/dashboard/bar' && targetTab === 'rack') ||
+        (targetPath === '/dashboard/inventory' && targetTab === 'overview') ||
+        (targetPath === '/dashboard/hrm' && targetTab === 'overview') ||
+        (targetPath === '/dashboard/reports' && targetTab === 'daily') ||
+        (targetPath === '/dashboard/settings' && targetTab === 'property')
+      );
+    }
+    return targetTab === currentTab;
+  };
+
+  // Automatically expand only the main module containing the current route
+  useEffect(() => {
+    for (const mod of mainModules) {
+      if (mod.subModules?.some((sub) => pathname === sub.href.split('?')[0])) {
+        setOpenGroups({ [mod.id]: true });
+        return;
+      }
+    }
+  }, [pathname]);
+
+  const toggleGroup = (id: string) => {
+    setOpenGroups((prev) => ({ [id]: !prev[id] }));
+  };
+
+  const handleNavigate = (e: React.MouseEvent, href: string) => {
+    e.preventDefault();
+    setMobileMenuOpen(false);
+    const qIndex = href.indexOf('?');
+    setCurrentSearch(qIndex >= 0 ? href.slice(qIndex) : '');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('hotel-nav-tab', { detail: { href } }));
+    }
+    router.push(href);
+  };
+
+  // Flatten all permitted sub-modules so Favorites can resolve labels & permissions
+  const allPermittedSubModules: SubModuleItem[] = mainModules.flatMap((mod) =>
+    (mod.subModules || []).filter((sub) =>
+      isRoutePermitted(sub.href, user, tenant, sub.requiredPermission),
+    ),
+  );
+  const favoriteSubModules = allPermittedSubModules.filter((sub) =>
+    favorites.includes(sub.href),
+  );
 
   return (
     <div className="min-h-screen flex bg-[#F8FAFC] text-[#0F172A] font-sans">
@@ -273,81 +458,211 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         )}
 
-        {/* Navigation Section */}
-        <div className="text-[10px] font-bold tracking-wider uppercase text-[#94A3B8] px-2 mb-2">
-          Core Operations
-        </div>
-        <nav className="space-y-1 flex-1 overflow-y-auto pr-1">
-          {navItems
-            .filter((item) => isRoutePermitted(item.href, user, tenant))
-            .map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-              return (
-              <a
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                  isActive
-                    ? 'bg-[#00C48C] text-white shadow-xs'
-                    : 'text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A]'
+        {/* Simplified Main Module & Drop-List Navigation */}
+        <nav className="no-scrollbar space-y-1 flex-1 overflow-y-auto select-none">
+          {/* Favorites Drop-List (matching reference top row) */}
+          {favoriteSubModules.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleGroup('favorites')}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
+                  openGroups['favorites']
+                    ? 'bg-[#F1F5F9] text-[#0F172A]'
+                    : 'text-[#334155] hover:bg-[#F1F5F9]/80 hover:text-[#0F172A]'
                 }`}
               >
-                <Icon
-                  className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[#64748B]'}`}
+                <Star className="w-[18px] h-[18px] shrink-0 text-[#475569] stroke-[1.75]" />
+                <span className="flex-1 text-left truncate">Favorites</span>
+                <ChevronLeft
+                  className={`w-4 h-4 text-[#64748B] transition-transform duration-200 ${
+                    openGroups['favorites'] ? '-rotate-90 text-[#0F172A]' : ''
+                  }`}
                 />
-                <span className="flex-1 truncate">{item.label}</span>
-                {item.badge && (
-                  <span
-                    className={`text-[9.5px] px-1.5 py-0.5 rounded-md font-bold ${
-                      isActive
-                        ? 'bg-white/20 text-white'
-                        : 'bg-[#ECFDF5] text-[#065F46]'
+              </button>
+
+              {openGroups['favorites'] && (
+                <div className="mt-1 ml-5 pl-3 border-l border-[#E2E8F0] space-y-0.5 py-0.5">
+                  {favoriteSubModules.map((sub) => {
+                    const active = isSubModuleActive(sub.href);
+                    return (
+                      <a
+                        key={`fav-${sub.href}`}
+                        href={sub.href}
+                        onClick={(e) => handleNavigate(e, sub.href)}
+                        className={`group flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-xs transition-all ${
+                          active
+                            ? 'bg-[#00C48C]/12 text-[#065F46] font-bold'
+                            : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#0F172A] font-medium'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                              active ? 'bg-[#00C48C]' : 'bg-[#CBD5E1] group-hover:bg-[#94A3B8]'
+                            }`}
+                          />
+                          <span className="truncate">{sub.label}</span>
+                        </div>
+                        <span
+                          role="button"
+                          title="Remove from Favorites"
+                          onClick={(e) => toggleFavorite(e, sub.href)}
+                          className="opacity-70 hover:opacity-100 text-amber-500 p-0.5 rounded"
+                        >
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
+                        </span>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Main Modules */}
+          {mainModules.map((module) => {
+            const Icon = module.icon;
+
+            // Direct single-link module (e.g. Dashboard)
+            if (module.href && !module.subModules) {
+              if (!isRoutePermitted(module.href, user, tenant)) return null;
+              const isActive = pathname === module.href;
+              return (
+                <a
+                  key={module.id}
+                  href={module.href}
+                  onClick={(e) => handleNavigate(e, module.href!)}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
+                    isActive
+                      ? 'bg-[#00C48C] text-white font-semibold shadow-2xs'
+                      : 'text-[#334155] hover:bg-[#F1F5F9]/80 hover:text-[#0F172A]'
+                  }`}
+                >
+                  <Icon
+                    className={`w-[18px] h-[18px] shrink-0 stroke-[1.75] ${
+                      isActive ? 'text-white' : 'text-[#475569]'
                     }`}
-                  >
-                    {item.badge}
-                  </span>
+                  />
+                  <span className="flex-1 truncate">{module.label}</span>
+                </a>
+              );
+            }
+
+            // Filter permitted sub-modules for this main module
+            const permittedSubs = (module.subModules || []).filter((sub) =>
+              isRoutePermitted(sub.href, user, tenant, sub.requiredPermission),
+            );
+            if (permittedSubs.length === 0) return null;
+
+            const hasActiveChild = permittedSubs.some((sub) =>
+              isSubModuleActive(sub.href),
+            );
+            const isOpen = !!openGroups[module.id];
+
+            return (
+              <div key={module.id}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(module.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
+                    hasActiveChild
+                      ? 'bg-[#ECFDF5] text-[#065F46] font-semibold'
+                      : isOpen
+                        ? 'bg-[#F1F5F9] text-[#0F172A]'
+                        : 'text-[#334155] hover:bg-[#F1F5F9]/80 hover:text-[#0F172A]'
+                  }`}
+                >
+                  <Icon
+                    className={`w-[18px] h-[18px] shrink-0 stroke-[1.75] ${
+                      hasActiveChild ? 'text-[#00C48C]' : 'text-[#475569]'
+                    }`}
+                  />
+                  <span className="flex-1 text-left truncate">{module.label}</span>
+                  <ChevronLeft
+                    className={`w-4 h-4 shrink-0 transition-transform duration-200 ${
+                      hasActiveChild ? 'text-[#065F46]' : 'text-[#64748B]'
+                    } ${isOpen ? '-rotate-90' : ''}`}
+                  />
+                </button>
+
+                {/* Sub-Modules Drop List */}
+                {isOpen && (
+                  <div className="mt-1 ml-5 pl-3 border-l border-[#E2E8F0] space-y-0.5 py-0.5">
+                    {permittedSubs.map((sub) => {
+                      const active = isSubModuleActive(sub.href);
+                      const isFav = favorites.includes(sub.href);
+                      return (
+                        <a
+                          key={sub.href}
+                          href={sub.href}
+                          onClick={(e) => handleNavigate(e, sub.href)}
+                          className={`group flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-xs transition-all ${
+                            active
+                              ? 'bg-[#00C48C] text-white font-semibold shadow-2xs'
+                              : 'text-[#64748B] hover:bg-[#F1F5F9] hover:text-[#0F172A] font-medium'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                active
+                                  ? 'bg-white'
+                                  : 'bg-[#CBD5E1] group-hover:bg-[#94A3B8]'
+                              }`}
+                            />
+                            <span className="truncate">{sub.label}</span>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {sub.badge && (
+                              <span
+                                className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                                  active
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-[#ECFDF5] text-[#065F46]'
+                                }`}
+                              >
+                                {sub.badge}
+                              </span>
+                            )}
+                            <span
+                              role="button"
+                              title={isFav ? 'Remove from Favorites' : 'Add to Favorites'}
+                              onClick={(e) => toggleFavorite(e, sub.href)}
+                              className={`p-0.5 rounded transition-opacity ${
+                                isFav
+                                  ? 'opacity-100'
+                                  : 'opacity-0 group-hover:opacity-70 hover:!opacity-100'
+                              }`}
+                            >
+                              <Star
+                                className={`w-3 h-3 ${
+                                  isFav
+                                    ? active
+                                      ? 'fill-white text-white'
+                                      : 'fill-amber-400 text-amber-500'
+                                    : active
+                                      ? 'text-white/80'
+                                      : 'text-[#94A3B8]'
+                                }`}
+                              />
+                            </span>
+                          </div>
+                        </a>
+                      );
+                    })}
+                  </div>
                 )}
-              </a>
+              </div>
             );
           })}
         </nav>
 
-        {/* Shift Card Status */}
-        <div className="p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] my-3">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10.5px] font-bold text-[#64748B] uppercase tracking-wider">
-              Shift Drawer
-            </span>
-            <span
-              className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full ${
-                activeShift
-                  ? 'bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]'
-                  : 'bg-amber-50 text-amber-700 border border-amber-200'
-              }`}
-            >
-              {activeShift ? 'Open' : 'Closed'}
-            </span>
-          </div>
-          {activeShift ? (
-            <div className="text-xs text-[#0F172A] font-semibold">
-              Float: ${Number(activeShift.startingFloat).toFixed(2)}
-            </div>
-          ) : (
-            <button
-              onClick={() => setShiftModalOpen(true)}
-              className="w-full mt-1.5 py-1.5 px-2 rounded-lg bg-[#00C48C] hover:bg-[#00A877] text-white text-[11px] font-bold transition-all flex items-center justify-center gap-1.5"
-            >
-              <Coins className="w-3.5 h-3.5" />
-              <span>Open Cash Shift</span>
-            </button>
-          )}
-        </div>
-
         {/* Log Out */}
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-all border border-transparent hover:border-red-100"
+          className="mt-2 flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-all border border-transparent hover:border-red-100"
         >
           <LogOut className="w-4 h-4 shrink-0" />
           <span>Sign Out</span>

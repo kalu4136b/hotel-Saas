@@ -3,6 +3,7 @@ import { ConversationService } from './services/conversation.service';
 import { AiProviderService } from './services/ai-provider.service';
 import { ToolExecutorService, ToolExecutionUser } from './services/tool-executor.service';
 import { MultilingualService } from './services/multilingual.service';
+import { AiEntitlementService } from './services/ai-entitlement.service';
 
 import { ChatRequestDto } from './dto/ai-assistant.dto';
 export { ChatRequestDto };
@@ -13,6 +14,8 @@ export interface ChatResponseDto {
   role: 'assistant';
   content: string;
   detectedLanguage: string;
+  providerUsed?: string;
+  modelUsed?: string;
   suggestedFollowUps?: string[];
   pendingAction?: {
     confirmationId: string;
@@ -38,6 +41,7 @@ export class AiAssistantService {
     private readonly aiProvider: AiProviderService,
     private readonly toolExecutor: ToolExecutorService,
     private readonly multilingualService: MultilingualService,
+    private readonly entitlementService: AiEntitlementService,
   ) {}
 
   /**
@@ -48,6 +52,15 @@ export class AiAssistantService {
     user: ToolExecutionUser,
   ): Promise<ChatResponseDto> {
     const rawMessage = (dto.message || '').trim();
+    const startTime = Date.now();
+
+    // 0. Validate subscription entitlement, role permissions, and quotas
+    const targetEngine = await this.entitlementService.validateExecution(
+      user.tenantId,
+      user,
+      dto.provider,
+      dto.model,
+    );
 
     // 1. Get or create conversation session
     const conversation = await this.conversationService.getOrCreateConversation(
@@ -64,6 +77,8 @@ export class AiAssistantService {
       {
         detectedLanguage,
         inputModality: dto.inputModality || 'text',
+        providerId: targetEngine.providerId,
+        modelId: targetEngine.modelId,
       },
     );
 
@@ -78,12 +93,32 @@ export class AiAssistantService {
     }));
 
     // 4. Process with AI Provider / Operations Engine
-    const aiResult = await this.aiProvider.processUserMessage(rawMessage, history, {
-      role: user.role,
-      tenantId: user.tenantId,
-      propertyId: user.propertyId,
-      currentPage: dto.currentPage,
-    });
+    let aiResult;
+    try {
+      aiResult = await this.aiProvider.processUserMessage(rawMessage, history, {
+        role: user.role,
+        tenantId: user.tenantId,
+        propertyId: user.propertyId,
+        currentPage: dto.currentPage,
+        preferredProvider: targetEngine.providerId,
+        preferredModel: targetEngine.modelId,
+        allowedProviders: targetEngine.allowedProviders,
+      });
+    } catch (err: any) {
+      await this.entitlementService.recordUsage(
+        user.tenantId,
+        user.id,
+        conversation.id,
+        targetEngine.providerId,
+        targetEngine.modelId,
+        Math.round(rawMessage.length / 4),
+        0,
+        Date.now() - startTime,
+        false,
+        err?.message,
+      );
+      throw err;
+    }
 
     let assistantContent = aiResult.content;
     let pendingActionData: ChatResponseDto['pendingAction'] = undefined;
@@ -144,7 +179,9 @@ export class AiAssistantService {
       }
     }
 
-    // 6. Persist assistant message
+    // 6. Persist assistant message (with the engine that actually produced the answer)
+    const answeredProviderId = aiResult.providerId || targetEngine.providerId;
+    const answeredModelId = aiResult.modelUsed || targetEngine.modelId;
     const savedAssistantMsg = await this.conversationService.addMessage(
       conversation.id,
       'assistant',
@@ -155,7 +192,27 @@ export class AiAssistantService {
         toolCalls: aiResult.toolToExecute,
         toolResults: toolResultData,
         actionConfirmationId: pendingActionData?.confirmationId,
+        providerId: answeredProviderId,
+        modelId: answeredModelId,
       },
+    );
+
+    // 7. Record successful usage & update quotas (built-in engine does not consume LLM tokens)
+    const usedExternalLlm = answeredProviderId !== 'internal';
+    const promptTokens = usedExternalLlm ? Math.max(1, Math.round(rawMessage.length / 4)) : 0;
+    const completionTokens = usedExternalLlm
+      ? Math.max(1, Math.round((assistantContent || '').length / 4))
+      : 0;
+    await this.entitlementService.recordUsage(
+      user.tenantId,
+      user.id,
+      conversation.id,
+      answeredProviderId,
+      answeredModelId,
+      promptTokens,
+      completionTokens,
+      Date.now() - startTime,
+      true,
     );
 
     return {
@@ -164,10 +221,19 @@ export class AiAssistantService {
       role: 'assistant',
       content: assistantContent,
       detectedLanguage: aiResult.detectedLanguage,
+      providerUsed: aiResult.providerUsed || targetEngine.providerId,
+      modelUsed: answeredModelId,
       suggestedFollowUps: aiResult.suggestedFollowUps,
       pendingAction: pendingActionData,
       toolResult: toolResultData,
     };
+  }
+
+  /**
+   * Return supported AI models and availability status
+   */
+  getAvailableModels() {
+    return this.aiProvider.getAvailableModels();
   }
 
   /**

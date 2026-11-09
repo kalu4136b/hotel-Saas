@@ -173,6 +173,29 @@ export default function BarPage() {
   const [activeTab, setActiveTab] = useState<
     'RACK' | 'POURS' | 'STOCK_REPORTS' | 'ADJUSTMENTS' | 'LEDGER' | 'ANALYTICS'
   >('RACK');
+
+  useEffect(() => {
+    const applyUrlTab = (searchStr?: string) => {
+      const params = new URLSearchParams(searchStr ?? window.location.search);
+      const tab = params.get('tab')?.toUpperCase() as any;
+      const validTabs = ['RACK', 'POURS', 'STOCK_REPORTS', 'ADJUSTMENTS', 'LEDGER', 'ANALYTICS'];
+      if (tab && validTabs.includes(tab)) {
+        setActiveTab(tab);
+      }
+    };
+    applyUrlTab();
+    const handleNavTab = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.href?.includes('?')) {
+        applyUrlTab('?' + detail.href.split('?')[1]);
+      }
+    };
+    window.addEventListener('hotel-nav-tab', handleNavTab);
+    window.addEventListener('popstate', () => applyUrlTab());
+    return () => {
+      window.removeEventListener('hotel-nav-tab', handleNavTab);
+    };
+  }, []);
   const [items, setItems] = useState<BarItem[]>([]);
   const [logs, setLogs] = useState<PourLog[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);

@@ -9,10 +9,13 @@ import {
   HttpStatus,
   BadRequestException,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import * as crypto from 'crypto';
 import {
   ChannelConnection,
+  ChannelConnectionStatus,
   ChannelCode,
   ChannelWebhookEvent,
   WebhookEventStatus,
@@ -22,6 +25,7 @@ import {
 } from '../../entities';
 import { ChannelManagerService } from '../channel-manager.service';
 import { SyncEngineService } from '../services/sync-engine.service';
+import { ChannelEncryptionService } from '../services/encryption.service';
 
 @Controller('api/channel-manager/webhooks')
 export class ChannelWebhookController {
@@ -29,6 +33,7 @@ export class ChannelWebhookController {
     private readonly dataSource: DataSource,
     private readonly channelManagerService: ChannelManagerService,
     private readonly syncEngineService: SyncEngineService,
+    private readonly encryptionService: ChannelEncryptionService,
   ) {}
 
   @Post(':channelCode/:connectionId')
@@ -50,6 +55,31 @@ export class ChannelWebhookController {
 
     if (!connection) {
       throw new NotFoundException('Target channel connection not found');
+    }
+
+    if (connection.status === ChannelConnectionStatus.DISABLED) {
+      throw new UnauthorizedException('Channel connection is currently disabled');
+    }
+
+    // Verify webhook secret if configured on the connection or environment
+    const creds: any = connection.encryptedCredentials
+      ? this.encryptionService.decryptObject(connection.encryptedCredentials) || {}
+      : {};
+    const expectedSecret = creds.webhookSecret || process.env.CHANNEL_WEBHOOK_SECRET;
+    if (expectedSecret) {
+      const providedSecret =
+        headers['x-webhook-secret'] ||
+        headers['x-channel-secret'] ||
+        (headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+
+      const expectedBuf = Buffer.from(String(expectedSecret));
+      const providedBuf = Buffer.from(String(providedSecret || ''));
+      if (
+        expectedBuf.length !== providedBuf.length ||
+        !crypto.timingSafeEqual(expectedBuf, providedBuf)
+      ) {
+        throw new UnauthorizedException('Invalid or missing webhook signature secret');
+      }
     }
 
     const adapter = this.syncEngineService.getAdapter(channelCode);

@@ -6,6 +6,8 @@ import {
   AiActionConfirmation,
   AiKnowledgeDocument,
   AiToolAuditLog,
+  AiTenantEntitlement,
+  AiUsageRecord,
   Room,
   Reservation,
   GuestFolio,
@@ -28,6 +30,7 @@ import { ToolExecutorService } from './services/tool-executor.service';
 import { MultilingualService } from './services/multilingual.service';
 import { KnowledgeBaseService } from './services/knowledge-base.service';
 import { ConversationService } from './services/conversation.service';
+import { AiEntitlementService } from './services/ai-entitlement.service';
 
 @Module({
   imports: [
@@ -60,7 +63,8 @@ import { ConversationService } from './services/conversation.service';
     MultilingualService,
     KnowledgeBaseService,
     ConversationService,
+    AiEntitlementService,
   ],
-  exports: [AiAssistantService],
+  exports: [AiAssistantService, AiEntitlementService],
 })
 export class AiAssistantModule {}

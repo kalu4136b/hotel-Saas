@@ -387,10 +387,29 @@ export class ChannelManagerService {
   }
 
   // ==========================================
+  // TENANT CONNECTION OWNERSHIP GUARD
+  // ==========================================
+
+  private async verifyConnectionOwnership(
+    tenantId: string,
+    propertyId: string,
+    connectionId: string,
+  ): Promise<ChannelConnection> {
+    const conn = await this.dataSource.getRepository(ChannelConnection).findOne({
+      where: { id: connectionId, tenantId, propertyId },
+    });
+    if (!conn) {
+      throw new NotFoundException('Channel connection not found for this property');
+    }
+    return conn;
+  }
+
+  // ==========================================
   // ROOM MAPPINGS
   // ==========================================
 
   async getRoomMappings(tenantId: string, propertyId: string, connectionId: string) {
+    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
     const mappingRepo = this.dataSource.getRepository(ChannelRoomMapping);
     const roomTypeRepo = this.dataSource.getRepository(RoomType);
 
@@ -411,6 +430,8 @@ export class ChannelManagerService {
   }
 
   async saveRoomMapping(
+    tenantId: string,
+    propertyId: string,
     connectionId: string,
     dto: {
       roomTypeId: string;
@@ -421,6 +442,7 @@ export class ChannelManagerService {
       syncRates?: boolean;
     },
   ) {
+    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
     const repo = this.dataSource.getRepository(ChannelRoomMapping);
     let mapping = await repo.findOne({
       where: { connectionId, roomTypeId: dto.roomTypeId },
@@ -448,7 +470,13 @@ export class ChannelManagerService {
     return repo.save(mapping);
   }
 
-  async deleteRoomMapping(connectionId: string, mappingId: string) {
+  async deleteRoomMapping(
+    tenantId: string,
+    propertyId: string,
+    connectionId: string,
+    mappingId: string,
+  ) {
+    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
     const repo = this.dataSource.getRepository(ChannelRoomMapping);
     const mapping = await repo.findOne({ where: { id: mappingId, connectionId } });
     if (!mapping) throw new NotFoundException('Mapping not found');
@@ -459,6 +487,7 @@ export class ChannelManagerService {
    * Automatic mapping suggestions based on room type name similarity
    */
   async autoSuggestRoomMappings(tenantId: string, propertyId: string, connectionId: string) {
+    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
     const roomTypes = await this.dataSource.getRepository(RoomType).find({
       where: { tenantId, propertyId, isActive: true },
     });
@@ -476,7 +505,8 @@ export class ChannelManagerService {
   // RATE PLAN MAPPINGS
   // ==========================================
 
-  async getRatePlanMappings(connectionId: string) {
+  async getRatePlanMappings(tenantId: string, propertyId: string, connectionId: string) {
+    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
     return this.dataSource.getRepository(ChannelRatePlanMapping).find({
       where: { connectionId },
       order: { internalRatePlanCode: 'ASC' },
@@ -484,6 +514,8 @@ export class ChannelManagerService {
   }
 
   async saveRatePlanMapping(
+    tenantId: string,
+    propertyId: string,
     connectionId: string,
     dto: {
       internalRatePlanCode: string;
@@ -493,6 +525,7 @@ export class ChannelManagerService {
       cancellationPolicy?: any;
     },
   ) {
+    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
     const repo = this.dataSource.getRepository(ChannelRatePlanMapping);
     let mapping = await repo.findOne({
       where: {
@@ -521,7 +554,13 @@ export class ChannelManagerService {
     return repo.save(mapping);
   }
 
-  async deleteRatePlanMapping(connectionId: string, mappingId: string) {
+  async deleteRatePlanMapping(
+    tenantId: string,
+    propertyId: string,
+    connectionId: string,
+    mappingId: string,
+  ) {
+    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
     const repo = this.dataSource.getRepository(ChannelRatePlanMapping);
     const mapping = await repo.findOne({ where: { id: mappingId, connectionId } });
     if (!mapping) throw new NotFoundException('Rate plan mapping not found');
@@ -532,7 +571,8 @@ export class ChannelManagerService {
   // PRICING RULES
   // ==========================================
 
-  async getPricingRules(connectionId: string) {
+  async getPricingRules(tenantId: string, propertyId: string, connectionId: string) {
+    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
     return this.dataSource.getRepository(ChannelPricingRule).find({
       where: { connectionId },
       relations: { roomType: true },
@@ -541,6 +581,8 @@ export class ChannelManagerService {
   }
 
   async savePricingRule(
+    tenantId: string,
+    propertyId: string,
     connectionId: string,
     dto: {
       roomTypeId?: string;
@@ -549,6 +591,7 @@ export class ChannelManagerService {
       applyToAllRoomTypes?: boolean;
     },
   ) {
+    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
     const repo = this.dataSource.getRepository(ChannelPricingRule);
     const rule = repo.create({
       connectionId,
@@ -562,7 +605,13 @@ export class ChannelManagerService {
     return repo.save(rule);
   }
 
-  async deletePricingRule(connectionId: string, ruleId: string) {
+  async deletePricingRule(
+    tenantId: string,
+    propertyId: string,
+    connectionId: string,
+    ruleId: string,
+  ) {
+    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
     const repo = this.dataSource.getRepository(ChannelPricingRule);
     const rule = await repo.findOne({ where: { id: ruleId, connectionId } });
     if (!rule) throw new NotFoundException('Pricing rule not found');

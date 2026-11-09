@@ -127,6 +127,76 @@ export const SYSTEM_PERMISSIONS: PermissionDefinition[] = [
     category: 'Analytics & Admin',
     description: 'Property profile, tax rates, staff accounts, and RBAC controls',
   },
+
+  // Human Resource Management (HRM & Payroll)
+  {
+    id: 'hrm',
+    label: 'HRM & Payroll Hub',
+    category: 'HRM & Payroll',
+    description: 'Complete hotel HR overview, departments, staff profiles, roster, attendance, leaves, and payroll',
+  },
+  {
+    id: 'hrm_employees',
+    label: 'Employees & Departments',
+    category: 'HRM & Payroll',
+    description: 'Manage employee profiles, departments, designations, and staff documents',
+  },
+  {
+    id: 'hrm_roster',
+    label: 'Shift & Duty Roster',
+    category: 'HRM & Payroll',
+    description: 'Configure hotel shift templates and publish weekly/daily duty rosters',
+  },
+  {
+    id: 'hrm_attendance',
+    label: 'Attendance & Timesheets',
+    category: 'HRM & Payroll',
+    description: 'Record daily attendance check-in/out, track overtime, and regularize timesheets',
+  },
+  {
+    id: 'hrm_leaves',
+    label: 'Leave Management',
+    category: 'HRM & Payroll',
+    description: 'Manage employee leave balances, leave requests, and approval workflows',
+  },
+  {
+    id: 'hrm_payroll',
+    label: 'Payroll, EPF/ETF & Service Charge',
+    category: 'HRM & Payroll',
+    description: 'Process monthly payroll, salary advances, 10% service charge pool, EPF/ETF, and payslips',
+  },
+
+  // AI Assistant & Operations
+  {
+    id: 'ai_view',
+    label: 'View AI Assistant',
+    category: 'AI Assistant',
+    description: 'Access the floating AI assistant co-pilot drawer and review data queries',
+  },
+  {
+    id: 'ai_chat',
+    label: 'Execute AI Chat',
+    category: 'AI Assistant',
+    description: 'Send messages, run operational queries, and execute guided hotel actions',
+  },
+  {
+    id: 'ai_model_select',
+    label: 'Switch AI Models',
+    category: 'AI Assistant',
+    description: 'Choose between permitted external AI models (e.g. Gemini) and internal engine',
+  },
+  {
+    id: 'ai_voice',
+    label: 'Use Voice Assistant',
+    category: 'AI Assistant',
+    description: 'Dictate voice commands and listen to AI audio speech readouts',
+  },
+  {
+    id: 'ai_manage_settings',
+    label: 'Manage AI Settings & Models',
+    category: 'AI Assistant',
+    description: 'Configure hotel AI provider activations, default models, and view usage allowances',
+  },
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -150,6 +220,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'stock_adjustments',
     'reports',
     'settings',
+    'hrm',
+    'hrm_employees',
+    'hrm_roster',
+    'hrm_attendance',
+    'hrm_leaves',
+    'hrm_payroll',
+    'ai_view',
+    'ai_chat',
+    'ai_model_select',
+    'ai_voice',
+    'ai_manage_settings',
   ],
   [UserRole.MANAGER]: [
     'dashboard',
@@ -170,12 +251,25 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'operational_issuance',
     'stock_adjustments',
     'reports',
+    'hrm',
+    'hrm_employees',
+    'hrm_roster',
+    'hrm_attendance',
+    'hrm_leaves',
+    'hrm_payroll',
+    'ai_view',
+    'ai_chat',
+    'ai_model_select',
+    'ai_voice',
   ],
   [UserRole.CASHIER]: [
     'pos',
     'orders',
     'tables',
     'bar',
+    'ai_view',
+    'ai_chat',
+    'ai_voice',
   ],
   [UserRole.KITCHEN]: [
     'kitchen',
@@ -184,19 +278,56 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
 };
 
-export function resolveUserPermissions(user: { role: UserRole; permissions?: string[] | null }): string[] {
-  if (user.role === UserRole.TENANT_ADMIN) {
+export function resolveUserPermissions(user: { role: UserRole | string; permissions?: string[] | null }): string[] {
+  if (user.role === UserRole.TENANT_ADMIN || user.role === 'TENANT_ADMIN') {
     return DEFAULT_ROLE_PERMISSIONS[UserRole.TENANT_ADMIN];
   }
   if (Array.isArray(user.permissions) && user.permissions.length > 0) {
     return user.permissions;
   }
-  return DEFAULT_ROLE_PERMISSIONS[user.role] || [];
+  return DEFAULT_ROLE_PERMISSIONS[user.role as UserRole] || [];
 }
 
-export function hasPermission(user: { role: UserRole; permissions?: string[] | null }, permission: string): boolean {
+const INVENTORY_SUB_PERMISSIONS = new Set([
+  'inventory',
+  'inventory_items',
+  'suppliers',
+  'purchase_orders',
+  'grn',
+  'grn_receiving',
+  'operational_issuance',
+  'stock_adjustments',
+]);
+
+const HRM_SUB_PERMISSIONS = new Set([
+  'hrm',
+  'hrm_employees',
+  'hrm_roster',
+  'hrm_attendance',
+  'hrm_leaves',
+  'hrm_payroll',
+]);
+
+export function hasPermission(
+  user: { role: UserRole | string; permissions?: string[] | null },
+  permission: string,
+): boolean {
   if (!user) return false;
-  if (user.role === UserRole.SUPER_ADMIN || user.role === UserRole.TENANT_ADMIN) return true;
+  if (
+    user.role === UserRole.SUPER_ADMIN ||
+    user.role === 'SUPER_ADMIN' ||
+    user.role === UserRole.TENANT_ADMIN ||
+    user.role === 'TENANT_ADMIN'
+  ) {
+    return true;
+  }
   const userPerms = resolveUserPermissions(user);
-  return userPerms.includes(permission) || userPerms.includes('inventory');
+  if (userPerms.includes(permission)) return true;
+  if (INVENTORY_SUB_PERMISSIONS.has(permission) && userPerms.includes('inventory')) {
+    return true;
+  }
+  if (HRM_SUB_PERMISSIONS.has(permission) && userPerms.includes('hrm')) {
+    return true;
+  }
+  return false;
 }

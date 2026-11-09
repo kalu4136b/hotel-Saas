@@ -18,8 +18,13 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Request() req: any) {
+    const clientIp =
+      (req?.headers?.['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req?.ip ||
+      req?.socket?.remoteAddress ||
+      'unknown';
+    return this.authService.login(dto, clientIp);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -31,7 +36,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  async logout() {
-    return { success: true, message: 'Logged out successfully' };
+  async logout(@Request() req: any) {
+    return this.authService.logout(req.user?.id);
   }
 }

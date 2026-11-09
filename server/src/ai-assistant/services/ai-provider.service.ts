@@ -15,6 +15,9 @@ export interface ProposedAction {
 export interface AiProviderResponse {
   content: string;
   detectedLanguage: DetectedLanguage;
+  providerId?: string;
+  providerUsed?: string;
+  modelUsed?: string;
   toolToExecute?: {
     name: string;
     parameters: any;
@@ -27,8 +30,18 @@ export interface AiProviderResponse {
 
 @Injectable()
 export class AiProviderService {
+  private readonly defaultProvider: string;
   private readonly geminiApiKey?: string;
+  private readonly geminiModel: string;
   private readonly openAiApiKey?: string;
+  private readonly openAiModel: string;
+  private readonly anthropicApiKey?: string;
+  private readonly anthropicModel: string;
+  private readonly deepseekApiKey?: string;
+  private readonly deepseekBaseUrl: string;
+  private readonly deepseekModel: string;
+  private readonly groqApiKey?: string;
+  private readonly groqModel: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -36,10 +49,79 @@ export class AiProviderService {
     private readonly multilingualService: MultilingualService,
     private readonly knowledgeBaseService: KnowledgeBaseService,
   ) {
+    this.defaultProvider = (this.configService.get<string>('AI_DEFAULT_PROVIDER') || 'auto').toLowerCase();
     this.geminiApiKey =
       this.configService.get<string>('GEMINI_API_KEY') ||
       this.configService.get<string>('GOOGLE_API_KEY');
+    this.geminiModel = this.configService.get<string>('GEMINI_MODEL') || 'gemini-3.5-flash';
+    this.groqApiKey = this.configService.get<string>('GROQ_API_KEY');
+    this.groqModel = this.configService.get<string>('GROQ_MODEL') || 'qwen/qwen3.8-27b';
     this.openAiApiKey = this.configService.get<string>('OPENAI_API_KEY');
+    this.openAiModel = this.configService.get<string>('OPENAI_MODEL') || 'gpt-4o-mini';
+    this.anthropicApiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
+    this.anthropicModel = this.configService.get<string>('ANTHROPIC_MODEL') || 'claude-3-5-sonnet-latest';
+    this.deepseekApiKey = this.configService.get<string>('DEEPSEEK_API_KEY');
+    this.deepseekBaseUrl = this.configService.get<string>('DEEPSEEK_BASE_URL') || 'https://api.deepseek.com';
+    this.deepseekModel = this.configService.get<string>('DEEPSEEK_MODEL') || 'deepseek-chat';
+  }
+
+  /**
+   * Return metadata about available AI models & provider configuration status
+   */
+  getAvailableModels() {
+    return {
+      defaultProvider: this.defaultProvider,
+      models: [
+        {
+          id: 'gemini',
+          name: 'Google Gemini',
+          modelName: this.geminiModel,
+          isConfigured: !!this.geminiApiKey,
+          badge: 'Gemini 3.5 Flash',
+          description: 'Official Google Gemini model with fast multilingual & multimodal capabilities.',
+        },
+        {
+          id: 'groq',
+          name: 'Groq Cloud',
+          modelName: this.groqModel,
+          isConfigured: !!this.groqApiKey,
+          badge: 'Qwen 3.8 27B',
+          description: 'Ultra-fast LPU inference hosting Qwen 3.8 27B model.',
+        },
+        {
+          id: 'openai',
+          name: 'OpenAI ChatGPT',
+          modelName: this.openAiModel,
+          isConfigured: !!this.openAiApiKey,
+          badge: 'GPT-4o mini',
+          description: 'High performance conversational model from OpenAI.',
+        },
+        {
+          id: 'claude',
+          name: 'Anthropic Claude',
+          modelName: this.anthropicModel,
+          isConfigured: !!this.anthropicApiKey,
+          badge: 'Claude 3.5 Sonnet',
+          description: 'Advanced nuance, structured reasoning, and deep analysis.',
+        },
+        {
+          id: 'deepseek',
+          name: 'DeepSeek',
+          modelName: this.deepseekModel,
+          isConfigured: !!this.deepseekApiKey,
+          badge: 'DeepSeek-V3',
+          description: 'High-speed reasoning and operations assistant.',
+        },
+        {
+          id: 'internal',
+          name: 'Hotel Ops Engine',
+          modelName: 'Built-in Rule NLP',
+          isConfigured: true,
+          badge: 'Always Free / Offline',
+          description: 'Deterministic instantaneous PMS, POS, and Channel Manager engine.',
+        },
+      ],
+    };
   }
 
   /**
@@ -53,6 +135,9 @@ export class AiProviderService {
       tenantId: string;
       propertyId: string;
       currentPage?: string;
+      preferredProvider?: string;
+      preferredModel?: string;
+      allowedProviders?: string[];
     },
   ): Promise<AiProviderResponse> {
     const { detectedLanguage, normalizedText, intentHints, roomNumberMatch } =
@@ -63,39 +148,10 @@ export class AiProviderService {
       userMessage,
     );
 
-    // 2. If external LLM key is configured, we can attempt LLM function calling
-    if (this.geminiApiKey) {
-      try {
-        const geminiRes = await this.callGemini(
-          userMessage,
-          history,
-          userContext,
-          detectedLanguage,
-          knowledgeMatches,
-        );
-        if (geminiRes) return geminiRes;
-      } catch (err: any) {
-        console.warn('Gemini API call failed, falling back to operations engine:', err?.message);
-      }
-    }
-
-    if (this.openAiApiKey) {
-      try {
-        const openAiRes = await this.callOpenAi(
-          userMessage,
-          history,
-          userContext,
-          detectedLanguage,
-          knowledgeMatches,
-        );
-        if (openAiRes) return openAiRes;
-      } catch (err: any) {
-        console.warn('OpenAI API call failed, falling back to operations engine:', err?.message);
-      }
-    }
-
-    // 3. Built-in Operations NLP Engine (deterministic, instantaneous, offline-ready)
-    return this.processWithInternalEngine(
+    // 2. Run the built-in operations engine first. It detects actionable intents
+    //    (live PMS / POS / inventory queries and write actions that need confirmation).
+    //    External LLMs have no access to hotel tools, so these must never be routed to them.
+    const internalResult = this.processWithInternalEngine(
       userMessage,
       normalizedText,
       detectedLanguage,
@@ -104,6 +160,46 @@ export class AiProviderService {
       knowledgeMatches,
       userContext,
     );
+    const internalTagged: AiProviderResponse = {
+      ...internalResult,
+      providerId: 'internal',
+      providerUsed: 'Hotel Ops Engine',
+      modelUsed: 'builtin-rule-nlp',
+    };
+
+    if (internalResult.toolToExecute) {
+      return internalTagged;
+    }
+
+    // 3. Conversational / general queries: use the selected external LLM (if entitled & configured)
+    const candidateProviders = this.resolveProviderOrder(userContext?.preferredProvider).filter(
+      (p) => !userContext?.allowedProviders || userContext.allowedProviders.includes(p),
+    );
+    for (const provider of candidateProviders) {
+      try {
+        let res: AiProviderResponse | null = null;
+        // Only forward customModel if this provider matches the user's requested preferredProvider
+        const customModel = userContext?.preferredProvider === provider ? userContext?.preferredModel : undefined;
+
+        if (provider === 'gemini' && this.geminiApiKey) {
+          res = await this.callGemini(userMessage, history, userContext, detectedLanguage, knowledgeMatches, customModel);
+        } else if (provider === 'groq' && this.groqApiKey) {
+          res = await this.callGroq(userMessage, history, userContext, detectedLanguage, knowledgeMatches, customModel);
+        } else if (provider === 'openai' && this.openAiApiKey) {
+          res = await this.callOpenAi(userMessage, history, userContext, detectedLanguage, knowledgeMatches, customModel);
+        } else if (provider === 'claude' && this.anthropicApiKey) {
+          res = await this.callAnthropic(userMessage, history, userContext, detectedLanguage, knowledgeMatches, customModel);
+        } else if (provider === 'deepseek' && this.deepseekApiKey) {
+          res = await this.callDeepSeek(userMessage, history, userContext, detectedLanguage, knowledgeMatches, customModel);
+        }
+        if (res) return { ...res, providerId: provider };
+      } catch (err: any) {
+        console.warn(`${provider} API call failed, trying next provider or falling back:`, err?.message);
+      }
+    }
+
+    // 4. Built-in Operations NLP Engine (deterministic, instantaneous, offline-ready)
+    return internalTagged;
   }
 
   /**
@@ -615,7 +711,7 @@ Or try one of the quick actions below:`,
   }
 
   /**
-   * Optional Gemini API integration if GEMINI_API_KEY is present
+   * Gemini API integration (Google AI Studio)
    */
   private async callGemini(
     userMessage: string,
@@ -623,13 +719,100 @@ Or try one of the quick actions below:`,
     userContext: any,
     lang: DetectedLanguage,
     knowledgeMatches: KnowledgeMatch[],
+    customModel?: string,
   ): Promise<AiProviderResponse | null> {
-    // If external call is made, parse response and return. Otherwise return null for fallback.
-    return null;
+    const apiKey = (this.geminiApiKey || '').trim();
+    if (!apiKey) return null;
+
+    try {
+      let model = (customModel && customModel.startsWith('gemini'))
+        ? customModel
+        : this.geminiModel || 'gemini-3.5-flash';
+      let url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+      const knowledgeContext = knowledgeMatches.length
+        ? `\n\nOperational SOP Context from hotel manual:\n${knowledgeMatches.map((k) => `### ${k.title}\n${k.content}`).join('\n\n')}`
+        : '';
+
+      const systemPrompt = `You are the Hotel Operations AI Co-Pilot for our multi-tenant SaaS Hotel Management platform.
+Property: ${userContext?.propertyId || 'Hotel'}, Staff Role: ${userContext?.role || 'STAFF'}, Screen: ${userContext?.currentPage || 'Dashboard'}.
+Preferred Language: ${lang}. If the staff speaks in Sinhala or Singlish, reply fluently and respectfully in Sinhala or Singlish.
+You assist with room management, arrivals/departures, check-ins, guest folio bills, housekeeping cleanliness, bar & inventory low stock alerts, channel manager sync, and POS/KOT printer troubleshooting.
+Give structured, helpful, concise operational answers using markdown bolding and bullet points.${knowledgeContext}`;
+
+      const contents = [
+        ...history.slice(-6).map((h) => ({
+          role: h.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: h.content }],
+        })),
+        {
+          role: 'user',
+          parts: [{ text: userMessage }],
+        },
+      ];
+
+      let res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1024,
+          },
+        }),
+      });
+
+      // If high-demand spike (503) or not found (404), attempt fallback to stable gemini-3.5-flash
+      if (!res.ok && (res.status === 503 || res.status === 404) && model !== 'gemini-3.5-flash') {
+        console.warn(`Gemini ${model} returned ${res.status}. Falling back to gemini-3.5-flash...`);
+        model = 'gemini-3.5-flash';
+        url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents,
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1024,
+            },
+          }),
+        });
+      }
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn('Gemini generateContent non-200:', res.status, errText);
+        return null;
+      }
+
+      const data: any = await res.json();
+      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!reply) return null;
+
+      return {
+        content: reply,
+        detectedLanguage: lang,
+        providerUsed: 'Google Gemini',
+        modelUsed: model,
+        matchedKnowledge: knowledgeMatches,
+        suggestedFollowUps: [
+          'Show available rooms',
+          'Show today arrivals',
+          'Check low stock items',
+        ],
+      };
+    } catch (err: any) {
+      console.warn('Gemini call failed:', err?.message);
+      return null;
+    }
   }
 
   /**
-   * Optional OpenAI API integration if OPENAI_API_KEY is present
+   * OpenAI API integration (ChatGPT)
    */
   private async callOpenAi(
     userMessage: string,
@@ -637,7 +820,265 @@ Or try one of the quick actions below:`,
     userContext: any,
     lang: DetectedLanguage,
     knowledgeMatches: KnowledgeMatch[],
+    customModel?: string,
   ): Promise<AiProviderResponse | null> {
-    return null;
+    if (!this.openAiApiKey) return null;
+
+    try {
+      const model = customModel || this.openAiModel || 'gpt-4o-mini';
+      const knowledgeContext = knowledgeMatches.length
+        ? `\n\nOperational SOP Context:\n${knowledgeMatches.map((k) => `### ${k.title}\n${k.content}`).join('\n\n')}`
+        : '';
+
+      const systemPrompt = `You are the Hotel Operations AI Co-Pilot for a multi-tenant Hotel SaaS platform.
+Staff Role: ${userContext?.role || 'STAFF'}, Screen: ${userContext?.currentPage || 'Dashboard'}, Lang: ${lang}.
+Help staff operate PMS, Housekeeping, Inventory, and OTA Channels concisely.${knowledgeContext}`;
+
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
+        { role: 'user', content: userMessage },
+      ];
+
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.openAiApiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      const reply = data?.choices?.[0]?.message?.content;
+      if (!reply) return null;
+
+      return {
+        content: reply,
+        detectedLanguage: lang,
+        providerUsed: 'OpenAI',
+        modelUsed: model,
+        matchedKnowledge: knowledgeMatches,
+        suggestedFollowUps: ['Show available rooms', 'Show today arrivals'],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Anthropic Claude API integration
+   */
+  private async callAnthropic(
+    userMessage: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    userContext: any,
+    lang: DetectedLanguage,
+    knowledgeMatches: KnowledgeMatch[],
+    customModel?: string,
+  ): Promise<AiProviderResponse | null> {
+    if (!this.anthropicApiKey) return null;
+
+    try {
+      const model = customModel || this.anthropicModel || 'claude-3-5-sonnet-latest';
+      const knowledgeContext = knowledgeMatches.length
+        ? `\n\nHotel SOPs:\n${knowledgeMatches.map((k) => `### ${k.title}\n${k.content}`).join('\n\n')}`
+        : '';
+
+      const systemPrompt = `You are the Hotel Operations AI Assistant for a multi-tenant PMS platform.
+Assist staff professionally in ${lang} with hotel operations.${knowledgeContext}`;
+
+      const messages = [
+        ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
+        { role: 'user', content: userMessage },
+      ];
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.anthropicApiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages,
+        }),
+      });
+
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      const reply = data?.content?.[0]?.text;
+      if (!reply) return null;
+
+      return {
+        content: reply,
+        detectedLanguage: lang,
+        providerUsed: 'Anthropic Claude',
+        modelUsed: model,
+        matchedKnowledge: knowledgeMatches,
+        suggestedFollowUps: ['Show available rooms', 'Show today arrivals'],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * DeepSeek API integration
+   */
+  private async callDeepSeek(
+    userMessage: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    userContext: any,
+    lang: DetectedLanguage,
+    knowledgeMatches: KnowledgeMatch[],
+    customModel?: string,
+  ): Promise<AiProviderResponse | null> {
+    if (!this.deepseekApiKey) return null;
+
+    try {
+      const model = customModel || this.deepseekModel || 'deepseek-chat';
+      const knowledgeContext = knowledgeMatches.length
+        ? `\n\nHotel SOP Context:\n${knowledgeMatches.map((k) => `### ${k.title}\n${k.content}`).join('\n\n')}`
+        : '';
+
+      const systemPrompt = `You are the Hotel Operations AI Assistant for a multi-tenant Hotel SaaS.
+Assist staff in ${lang} with room operations, reservations, and inventory.${knowledgeContext}`;
+
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
+        { role: 'user', content: userMessage },
+      ];
+
+      const res = await fetch(`${this.deepseekBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.deepseekApiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+        }),
+      });
+
+      if (!res.ok) return null;
+      const data: any = await res.json();
+      const reply = data?.choices?.[0]?.message?.content;
+      if (!reply) return null;
+
+      return {
+        content: reply,
+        detectedLanguage: lang,
+        providerUsed: 'DeepSeek',
+        modelUsed: model,
+        matchedKnowledge: knowledgeMatches,
+        suggestedFollowUps: ['Show available rooms', 'Show today arrivals'],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Groq Cloud API integration (Ultra-fast LPU inference: Llama 3.3 70B, Mixtral)
+   */
+  private async callGroq(
+    userMessage: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    userContext: any,
+    lang: DetectedLanguage,
+    knowledgeMatches: KnowledgeMatch[],
+    customModel?: string,
+  ): Promise<AiProviderResponse | null> {
+    const apiKey = (this.groqApiKey || '').trim();
+    if (!apiKey) return null;
+
+    try {
+      const model = (customModel && (customModel.startsWith('qwen') || customModel.startsWith('openai') || customModel.startsWith('allam') || customModel.startsWith('meta-llama') || customModel.startsWith('llama')))
+        ? customModel
+        : this.groqModel || 'qwen/qwen3.8-27b';
+      const knowledgeContext = knowledgeMatches.length
+        ? `\n\nOperational SOP Context from hotel manual:\n${knowledgeMatches.map((k) => `### ${k.title}\n${k.content}`).join('\n\n')}`
+        : '';
+
+      const systemPrompt = `You are the Hotel Operations AI Assistant for a modern multi-tenant SaaS Hotel Management platform.
+Property: ${userContext?.propertyId || 'Hotel'}, Staff Role: ${userContext?.role || 'STAFF'}, Screen: ${userContext?.currentPage || 'Dashboard'}.
+Preferred Language: ${lang}. If staff speaks in Sinhala (සිංහල) or Singlish, answer fluently and politely in Sinhala or Singlish.
+Assist with reservations, front-desk, room cleanliness, inventory alerts, OTA channels, and SOP troubleshooting.
+Give structured, helpful, concise operational answers using markdown bolding and bullet points.${knowledgeContext}`;
+
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
+        { role: 'user', content: userMessage },
+      ];
+
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.6,
+          max_tokens: 1024,
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn('Groq API returned non-200:', res.status, errText);
+        return null;
+      }
+
+      const data: any = await res.json();
+      const reply = data?.choices?.[0]?.message?.content;
+      if (!reply) return null;
+
+      return {
+        content: reply,
+        detectedLanguage: lang,
+        providerUsed: 'Groq Cloud',
+        modelUsed: model,
+        matchedKnowledge: knowledgeMatches,
+        suggestedFollowUps: [
+          'Show available rooms',
+          'Show today arrivals',
+          'Check low stock items',
+        ],
+      };
+    } catch (err: any) {
+      console.warn('Groq call failed:', err?.message);
+      return null;
+    }
+  }
+
+  /**
+   * Resolve provider priority based on user selection or AI_DEFAULT_PROVIDER setting
+   */
+  private resolveProviderOrder(preferredProvider?: string): Array<'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek'> {
+    const target = (preferredProvider || this.defaultProvider || 'auto').toLowerCase();
+
+    if (target === 'internal') return [];
+    if (target === 'groq') return ['groq', 'gemini', 'openai', 'claude', 'deepseek'];
+    if (target === 'gemini') return ['gemini', 'groq', 'openai', 'claude', 'deepseek'];
+    if (target === 'openai' || target === 'gpt') return ['openai', 'groq', 'gemini', 'claude', 'deepseek'];
+    if (target === 'claude' || target === 'anthropic') return ['claude', 'groq', 'gemini', 'openai', 'deepseek'];
+    if (target === 'deepseek') return ['deepseek', 'groq', 'gemini', 'openai', 'claude'];
+
+    // 'auto': prioritize any configured key in order of speed/cost
+    return ['groq', 'gemini', 'openai', 'claude', 'deepseek'];
   }
 }

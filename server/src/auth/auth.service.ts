@@ -1,6 +1,8 @@
 import {
   Injectable,
   UnauthorizedException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { DataSource } from 'typeorm';
@@ -10,22 +12,72 @@ import { TenantStatus } from '../entities/tenant.entity';
 import { User } from '../entities/user.entity';
 import { resolveUserPermissions } from './permissions';
 
+interface LoginAttemptRecord {
+  count: number;
+  firstAttemptAt: number;
+  lockedUntil?: number;
+}
+
+const MAX_FAILED_ATTEMPTS = 5;
+const ATTEMPT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
 @Injectable()
 export class AuthService {
+  private readonly loginAttempts = new Map<string, LoginAttemptRecord>();
+
   constructor(
     private readonly jwtService: JwtService,
     private readonly dataSource: DataSource,
   ) {}
 
-  async login(dto: LoginDto) {
-    const identifier = dto.usernameOrEmail.trim().toLowerCase();
+  private checkRateLimit(key: string): void {
+    const now = Date.now();
+    const record = this.loginAttempts.get(key);
+    if (!record) return;
 
-    const user = await this.dataSource.getRepository(User).findOne({
+    if (record.lockedUntil && record.lockedUntil > now) {
+      const remainingMinutes = Math.ceil((record.lockedUntil - now) / 60000);
+      throw new HttpException(
+        `Too many failed sign-in attempts. Please wait ${remainingMinutes} minute(s) before trying again.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    if (now - record.firstAttemptAt > ATTEMPT_WINDOW_MS) {
+      this.loginAttempts.delete(key);
+    }
+  }
+
+  private recordFailedAttempt(key: string): void {
+    const now = Date.now();
+    const record = this.loginAttempts.get(key);
+    if (!record || now - record.firstAttemptAt > ATTEMPT_WINDOW_MS) {
+      this.loginAttempts.set(key, { count: 1, firstAttemptAt: now });
+      return;
+    }
+
+    record.count += 1;
+    if (record.count >= MAX_FAILED_ATTEMPTS) {
+      record.lockedUntil = now + LOCKOUT_DURATION_MS;
+    }
+    this.loginAttempts.set(key, record);
+  }
+
+  async login(dto: LoginDto, clientIp = 'unknown') {
+    const identifier = dto.usernameOrEmail.trim().toLowerCase();
+    const throttleKey = `${clientIp}:${identifier}`;
+
+    this.checkRateLimit(throttleKey);
+
+    const userRepo = this.dataSource.getRepository(User);
+    const user = await userRepo.findOne({
       where: [{ email: identifier }, { username: identifier }],
       relations: { property: true, tenant: true },
     });
 
     if (!user) {
+      this.recordFailedAttempt(throttleKey);
       throw new UnauthorizedException('Invalid credentials. Please verify username/email and password');
     }
 
@@ -37,14 +89,24 @@ export class AuthService {
       throw new UnauthorizedException('Your hotel subscription is suspended or pending activation');
     }
 
+    if (user.tenant?.expiresAt && new Date(user.tenant.expiresAt).getTime() < Date.now()) {
+      throw new UnauthorizedException('Your hotel subscription has expired. Please contact support');
+    }
+
     const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
     if (!isMatch) {
+      this.recordFailedAttempt(throttleKey);
       throw new UnauthorizedException('Invalid credentials. Please verify username/email and password');
     }
 
-    // Update lastLoginAt
+    // Clear failed login counter on success & record lastLoginAt
+    this.loginAttempts.delete(throttleKey);
+    user.lastLoginAt = new Date();
+    await userRepo.update(user.id, { lastLoginAt: user.lastLoginAt });
+
     const permissions = resolveUserPermissions(user);
-    const token = this.generateToken(user, user.tenantId, user.propertyId, permissions);
+    const expiresIn = dto.rememberMe === false ? '8h' : '12h';
+    const token = this.generateToken(user, user.tenantId, user.propertyId, permissions, expiresIn);
 
     return {
       accessToken: token,
@@ -112,7 +174,25 @@ export class AuthService {
     };
   }
 
-  private generateToken(user: User, tenantId: string, propertyId?: string, permissions?: string[]): string {
+  async logout(userId: string) {
+    if (userId) {
+      await this.dataSource
+        .getRepository(User)
+        .increment({ id: userId }, 'tokenVersion', 1);
+    }
+    return {
+      success: true,
+      message: 'Session revoked and logged out successfully',
+    };
+  }
+
+  private generateToken(
+    user: User,
+    tenantId: string,
+    propertyId?: string,
+    permissions?: string[],
+    expiresIn?: string,
+  ): string {
     const effectivePermissions = permissions || resolveUserPermissions(user);
     const payload = {
       sub: user.id,
@@ -122,8 +202,12 @@ export class AuthService {
       propertyId: propertyId || user.propertyId,
       role: user.role,
       permissions: effectivePermissions,
+      tv: user.tokenVersion ?? 0,
     };
 
-    return this.jwtService.sign(payload);
+    return this.jwtService.sign(
+      payload,
+      expiresIn ? ({ expiresIn: expiresIn as any } as any) : undefined,
+    );
   }
 }

@@ -66,11 +66,19 @@ export class ConversationService {
     conversationId: string,
     user: ToolExecutionUser,
   ): Promise<AiMessage[]> {
-    return this.dataSource.getRepository(AiMessage).find({
+    // Ensure the conversation belongs to the caller's tenant
+    const conversation = await this.dataSource.getRepository(AiConversation).findOne({
+      where: { id: conversationId, tenantId: user.tenantId },
+    });
+    if (!conversation) return [];
+
+    // Latest 50 messages, returned in chronological order
+    const latest = await this.dataSource.getRepository(AiMessage).find({
       where: { conversationId },
-      order: { createdAt: 'ASC' },
+      order: { createdAt: 'DESC' },
       take: 50,
     });
+    return latest.reverse();
   }
 
   /**
@@ -87,6 +95,8 @@ export class ConversationService {
       toolResults?: any;
       actionConfirmationId?: string;
       audioUrl?: string;
+      providerId?: string;
+      modelId?: string;
     },
   ): Promise<AiMessage> {
     const msgRepo = this.dataSource.getRepository(AiMessage);
@@ -100,6 +110,8 @@ export class ConversationService {
       toolResults: options?.toolResults || null,
       actionConfirmationId: options?.actionConfirmationId || null,
       audioUrl: options?.audioUrl || null,
+      providerId: options?.providerId || null,
+      modelId: options?.modelId || null,
     });
 
     const saved = await msgRepo.save(msg);

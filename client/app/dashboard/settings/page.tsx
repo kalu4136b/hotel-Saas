@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { settingsApi, authStorage } from '@/lib/api';
+import { settingsApi, aiAssistantApi, authStorage } from '@/lib/api';
 import {
   Building2,
   Users,
@@ -26,18 +26,49 @@ import {
   KeyRound,
   SlidersHorizontal,
   Check,
+  Sparkles,
+  Bot,
+  Cpu,
 } from 'lucide-react';
 import {
   SYSTEM_PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
   getTenantModules,
+  isPermissionAllowedByModules,
 } from '@/lib/permissions';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'property' | 'staff' | 'audit'>('property');
+  const [activeTab, setActiveTab] = useState<'property' | 'staff' | 'audit' | 'ai'>('property');
   const [loading, setLoading] = useState(true);
   const [savingProperty, setSavingProperty] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    const applyUrlTab = (searchStr?: string) => {
+      const params = new URLSearchParams(searchStr ?? window.location.search);
+      const tab = params.get('tab')?.toLowerCase() as any;
+      const validTabs = ['property', 'staff', 'audit', 'ai'];
+      if (tab && validTabs.includes(tab)) {
+        setActiveTab(tab);
+      }
+    };
+    applyUrlTab();
+    const handleNavTab = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.href?.includes('?')) {
+        applyUrlTab('?' + detail.href.split('?')[1]);
+      }
+    };
+    window.addEventListener('hotel-nav-tab', handleNavTab);
+    window.addEventListener('popstate', () => applyUrlTab());
+    return () => {
+      window.removeEventListener('hotel-nav-tab', handleNavTab);
+    };
+  }, []);
+
+  // AI Settings State
+  const [aiConfig, setAiConfig] = useState<any>(null);
+  const [savingAiConfig, setSavingAiConfig] = useState(false);
 
   // Property Form State
   const [property, setProperty] = useState<any>({
@@ -92,6 +123,9 @@ export default function SettingsPage() {
       } else if (activeTab === 'audit') {
         const logs = await settingsApi.getAuditLogs();
         setAuditLogs(logs);
+      } else if (activeTab === 'ai') {
+        const config = await aiAssistantApi.getTenantConfig();
+        setAiConfig(config);
       }
     } catch (err: any) {
       setFeedbackMessage({
@@ -100,6 +134,35 @@ export default function SettingsPage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveAiConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiConfig) return;
+    setSavingAiConfig(true);
+    setFeedbackMessage(null);
+    try {
+      const activeIds = aiConfig.providers
+        .filter((p: any) => p.isEnabled)
+        .map((p: any) => p.id);
+      const updated = await aiAssistantApi.updateTenantConfig({
+        enabledProviders: activeIds,
+        defaultProviderId: aiConfig.defaultProviderId,
+        defaultModelId: aiConfig.defaultModelId,
+      });
+      setAiConfig(updated);
+      setFeedbackMessage({
+        type: 'success',
+        text: 'AI Assistant models and entitlement settings updated successfully.',
+      });
+    } catch (err: any) {
+      setFeedbackMessage({
+        type: 'error',
+        text: err?.message || 'Failed to save AI configuration.',
+      });
+    } finally {
+      setSavingAiConfig(false);
     }
   };
 
@@ -307,9 +370,335 @@ export default function SettingsPage() {
             <ShieldCheck className="w-4 h-4" />
             <span>Audit Trail</span>
           </button>
+          <button
+            onClick={() => setActiveTab('ai')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition mb-[-2px] ${
+              activeTab === 'ai'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-[#00C48C]" />
+            <span>AI Operations & Models</span>
+          </button>
         </div>
 
-        {/* TAB 1: Property Settings */}
+        {/* TAB 4: AI Operations & Model Management */}
+        {activeTab === 'ai' && (
+          <div className="space-y-6 max-w-5xl">
+            {/* Header info */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-[#0F172A] flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#00C48C]" />
+                  <span>AI Assistant & Model Access Management</span>
+                </h2>
+                <p className="text-xs text-[#64748B] mt-0.5">
+                  Configure which AI providers, reasoning models, and quotas are active for your hotel organization.
+                </p>
+              </div>
+            </div>
+
+            {loading || !aiConfig ? (
+              <div className="p-12 text-center text-xs text-[#94A3B8] flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-[#00C48C]" />
+                <span>Loading AI subscription entitlements...</span>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveAiConfig} className="space-y-6">
+                {/* 1. Subscription & Usage Allowance Card */}
+                <div className="bg-gradient-to-br from-[#0F172A] via-[#1E293B] to-[#0F172A] rounded-2xl p-6 text-white shadow-lg border border-[#334155]">
+                  <div className="flex flex-wrap items-center justify-between gap-4 pb-5 border-b border-white/10">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#00C48C] to-[#10B981] flex items-center justify-center text-white shadow-md shadow-[#00C48C]/30">
+                        <Bot className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-[#94A3B8] uppercase font-bold tracking-wider">Current AI Tier</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#00C48C]/20 text-[#00C48C] border border-[#00C48C]/40">
+                            {aiConfig.aiTier === 'TIER_3_ALL'
+                              ? 'Tier 3 — All Models Suite'
+                              : aiConfig.aiTier === 'TIER_2_SPECIFIC'
+                              ? 'Tier 2 — Pro Models (Gemini & Groq)'
+                              : 'Tier 1 — Basic AI Chat'}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold text-white mt-0.5">
+                          {aiConfig.aiTier === 'TIER_3_ALL'
+                            ? 'Multi-Model Enterprise Entitlement'
+                            : aiConfig.aiTier === 'TIER_2_SPECIFIC'
+                            ? 'Google Gemini & Groq Cloud LPU Access'
+                            : 'Platform Default AI Operations'}
+                        </h3>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[11px] text-[#94A3B8] block">Billing Cycle Resets:</span>
+                      <span className="text-xs font-mono font-semibold text-white">
+                        {new Date(aiConfig.billingPeriodStart).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quota Usage Meters */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+                    {/* Requests Meter */}
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                      <div className="flex items-center justify-between text-xs mb-2">
+                        <span className="text-[#CBD5E1] font-medium">Monthly Requests Allowance</span>
+                        <span className="font-mono font-bold text-[#00C48C]">
+                          {aiConfig.requestsUsedThisMonth?.toLocaleString()} / {aiConfig.monthlyRequestLimit?.toLocaleString()} ({aiConfig.percentUsed}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            aiConfig.percentUsed > 90
+                              ? 'bg-rose-500'
+                              : aiConfig.percentUsed > 75
+                              ? 'bg-amber-400'
+                              : 'bg-[#00C48C]'
+                          }`}
+                          style={{ width: `${Math.min(100, aiConfig.percentUsed)}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-[#94A3B8] mt-2 block">
+                        {(aiConfig.monthlyRequestLimit - aiConfig.requestsUsedThisMonth)?.toLocaleString()} operations remaining this cycle
+                      </span>
+                    </div>
+
+                    {/* Tokens Meter */}
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                      <div className="flex items-center justify-between text-xs mb-2">
+                        <span className="text-[#CBD5E1] font-medium">Monthly Token Budget</span>
+                        <span className="font-mono font-bold text-[#38BDF8]">
+                          {aiConfig.tokensUsedThisMonth?.toLocaleString()} / {aiConfig.monthlyTokenLimit?.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="h-full bg-[#38BDF8] rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              Math.round(
+                                (aiConfig.tokensUsedThisMonth / (aiConfig.monthlyTokenLimit || 1)) * 100
+                              )
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-[#94A3B8] mt-2 block">
+                        Server-managed platform tokens for fast inference
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Provider Matrix & Model Availability */}
+                <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs p-6 space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#F1F5F9]">
+                    <div>
+                      <h3 className="text-sm font-bold text-[#0F172A]">AI Engine & Model Permitted Registry</h3>
+                      <p className="text-xs text-[#64748B]">
+                        Enable or disable permitted AI models for your hotel staff. Coming Soon models cannot be activated yet.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {aiConfig.providers?.map((p: any) => (
+                      <div
+                        key={p.id}
+                        className={`rounded-xl border p-4.5 transition-all flex flex-col justify-between ${
+                          p.isComingSoon
+                            ? 'bg-[#F8FAFC]/80 border-[#E2E8F0] opacity-80'
+                            : !p.isSubscribed
+                            ? 'bg-slate-50/50 border-[#E2E8F0]'
+                            : p.isEnabled
+                            ? 'bg-emerald-50/30 border-emerald-200 shadow-xs'
+                            : 'bg-white border-[#CBD5E1]'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs ${
+                                  p.isComingSoon
+                                    ? 'bg-slate-200 text-slate-500'
+                                    : p.id === 'internal'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-emerald-100 text-[#00A877]'
+                                }`}
+                              >
+                                {p.id === 'internal' ? <Cpu className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-bold text-[#0F172A]">{p.name}</h4>
+                                <span className="text-[10px] text-[#64748B] block font-mono">{p.modelId}</span>
+                              </div>
+                            </div>
+
+                            {/* Badge */}
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                p.isComingSoon
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : !p.isSubscribed
+                                  ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                                  : p.isEnabled
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : 'bg-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {p.badge}
+                            </span>
+                          </div>
+
+                          <p className="text-xs text-[#64748B] leading-relaxed mb-4">
+                            {p.description}
+                          </p>
+                        </div>
+
+                        {/* Controls / State */}
+                        <div className="pt-3 border-t border-[#F1F5F9] flex items-center justify-between text-xs">
+                          {p.isComingSoon ? (
+                            <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                              Coming Soon • Model integration in progress
+                            </span>
+                          ) : !p.isSubscribed ? (
+                            <span className="text-[11px] text-[#64748B] italic">
+                              Requires plan upgrade to {p.minTier}
+                            </span>
+                          ) : p.id === 'internal' ? (
+                            <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                              Core Platform Engine • Always Enabled
+                            </span>
+                          ) : (
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={!!p.isEnabled}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  const updated = aiConfig.providers.map((item: any) =>
+                                    item.id === p.id ? { ...item, isEnabled: checked } : item
+                                  );
+                                  const nextDefaultProviderId =
+                                    !checked && aiConfig.defaultProviderId === p.id
+                                      ? 'internal'
+                                      : aiConfig.defaultProviderId;
+                                  const nextDefaultModelId =
+                                    !checked && aiConfig.defaultProviderId === p.id
+                                      ? 'builtin-rule-nlp'
+                                      : aiConfig.defaultModelId;
+                                  setAiConfig({
+                                    ...aiConfig,
+                                    providers: updated,
+                                    defaultProviderId: nextDefaultProviderId,
+                                    defaultModelId: nextDefaultModelId,
+                                  });
+                                }}
+                                className="w-4 h-4 text-[#00C48C] rounded border-[#CBD5E1] focus:ring-[#00C48C]"
+                              />
+                              <span className="text-xs font-semibold text-[#334155]">
+                                {p.isEnabled ? 'Enabled for Hotel Staff' : 'Disabled'}
+                              </span>
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Default AI Engine Selector & Staff Access Notice */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Default Model */}
+                  <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs p-5">
+                    <h3 className="text-xs font-bold text-[#0F172A] mb-1">Hotel Default AI Model</h3>
+                    <p className="text-[11px] text-[#64748B] mb-3">
+                      This model is selected automatically whenever a staff member opens the AI assistant.
+                    </p>
+
+                    <select
+                      value={aiConfig.defaultModelId}
+                      onChange={(e) => {
+                        const selectedModel = aiConfig.providers.find((p: any) => p.modelId === e.target.value);
+                        setAiConfig({
+                          ...aiConfig,
+                          defaultModelId: e.target.value,
+                          defaultProviderId: selectedModel?.id || 'internal',
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-semibold text-[#0F172A] focus:bg-white focus:outline-none focus:border-[#00C48C]"
+                    >
+                      {aiConfig.providers
+                        ?.filter((p: any) => p.isSubscribed && !p.isComingSoon && p.isEnabled)
+                        .map((p: any) => (
+                          <option key={p.modelId} value={p.modelId}>
+                            {p.name} ({p.badge})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {/* Staff RBAC Notice */}
+                  <div className="bg-emerald-50/50 rounded-2xl border border-emerald-200 shadow-xs p-5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900 mb-1">
+                        <ShieldCheck className="w-4 h-4 text-[#00C48C]" />
+                        <span>Role-Based AI Access (RBAC)</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 leading-relaxed">
+                        Control individual staff access using permissions in the <strong>Staff Accounts</strong> tab:
+                      </p>
+                      <ul className="text-[10px] text-emerald-800 mt-2 space-y-1 list-disc list-inside">
+                        <li><strong>ai_view:</strong> Access the AI Assistant drawer.</li>
+                        <li><strong>ai_chat:</strong> Run operational chat commands.</li>
+                        <li><strong>ai_model_select:</strong> Allow staff to switch between permitted models.</li>
+                      </ul>
+                    </div>
+
+                    <div className="mt-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('staff')}
+                        className="text-[11px] font-bold text-[#00A877] hover:underline"
+                      >
+                        Manage Staff Roles &rarr;
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save Changes CTA */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={savingAiConfig}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#00C48C] hover:bg-[#00A877] text-white font-bold text-xs transition shadow-sm disabled:opacity-50"
+                  >
+                    {savingAiConfig ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Saving Configuration...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Save AI Settings</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
         {activeTab === 'property' && (
           <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs p-6 max-w-4xl">
             <div className="flex items-center justify-between pb-5 border-b border-[#F1F5F9] mb-6">
@@ -845,17 +1234,18 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                    {(['POS & Dining', 'PMS & Lodging', 'Operations & Admin'] as const).map(
+                    {(['POS & Dining', 'PMS & Lodging', 'Operations & Admin', 'AI Assistant'] as const).map(
                       (cat) => {
                         const tenantModules = getTenantModules();
                         const catPerms = SYSTEM_PERMISSIONS.filter(
-                          (p) => p.category === cat && tenantModules.includes(p.id),
+                          (p) => p.category === cat && isPermissionAllowedByModules(p, tenantModules),
                         );
                         if (catPerms.length === 0) return null;
                         return (
                           <div key={cat} className="space-y-1">
-                            <span className="text-[9.5px] font-black uppercase tracking-wider text-[#94A3B8] block px-1">
-                              {cat}
+                            <span className="text-[9.5px] font-black uppercase tracking-wider text-[#94A3B8] flex items-center gap-1 px-1">
+                              {cat === 'AI Assistant' && <Sparkles className="w-2.5 h-2.5 text-[#00C48C]" />}
+                              <span>{cat}</span>
                             </span>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                               {catPerms.map((perm) => {
@@ -1079,17 +1469,18 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                    {(['POS & Dining', 'PMS & Lodging', 'Operations & Admin'] as const).map(
+                    {(['POS & Dining', 'PMS & Lodging', 'Operations & Admin', 'AI Assistant'] as const).map(
                       (cat) => {
                         const tenantModules = getTenantModules();
                         const catPerms = SYSTEM_PERMISSIONS.filter(
-                          (p) => p.category === cat && tenantModules.includes(p.id),
+                          (p) => p.category === cat && isPermissionAllowedByModules(p, tenantModules),
                         );
                         if (catPerms.length === 0) return null;
                         return (
                           <div key={cat} className="space-y-1">
-                            <span className="text-[9.5px] font-black uppercase tracking-wider text-[#94A3B8] block px-1">
-                              {cat}
+                            <span className="text-[9.5px] font-black uppercase tracking-wider text-[#94A3B8] flex items-center gap-1 px-1">
+                              {cat === 'AI Assistant' && <Sparkles className="w-2.5 h-2.5 text-[#00C48C]" />}
+                              <span>{cat}</span>
                             </span>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                               {catPerms.map((perm) => {

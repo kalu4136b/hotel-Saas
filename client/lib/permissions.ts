@@ -1,9 +1,10 @@
 export interface PermissionItem {
   id: string;
   label: string;
-  category: 'POS & Dining' | 'PMS & Lodging' | 'Operations & Admin';
+  category: 'POS & Dining' | 'PMS & Lodging' | 'Operations & Admin' | 'AI Assistant';
   description: string;
   route: string;
+  requiredModule?: string;
 }
 
 export const SYSTEM_PERMISSIONS: PermissionItem[] = [
@@ -159,6 +160,96 @@ export const SYSTEM_PERMISSIONS: PermissionItem[] = [
     description: 'Property profile, tax rates, staff accounts, and RBAC controls',
     route: '/dashboard/settings',
   },
+  // HRM & Payroll
+  {
+    id: 'hrm',
+    label: 'HRM & Payroll Hub',
+    category: 'Operations & Admin',
+    description: 'Hotel HR overview, departments, employee profiles, roster, attendance, leaves, and payroll',
+    route: '/dashboard/hrm',
+    requiredModule: 'hrm',
+  },
+  {
+    id: 'hrm_employees',
+    label: 'Employees & Departments',
+    category: 'Operations & Admin',
+    description: 'Manage employee profiles, departments, designations, and staff documents',
+    route: '/dashboard/hrm',
+    requiredModule: 'hrm',
+  },
+  {
+    id: 'hrm_roster',
+    label: 'Shift & Duty Roster',
+    category: 'Operations & Admin',
+    description: 'Configure hotel shift templates and publish weekly/daily duty rosters',
+    route: '/dashboard/hrm',
+    requiredModule: 'hrm',
+  },
+  {
+    id: 'hrm_attendance',
+    label: 'Attendance & Timesheets',
+    category: 'Operations & Admin',
+    description: 'Record daily attendance check-in/out, track overtime, and regularize timesheets',
+    route: '/dashboard/hrm',
+    requiredModule: 'hrm',
+  },
+  {
+    id: 'hrm_leaves',
+    label: 'Leave Management',
+    category: 'Operations & Admin',
+    description: 'Manage employee leave balances, leave requests, and approval workflows',
+    route: '/dashboard/hrm',
+    requiredModule: 'hrm',
+  },
+  {
+    id: 'hrm_payroll',
+    label: 'Payroll, EPF/ETF & Service Charge',
+    category: 'Operations & Admin',
+    description: 'Process monthly payroll, salary advances, 10% service charge pool, EPF/ETF, and payslips',
+    route: '/dashboard/hrm',
+    requiredModule: 'hrm',
+  },
+  // AI Assistant & Operations
+  {
+    id: 'ai_view',
+    label: 'View AI Assistant',
+    category: 'AI Assistant',
+    description: 'Access the floating AI assistant co-pilot drawer and review data queries',
+    route: '/dashboard',
+    requiredModule: 'ai_copilot',
+  },
+  {
+    id: 'ai_chat',
+    label: 'Execute AI Chat',
+    category: 'AI Assistant',
+    description: 'Send messages, run operational queries, and execute guided hotel actions',
+    route: '/dashboard',
+    requiredModule: 'ai_copilot',
+  },
+  {
+    id: 'ai_model_select',
+    label: 'Switch AI Models',
+    category: 'AI Assistant',
+    description: 'Choose between permitted external AI models (e.g. Gemini) and internal engine',
+    route: '/dashboard',
+    requiredModule: 'ai_copilot',
+  },
+  {
+    id: 'ai_voice',
+    label: 'Use Voice Assistant',
+    category: 'AI Assistant',
+    description: 'Dictate voice commands and listen to AI audio speech readouts',
+    route: '/dashboard',
+    requiredModule: 'ai_copilot',
+  },
+  {
+    id: 'ai_manage_settings',
+    label: 'Manage AI Settings & Models',
+    category: 'AI Assistant',
+    description: 'Configure hotel AI provider activations, default models, and view usage allowances',
+    route: '/dashboard/settings',
+    requiredModule: 'ai_copilot',
+  },
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
@@ -183,6 +274,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'stock_adjustments',
     'reports',
     'settings',
+    'hrm',
+    'hrm_employees',
+    'hrm_roster',
+    'hrm_attendance',
+    'hrm_leaves',
+    'hrm_payroll',
+    'ai_view',
+    'ai_chat',
+    'ai_model_select',
+    'ai_voice',
+    'ai_manage_settings',
   ],
   MANAGER: [
     'dashboard',
@@ -205,12 +307,25 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'operational_issuance',
     'stock_adjustments',
     'reports',
+    'hrm',
+    'hrm_employees',
+    'hrm_roster',
+    'hrm_attendance',
+    'hrm_leaves',
+    'hrm_payroll',
+    'ai_view',
+    'ai_chat',
+    'ai_model_select',
+    'ai_voice',
   ],
   CASHIER: [
     'pos',
     'orders',
     'tables',
     'bar',
+    'ai_view',
+    'ai_chat',
+    'ai_voice',
   ],
   KITCHEN: [
     'kitchen',
@@ -240,10 +355,21 @@ export const ROUTE_PERMISSION_MAP: Record<string, string> = {
   '/dashboard/tables': 'tables',
   '/dashboard/menu': 'menu',
   '/dashboard/inventory': 'inventory',
+  '/dashboard/hrm': 'hrm',
   '/dashboard/reports': 'reports',
   '/dashboard/settings': 'settings',
 };
 
+
+export function isPermissionAllowedByModules(
+  perm: PermissionItem,
+  tenantModules: string[],
+): boolean {
+  if (perm.requiredModule) {
+    return tenantModules.includes(perm.requiredModule);
+  }
+  return tenantModules.includes(perm.id);
+}
 
 export function getTenantModules(tenant?: any): string[] {
   let list: string[] = [];
@@ -252,6 +378,9 @@ export function getTenantModules(tenant?: any): string[] {
   } else if (typeof window !== 'undefined') {
     try {
       const raw =
+        sessionStorage.getItem('hotel_saas_tenant_tenant') ||
+        localStorage.getItem('hotel_saas_tenant_tenant') ||
+        sessionStorage.getItem('hotel_saas_tenant') ||
         localStorage.getItem('hotel_saas_tenant') ||
         localStorage.getItem('tenant');
       if (raw) {
@@ -266,12 +395,30 @@ export function getTenantModules(tenant?: any): string[] {
   }
 
   if (list.length === 0) {
-    return SYSTEM_PERMISSIONS.map((p) => p.id);
+    return [
+      ...SYSTEM_PERMISSIONS.map((p) => p.id),
+      'ai_copilot',
+      'pos',
+      'orders',
+      'tables',
+      'menu',
+      'kitchen',
+      'bar',
+      'pms_hub',
+      'pms_rooms',
+      'pms_reservations',
+      'pms_front_desk',
+      'inventory',
+      'reports',
+      'settings',
+      'dashboard',
+    ];
   }
 
-  // Ensure bar, inventory, and housekeeping are always included in active modules
+  // Ensure bar, inventory, hrm, and housekeeping are always included in active modules
   if (!list.includes('bar')) list.push('bar');
   if (!list.includes('inventory')) list.push('inventory');
+  if (!list.includes('hrm')) list.push('hrm');
   if (!list.includes('pms_housekeeping')) list.push('pms_housekeeping');
 
   return list;
@@ -287,7 +434,9 @@ export function getUserPermissions(user: any, tenantModules?: string[]): string[
 
   let rawPerms: string[] = [];
   if (user.role === 'TENANT_ADMIN' || user.role === 'ADMIN') {
-    rawPerms = allowedByTenant;
+    return SYSTEM_PERMISSIONS.filter((p) =>
+      isPermissionAllowedByModules(p, allowedByTenant),
+    ).map((p) => p.id);
   } else if (Array.isArray(user.permissions) && user.permissions.length > 0) {
     rawPerms = user.permissions;
   } else {
@@ -295,22 +444,42 @@ export function getUserPermissions(user: any, tenantModules?: string[]): string[
   }
 
   // Intersect with what the tenant has actually purchased
-  return rawPerms.filter((p) => allowedByTenant.includes(p));
+  return rawPerms.filter((pId) => {
+    const perm = SYSTEM_PERMISSIONS.find((sp) => sp.id === pId);
+    if (!perm) return allowedByTenant.includes(pId);
+    return isPermissionAllowedByModules(perm, allowedByTenant);
+  });
 }
 
 export function isRoutePermitted(
   pathname: string,
   user: any,
   tenant?: any,
+  requiredPermission?: string,
 ): boolean {
   if (!user) return true; // While loading
   if (user.role === 'SUPER_ADMIN') return true;
 
+  const cleanPath = (pathname || '').split('?')[0];
   const tenantModules = getTenantModules(tenant || user.tenant);
   const userPerms = getUserPermissions(user, tenantModules);
 
+  if (requiredPermission) {
+    const permItem = SYSTEM_PERMISSIONS.find((p) => p.id === requiredPermission);
+    if (permItem && !isPermissionAllowedByModules(permItem, tenantModules)) {
+      return false;
+    }
+    if (
+      user.role !== 'TENANT_ADMIN' &&
+      user.role !== 'ADMIN' &&
+      !userPerms.includes(requiredPermission)
+    ) {
+      return false;
+    }
+  }
+
   // Exact match
-  const required = ROUTE_PERMISSION_MAP[pathname];
+  const required = ROUTE_PERMISSION_MAP[cleanPath];
   if (required) {
     if (!tenantModules.includes(required)) return false;
     return userPerms.includes(required);
@@ -318,7 +487,7 @@ export function isRoutePermitted(
 
   // Prefix match (e.g. sub-pages under /dashboard/pms/...)
   for (const [route, perm] of Object.entries(ROUTE_PERMISSION_MAP)) {
-    if (route !== '/dashboard' && pathname.startsWith(route)) {
+    if (route !== '/dashboard' && cleanPath.startsWith(route)) {
       if (!tenantModules.includes(perm)) return false;
       return userPerms.includes(perm);
     }

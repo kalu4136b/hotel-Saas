@@ -43,6 +43,12 @@ export class AiMessage {
   @Column({ name: 'action_confirmation_id', type: 'varchar', length: 36, nullable: true })
   actionConfirmationId: string | null;
 
+  @Column({ name: 'provider_id', type: 'varchar', length: 50, nullable: true })
+  providerId: string | null;
+
+  @Column({ name: 'model_id', type: 'varchar', length: 80, nullable: true })
+  modelId: string | null;
+
   @Column({ name: 'audio_url', type: 'varchar', length: 500, nullable: true })
   audioUrl: string | null;
 

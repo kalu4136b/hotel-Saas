@@ -9,6 +9,7 @@ export interface UserSession {
   role: string;
   phone?: string;
   avatarUrl?: string;
+  permissions?: string[];
 }
 
 export interface TenantSession {
@@ -16,6 +17,9 @@ export interface TenantSession {
   name: string;
   slug: string;
   subscriptionTier: string;
+  status?: string;
+  plan?: string;
+  modules?: string[];
 }
 
 export interface PropertySession {
@@ -32,6 +36,17 @@ export interface AuthResponse {
   property: PropertySession;
 }
 
+const getStorageItem = (key: string): string | null => {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem(key) || localStorage.getItem(key);
+};
+
+const removeStorageItem = (key: string) => {
+  if (typeof window === 'undefined') return;
+  sessionStorage.removeItem(key);
+  localStorage.removeItem(key);
+};
+
 export const authStorage = {
   // Scoped Token Resolution:
   // If requesting a Super Admin endpoint or on /admin, prioritize admin token.
@@ -41,14 +56,14 @@ export const authStorage = {
 
     if (forScope === 'admin') {
       return (
-        localStorage.getItem('hotel_saas_admin_token') ||
-        localStorage.getItem('hotel_saas_token')
+        getStorageItem('hotel_saas_admin_token') ||
+        getStorageItem('hotel_saas_token')
       );
     }
     if (forScope === 'tenant') {
       return (
-        localStorage.getItem('hotel_saas_tenant_token') ||
-        localStorage.getItem('hotel_saas_token')
+        getStorageItem('hotel_saas_tenant_token') ||
+        getStorageItem('hotel_saas_token')
       );
     }
 
@@ -56,107 +71,115 @@ export const authStorage = {
     const path = window.location.pathname;
     if (path.startsWith('/admin')) {
       return (
-        localStorage.getItem('hotel_saas_admin_token') ||
-        localStorage.getItem('hotel_saas_token')
+        getStorageItem('hotel_saas_admin_token') ||
+        getStorageItem('hotel_saas_token')
       );
     }
     if (path.startsWith('/dashboard')) {
       return (
-        localStorage.getItem('hotel_saas_tenant_token') ||
-        localStorage.getItem('hotel_saas_token')
+        getStorageItem('hotel_saas_tenant_token') ||
+        getStorageItem('hotel_saas_token')
       );
     }
 
     return (
-      localStorage.getItem('hotel_saas_tenant_token') ||
-      localStorage.getItem('hotel_saas_admin_token') ||
-      localStorage.getItem('hotel_saas_token')
+      getStorageItem('hotel_saas_tenant_token') ||
+      getStorageItem('hotel_saas_admin_token') ||
+      getStorageItem('hotel_saas_token')
     );
   },
 
-  setSession(data: AuthResponse) {
+  setSession(data: AuthResponse, rememberMe = true) {
     if (typeof window === 'undefined') return;
+    const store = rememberMe ? localStorage : sessionStorage;
 
     if (data.user?.role === 'SUPER_ADMIN') {
-      // Store in dedicated admin slots
-      localStorage.setItem('hotel_saas_admin_token', data.accessToken);
-      localStorage.setItem('hotel_saas_admin_user', JSON.stringify(data.user));
+      removeStorageItem('hotel_saas_admin_token');
+      removeStorageItem('hotel_saas_admin_user');
+      store.setItem('hotel_saas_admin_token', data.accessToken);
+      store.setItem('hotel_saas_admin_user', JSON.stringify(data.user));
     } else {
-      // Store in dedicated tenant slots
-      localStorage.setItem('hotel_saas_tenant_token', data.accessToken);
-      localStorage.setItem('hotel_saas_tenant_user', JSON.stringify(data.user));
+      removeStorageItem('hotel_saas_tenant_token');
+      removeStorageItem('hotel_saas_tenant_user');
+      removeStorageItem('hotel_saas_tenant_tenant');
+      removeStorageItem('hotel_saas_tenant_property');
+      store.setItem('hotel_saas_tenant_token', data.accessToken);
+      store.setItem('hotel_saas_tenant_user', JSON.stringify(data.user));
       if (data.tenant) {
-        localStorage.setItem('hotel_saas_tenant_tenant', JSON.stringify(data.tenant));
+        store.setItem('hotel_saas_tenant_tenant', JSON.stringify(data.tenant));
       }
       if (data.property) {
-        localStorage.setItem('hotel_saas_tenant_property', JSON.stringify(data.property));
+        store.setItem('hotel_saas_tenant_property', JSON.stringify(data.property));
       }
     }
 
-    // Always update active general session as fallback
-    localStorage.setItem('hotel_saas_token', data.accessToken);
-    localStorage.setItem('hotel_saas_user', JSON.stringify(data.user));
-    localStorage.setItem('hotel_saas_tenant', JSON.stringify(data.tenant));
-    localStorage.setItem('hotel_saas_property', JSON.stringify(data.property));
+    removeStorageItem('hotel_saas_token');
+    removeStorageItem('hotel_saas_user');
+    removeStorageItem('hotel_saas_tenant');
+    removeStorageItem('hotel_saas_property');
+    store.setItem('hotel_saas_token', data.accessToken);
+    store.setItem('hotel_saas_user', JSON.stringify(data.user));
+    store.setItem('hotel_saas_tenant', JSON.stringify(data.tenant));
+    store.setItem('hotel_saas_property', JSON.stringify(data.property));
   },
 
   getUser(forScope?: 'admin' | 'tenant'): UserSession | null {
     if (typeof window === 'undefined') return null;
 
     if (forScope === 'admin') {
-      const item = localStorage.getItem('hotel_saas_admin_user');
+      const item = getStorageItem('hotel_saas_admin_user');
       if (item) return JSON.parse(item);
     }
     if (forScope === 'tenant') {
-      const item = localStorage.getItem('hotel_saas_tenant_user');
+      const item = getStorageItem('hotel_saas_tenant_user');
       if (item) return JSON.parse(item);
     }
 
     // Auto-detect scope by path
     const path = window.location.pathname;
     if (path.startsWith('/admin')) {
-      const item = localStorage.getItem('hotel_saas_admin_user');
+      const item = getStorageItem('hotel_saas_admin_user');
       if (item) return JSON.parse(item);
     }
     if (path.startsWith('/dashboard')) {
-      const item = localStorage.getItem('hotel_saas_tenant_user');
+      const item = getStorageItem('hotel_saas_tenant_user');
       if (item) return JSON.parse(item);
     }
 
     const item =
-      localStorage.getItem('hotel_saas_user') ||
-      localStorage.getItem('hotel_saas_tenant_user') ||
-      localStorage.getItem('hotel_saas_admin_user');
+      getStorageItem('hotel_saas_user') ||
+      getStorageItem('hotel_saas_tenant_user') ||
+      getStorageItem('hotel_saas_admin_user');
     return item ? JSON.parse(item) : null;
   },
 
   getAdminUser(): UserSession | null {
     if (typeof window === 'undefined') return null;
-    const item = localStorage.getItem('hotel_saas_admin_user');
+    const item = getStorageItem('hotel_saas_admin_user');
     return item ? JSON.parse(item) : null;
   },
 
   getTenantUser(): UserSession | null {
     if (typeof window === 'undefined') return null;
-    const item = localStorage.getItem('hotel_saas_tenant_user');
+    const item = getStorageItem('hotel_saas_tenant_user');
     return item ? JSON.parse(item) : null;
   },
 
   getAdminToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('hotel_saas_admin_token');
+    return getStorageItem('hotel_saas_admin_token');
   },
 
   getTenantToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('hotel_saas_tenant_token');
+    return getStorageItem('hotel_saas_tenant_token');
   },
 
   getProperty(): PropertySession | null {
     if (typeof window === 'undefined') return null;
     const item =
-      localStorage.getItem('hotel_saas_tenant_property') ||
-      localStorage.getItem('hotel_saas_property');
+      getStorageItem('hotel_saas_tenant_property') ||
+      getStorageItem('hotel_saas_property');
     return item ? JSON.parse(item) : null;
   },
 
@@ -169,37 +192,45 @@ export const authStorage = {
   getTenant(): TenantSession | null {
     if (typeof window === 'undefined') return null;
     const item =
-      localStorage.getItem('hotel_saas_tenant_tenant') ||
-      localStorage.getItem('hotel_saas_tenant');
+      getStorageItem('hotel_saas_tenant_tenant') ||
+      getStorageItem('hotel_saas_tenant');
     return item ? JSON.parse(item) : null;
   },
 
   clearAdminSession() {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem('hotel_saas_admin_token');
-    localStorage.removeItem('hotel_saas_admin_user');
+    removeStorageItem('hotel_saas_admin_token');
+    removeStorageItem('hotel_saas_admin_user');
+    removeStorageItem('hotel_saas_token');
+    removeStorageItem('hotel_saas_user');
   },
 
   clearTenantSession() {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem('hotel_saas_tenant_token');
-    localStorage.removeItem('hotel_saas_tenant_user');
-    localStorage.removeItem('hotel_saas_tenant_tenant');
-    localStorage.removeItem('hotel_saas_tenant_property');
+    removeStorageItem('hotel_saas_tenant_token');
+    removeStorageItem('hotel_saas_tenant_user');
+    removeStorageItem('hotel_saas_tenant_tenant');
+    removeStorageItem('hotel_saas_tenant_property');
+    removeStorageItem('hotel_saas_token');
+    removeStorageItem('hotel_saas_user');
+    removeStorageItem('hotel_saas_tenant');
+    removeStorageItem('hotel_saas_property');
   },
 
   clearSession() {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem('hotel_saas_token');
-    localStorage.removeItem('hotel_saas_user');
-    localStorage.removeItem('hotel_saas_tenant');
-    localStorage.removeItem('hotel_saas_property');
-    localStorage.removeItem('hotel_saas_admin_token');
-    localStorage.removeItem('hotel_saas_admin_user');
-    localStorage.removeItem('hotel_saas_tenant_token');
-    localStorage.removeItem('hotel_saas_tenant_user');
-    localStorage.removeItem('hotel_saas_tenant_tenant');
-    localStorage.removeItem('hotel_saas_tenant_property');
+    [
+      'hotel_saas_token',
+      'hotel_saas_user',
+      'hotel_saas_tenant',
+      'hotel_saas_property',
+      'hotel_saas_admin_token',
+      'hotel_saas_admin_user',
+      'hotel_saas_tenant_token',
+      'hotel_saas_tenant_user',
+      'hotel_saas_tenant_tenant',
+      'hotel_saas_tenant_property',
+    ].forEach(removeStorageItem);
   },
 };
 
@@ -278,12 +309,13 @@ export const authApi = {
   async login(body: {
     usernameOrEmail: string;
     password: string;
+    rememberMe?: boolean;
   }): Promise<AuthResponse> {
     const response = await apiRequest<AuthResponse>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(body),
     });
-    authStorage.setSession(response);
+    authStorage.setSession(response, body.rememberMe ?? true);
     return response;
   },
 
@@ -297,6 +329,9 @@ export const authApi = {
     } catch {
       // Ignore network / token errors on logout
     } finally {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hotel-saas-logout'));
+      }
       if (scope === 'admin') {
         authStorage.clearAdminSession();
       } else if (scope === 'tenant') {
@@ -1489,11 +1524,19 @@ export const channelManagerApi = {
 };
 
 export const aiAssistantApi = {
+  async getModels() {
+    return apiRequest('/api/ai/models', {
+      method: 'GET',
+    });
+  },
+
   async sendMessage(data: {
     message: string;
     conversationId?: string;
     inputModality?: 'text' | 'voice';
     currentPage?: string;
+    provider?: string;
+    model?: string;
   }) {
     return apiRequest('/api/ai/chat', {
       method: 'POST',
@@ -1526,7 +1569,303 @@ export const aiAssistantApi = {
       method: 'GET',
     });
   },
+
+  async getTenantConfig() {
+    return apiRequest('/api/ai/tenant-config', {
+      method: 'GET',
+    });
+  },
+
+  async updateTenantConfig(data: {
+    enabledProviders?: string[];
+    defaultProviderId?: string;
+    defaultModelId?: string;
+  }) {
+    return apiRequest('/api/ai/tenant-config', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
 };
+
+export const hrmApi = {
+  async getOverview() {
+    return apiRequest('/api/hrm/overview', { method: 'GET' });
+  },
+
+  async seedDefaults() {
+    return apiRequest('/api/hrm/seed-defaults', { method: 'POST' });
+  },
+
+  // Departments & Designations
+  async getDepartments() {
+    return apiRequest('/api/hrm/departments', { method: 'GET' });
+  },
+
+  async createDepartment(data: any) {
+    return apiRequest('/api/hrm/departments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateDepartment(id: string, data: any) {
+    return apiRequest(`/api/hrm/departments/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteDepartment(id: string) {
+    return apiRequest(`/api/hrm/departments/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getDesignations() {
+    return apiRequest('/api/hrm/designations', { method: 'GET' });
+  },
+
+  async createDesignation(data: any) {
+    return apiRequest('/api/hrm/designations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Employees & Documents
+  async getEmployees(params?: {
+    departmentId?: string;
+    status?: string;
+    search?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.departmentId) q.set('departmentId', params.departmentId);
+    if (params?.status) q.set('status', params.status);
+    if (params?.search) q.set('search', params.search);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiRequest(`/api/hrm/employees${qs}`, { method: 'GET' });
+  },
+
+  async getEmployeeById(id: string) {
+    return apiRequest(`/api/hrm/employees/${id}`, { method: 'GET' });
+  },
+
+  async createEmployee(data: any) {
+    return apiRequest('/api/hrm/employees', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateEmployee(id: string, data: any) {
+    return apiRequest(`/api/hrm/employees/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async addEmployeeDocument(employeeId: string, data: any) {
+    return apiRequest(`/api/hrm/employees/${employeeId}/documents`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Shifts & Roster
+  async getShifts() {
+    return apiRequest('/api/hrm/shifts', { method: 'GET' });
+  },
+
+  async createShift(data: any) {
+    return apiRequest('/api/hrm/shifts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getRoster(params?: {
+    startDate?: string;
+    endDate?: string;
+    departmentId?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.startDate) q.set('startDate', params.startDate);
+    if (params?.endDate) q.set('endDate', params.endDate);
+    if (params?.departmentId) q.set('departmentId', params.departmentId);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiRequest(`/api/hrm/roster${qs}`, { method: 'GET' });
+  },
+
+  async createRosterAssignment(data: any) {
+    return apiRequest('/api/hrm/roster', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async publishRoster(startDate: string, endDate: string) {
+    return apiRequest('/api/hrm/roster/publish', {
+      method: 'POST',
+      body: JSON.stringify({ startDate, endDate }),
+    });
+  },
+
+  async deleteRosterAssignment(id: string) {
+    return apiRequest(`/api/hrm/roster/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Attendance & Timesheets
+  async getAttendance(params?: {
+    date?: string;
+    startDate?: string;
+    endDate?: string;
+    employeeId?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.date) q.set('date', params.date);
+    if (params?.startDate) q.set('startDate', params.startDate);
+    if (params?.endDate) q.set('endDate', params.endDate);
+    if (params?.employeeId) q.set('employeeId', params.employeeId);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiRequest(`/api/hrm/attendance${qs}`, { method: 'GET' });
+  },
+
+  async recordAttendance(data: any) {
+    return apiRequest('/api/hrm/attendance', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async regularizeAttendance(id: string, data: any) {
+    return apiRequest(`/api/hrm/attendance/${id}/regularize`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Leaves
+  async getLeaveTypes() {
+    return apiRequest('/api/hrm/leave-types', { method: 'GET' });
+  },
+
+  async getLeaveBalances(employeeId?: string, year?: number) {
+    const q = new URLSearchParams();
+    if (employeeId) q.set('employeeId', employeeId);
+    if (year) q.set('year', String(year));
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiRequest(`/api/hrm/leave-balances${qs}`, { method: 'GET' });
+  },
+
+  async getLeaveRequests(params?: { status?: string; employeeId?: string }) {
+    const q = new URLSearchParams();
+    if (params?.status) q.set('status', params.status);
+    if (params?.employeeId) q.set('employeeId', params.employeeId);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiRequest(`/api/hrm/leave-requests${qs}`, { method: 'GET' });
+  },
+
+  async createLeaveRequest(data: any) {
+    return apiRequest('/api/hrm/leave-requests', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateLeaveRequestStatus(
+    id: string,
+    data: { status: string; rejectionReason?: string },
+  ) {
+    return apiRequest(`/api/hrm/leave-requests/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Salary Advances & Components
+  async getSalaryComponents() {
+    return apiRequest('/api/hrm/salary-components', { method: 'GET' });
+  },
+
+  async assignEmployeeSalaryComponent(data: any) {
+    return apiRequest('/api/hrm/employee-salary-components', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getSalaryAdvances(params?: { status?: string; employeeId?: string }) {
+    const q = new URLSearchParams();
+    if (params?.status) q.set('status', params.status);
+    if (params?.employeeId) q.set('employeeId', params.employeeId);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiRequest(`/api/hrm/salary-advances${qs}`, { method: 'GET' });
+  },
+
+  async createSalaryAdvance(data: any) {
+    return apiRequest('/api/hrm/salary-advances', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateSalaryAdvanceStatus(
+    id: string,
+    data: {
+      status: string;
+      approvedAmount?: number;
+      repaymentAmount?: number;
+    },
+  ) {
+    return apiRequest(`/api/hrm/salary-advances/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Payroll Settings, Runs & Payslips
+  async getPayrollSettings() {
+    return apiRequest('/api/hrm/payroll-settings', { method: 'GET' });
+  },
+
+  async updatePayrollSettings(data: any) {
+    return apiRequest('/api/hrm/payroll-settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getPayrollRuns() {
+    return apiRequest('/api/hrm/payroll-runs', { method: 'GET' });
+  },
+
+  async generatePayrollRun(data: {
+    payPeriodMonth: number;
+    payPeriodYear: number;
+    manualServiceChargePool?: number;
+    notes?: string;
+  }) {
+    return apiRequest('/api/hrm/payroll-runs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updatePayrollRunStatus(id: string, status: string) {
+    return apiRequest(`/api/hrm/payroll-runs/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  async getPayslipById(id: string) {
+    return apiRequest(`/api/hrm/payslips/${id}`, { method: 'GET' });
+  },
+};
+
 
 
 

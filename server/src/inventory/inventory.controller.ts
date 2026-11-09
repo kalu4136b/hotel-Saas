@@ -11,6 +11,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PermissionsGuard, RequirePermissions } from '../auth/permissions.guard';
 import { InventoryService } from './inventory.service';
 import {
   InventoryCategory,
@@ -22,7 +23,17 @@ import {
 } from '../entities';
 
 @Controller('api/inventory')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(
+  'inventory',
+  'inventory_items',
+  'suppliers',
+  'purchase_orders',
+  'grn',
+  'grn_receiving',
+  'operational_issuance',
+  'stock_adjustments',
+)
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
