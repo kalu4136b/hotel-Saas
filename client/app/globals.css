@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 :root {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
   --primary: #00C48C;
   --primary-hover: #00A877;
   --primary-active: #008F65;

@@ -1,0 +1,27 @@
+services:
+  hotelia-server:
+    container_name: hotelia-server
+    image: ${HOTELIA_SERVER_IMAGE:-hotelia-server:latest}
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:4010:4000"
+
+  hotelia-client:
+    container_name: hotelia-client
+    image: ${HOTELIA_CLIENT_IMAGE:-hotelia-client:latest}
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:3010:3000"
+    depends_on:
+      - hotelia-server
+

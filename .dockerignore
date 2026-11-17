@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+client/node_modules
+client/.next
+server/node_modules
+server/dist
+.env*
+!.env.example
+*.md
+docs
+template
+*.log
+
