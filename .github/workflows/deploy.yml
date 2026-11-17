@@ -64,19 +64,33 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy on VPS
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ vars.SSH_HOST || secrets.SSH_HOST }}
-          port: ${{ vars.SSH_PORT || secrets.SSH_PORT || 22 }}
-          username: ${{ vars.SSH_USER || secrets.SSH_USER || 'hotelia-deploy' }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          passphrase: ${{ secrets.SSH_PASSPHRASE }}
-          script: |
-            cd ${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH }}
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            export HOTELIA_CLIENT_IMAGE=ghcr.io/${{ needs.build-and-push.outputs.image_owner }}/hotelia-client:latest
-            export HOTELIA_SERVER_IMAGE=ghcr.io/${{ needs.build-and-push.outputs.image_owner }}/hotelia-server:latest
+      - name: Deploy to VPS via SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ vars.SSH_HOST || secrets.SSH_HOST }}
+          SSH_PORT: ${{ vars.SSH_PORT || secrets.SSH_PORT || '22' }}
+          SSH_USER: ${{ vars.SSH_USER || 'hotelia-deploy' }}
+        run: |
+          mkdir -p ~/.ssh
+          # Clean private key to ensure proper Unix line endings and trailing newline
+          printf "%s\n" "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          echo "Connecting to $SSH_USER@$SSH_HOST on port $SSH_PORT..."
+
+          ssh -i ~/.ssh/id_deploy \
+              -p "$SSH_PORT" \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "$SSH_USER@$SSH_HOST" bash -s << 'EOF'
+            set -e
+            echo "Successfully authenticated as $(whoami) on $(hostname)"
+            cd "${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH || '/var/www/hotel-saas' }}"
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            export HOTELIA_CLIENT_IMAGE="ghcr.io/${{ needs.build-and-push.outputs.image_owner }}/hotelia-client:latest"
+            export HOTELIA_SERVER_IMAGE="ghcr.io/${{ needs.build-and-push.outputs.image_owner }}/hotelia-server:latest"
             docker compose pull
             docker compose up -d --remove-orphans
+            echo "Deployment completed successfully!"
+          EOF
 
