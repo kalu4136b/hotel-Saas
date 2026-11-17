@@ -68,8 +68,11 @@ jobs:
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ vars.SSH_HOST || secrets.SSH_HOST }}
+          port: ${{ vars.SSH_PORT || secrets.SSH_PORT || 22 }}
           username: ${{ vars.SSH_USER || secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd ${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH }}
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
