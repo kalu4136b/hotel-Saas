@@ -77,11 +77,21 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
 
           echo "Connecting to $SSH_USER@$SSH_HOST on port $SSH_PORT..."
+          echo "Key fingerprint in GitHub Secrets:"
+          ssh-keygen -l -f ~/.ssh/id_deploy || echo "Notice: Key may be encrypted with a passphrase"
+
+          if [ -n "${{ secrets.SSH_PASSPHRASE }}" ]; then
+            eval $(ssh-agent -s)
+            echo "${{ secrets.SSH_PASSPHRASE }}" | ssh-add ~/.ssh/id_deploy
+          fi
 
           ssh -i ~/.ssh/id_deploy \
               -p "$SSH_PORT" \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
+              -v \
               "$SSH_USER@$SSH_HOST" bash -s << 'EOF'
             set -e
             echo "Successfully authenticated as $(whoami) on $(hostname)"
