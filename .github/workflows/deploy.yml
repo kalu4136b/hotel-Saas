@@ -85,17 +85,44 @@ jobs:
             echo "${{ secrets.SSH_PASSPHRASE }}" | ssh-add ~/.ssh/id_deploy
           fi
 
+          DEPLOY_DIR="${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH || '/var/www/hotel-saas' }}"
+
+          # Ensure deployment directory exists on VPS
+          ssh -i ~/.ssh/id_deploy \
+              -p "$SSH_PORT" \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_DIR'"
+
+          # Automatically copy the latest docker-compose.yaml to the VPS
+          scp -i ~/.ssh/id_deploy \
+              -P "$SSH_PORT" \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              docker-compose.yaml \
+              "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/docker-compose.yaml"
+
+          # Execute deployment on the VPS
           ssh -i ~/.ssh/id_deploy \
               -p "$SSH_PORT" \
               -o BatchMode=yes \
               -o IdentitiesOnly=yes \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
-              -v \
               "$SSH_USER@$SSH_HOST" bash -s << 'EOF'
             set -e
+            DEPLOY_DIR="${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH || '/var/www/hotel-saas' }}"
+            cd "$DEPLOY_DIR"
             echo "Successfully authenticated as $(whoami) on $(hostname)"
-            cd "${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH || '/var/www/hotel-saas' }}"
+            echo "Working directory: $(pwd)"
+
+            # Ensure .env file exists so docker compose doesn't complain about missing env_file
+            if [ ! -f .env ]; then
+              touch .env
+            fi
+
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
             export HOTELIA_CLIENT_IMAGE="ghcr.io/${{ needs.build-and-push.outputs.image_owner }}/hotelia-client:latest"
             export HOTELIA_SERVER_IMAGE="ghcr.io/${{ needs.build-and-push.outputs.image_owner }}/hotelia-server:latest"
