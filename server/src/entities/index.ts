@@ -63,4 +63,6 @@ export * from './hrm-employee-salary-component.entity';
 export * from './hrm-salary-advance.entity';
 export * from './hrm-payroll-settings.entity';
 export * from './hrm-payroll.entity';
+export * from './TenantDomain.entity';
+
 

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { RedisService } from '../redis/redis.service';
 import { Tenant, TenantStatus, SubscriptionTier } from '../entities/tenant.entity';
+import { TenantDomain } from '../entities/TenantDomain.entity';
 import { Property } from '../entities/property.entity';
 import { TenantContext, TenantPropertyConfig } from './tenant-context.interface';
 
@@ -68,7 +69,17 @@ export class TenantCacheService {
       if (context) return context;
     }
 
-    // Check if host is a subdomain like <slug>.hotelia.tenura.tech or <slug>.localhost
+    // 1. Check custom domain table in database
+    const domainRepo = this.dataSource.getRepository(TenantDomain);
+    const domainRecord = await domainRepo.findOne({
+      where: { domain: cleanHost },
+    });
+    if (domainRecord) {
+      await this.redis.set(domainKey, domainRecord.tenantId, TENANT_CACHE_TTL_SECONDS);
+      return this.getTenantContextById(domainRecord.tenantId);
+    }
+
+    // 2. Check if host is a subdomain like <slug>.hotelia.tenura.tech or <slug>.localhost
     const parts = cleanHost.split('.');
     if (parts.length >= 3 || (parts.length === 2 && parts[1] === 'localhost')) {
       const potentialSlug = parts[0];
@@ -80,6 +91,22 @@ export class TenantCacheService {
     }
 
     return null;
+  }
+
+  /**
+   * Set dynamic custom domain mapping in Redis.
+   */
+  async setDomainMapping(domain: string, tenantId: string): Promise<void> {
+    const cleanDomain = domain.split(':')[0].toLowerCase().trim();
+    await this.redis.set(`tenant:domain:${cleanDomain}`, tenantId, TENANT_CACHE_TTL_SECONDS);
+  }
+
+  /**
+   * Remove custom domain mapping from Redis.
+   */
+  async deleteDomainMapping(domain: string): Promise<void> {
+    const cleanDomain = domain.split(':')[0].toLowerCase().trim();
+    await this.redis.del(`tenant:domain:${cleanDomain}`);
   }
 
   /**

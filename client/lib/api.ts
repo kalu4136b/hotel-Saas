@@ -1163,6 +1163,43 @@ export const superAdminApi = {
       body: JSON.stringify({ newPassword }),
     });
   },
+
+  async getTenantDomains(id: string) {
+    return apiRequest<{
+      tenantId: string;
+      tenantSlug: string;
+      defaultSubdomain: string;
+      domains: Array<{
+        id: string;
+        tenantId: string;
+        domain: string;
+        isPrimary: boolean;
+        isVerified: boolean;
+        createdAt: string;
+      }>;
+    }>(`/api/super-admin/tenants/${id}/domains`, {
+      method: 'GET',
+    });
+  },
+
+  async addTenantDomain(id: string, domain: string, isPrimary = false) {
+    return apiRequest(`/api/super-admin/tenants/${id}/domains`, {
+      method: 'POST',
+      body: JSON.stringify({ domain, isPrimary }),
+    });
+  },
+
+  async deleteTenantDomain(id: string, domainId: string) {
+    return apiRequest(`/api/super-admin/tenants/${id}/domains/${domainId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async setPrimaryDomain(id: string, domainId: string) {
+    return apiRequest(`/api/super-admin/tenants/${id}/domains/${domainId}/primary`, {
+      method: 'PUT',
+    });
+  },
 };
 
 export const barApi = {

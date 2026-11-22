@@ -8,6 +8,7 @@ import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import {
   Tenant,
+  TenantDomain,
   Property,
   User,
   POSOutlet,
@@ -519,6 +520,112 @@ export class SuperAdminService {
       message: `Password for admin user "${adminUser.username}" (${adminUser.email}) has been successfully updated.`,
       username: adminUser.username,
       email: adminUser.email,
+    };
+  }
+
+  // ================= TENANT CUSTOM DOMAINS =================
+
+  async getTenantDomains(tenantId: string) {
+    const tenant = await this.dataSource.getRepository(Tenant).findOne({
+      where: { id: tenantId },
+    });
+    if (!tenant) throw new NotFoundException(`Tenant with ID ${tenantId} not found`);
+
+    const domains = await this.dataSource.getRepository(TenantDomain).find({
+      where: { tenantId },
+      order: { isPrimary: 'DESC', createdAt: 'ASC' },
+    });
+
+    return {
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      defaultSubdomain: `${tenant.slug}.hotelia.tenura.tech`,
+      domains,
+    };
+  }
+
+  async addTenantDomain(tenantId: string, domainRaw: string, isPrimary = false) {
+    const tenant = await this.dataSource.getRepository(Tenant).findOne({
+      where: { id: tenantId },
+    });
+    if (!tenant) throw new NotFoundException(`Tenant with ID ${tenantId} not found`);
+
+    // Clean and validate domain
+    let clean = domainRaw.trim().toLowerCase();
+    clean = clean.replace(/^https?:\/\//, '').replace(/\/.*$/, '').split(':')[0];
+
+    const fqdnRegex = /^(?!:\/\/)([a-zA-Z0-9-_]+\.)+[a-zA-Z]{2,}$/;
+    if (!clean || !fqdnRegex.test(clean)) {
+      throw new BadRequestException('Invalid domain format. Example: pms.grandazurehotel.com');
+    }
+
+    const domainRepo = this.dataSource.getRepository(TenantDomain);
+    const existing = await domainRepo.findOne({ where: { domain: clean } });
+    if (existing) {
+      throw new ConflictException(`Domain "${clean}" is already assigned to a tenant`);
+    }
+
+    if (isPrimary) {
+      await domainRepo.update({ tenantId }, { isPrimary: false });
+    }
+
+    const newDomain = domainRepo.create({
+      tenantId,
+      domain: clean,
+      isPrimary,
+      isVerified: true,
+    });
+
+    const saved = await domainRepo.save(newDomain);
+
+    // Sync to Redis for 0ms routing
+    await this.tenantCache.setDomainMapping(clean, tenantId);
+
+    return {
+      success: true,
+      domain: saved,
+    };
+  }
+
+  async deleteTenantDomain(tenantId: string, domainId: string) {
+    const domainRepo = this.dataSource.getRepository(TenantDomain);
+    const domainRecord = await domainRepo.findOne({
+      where: { id: domainId, tenantId },
+    });
+
+    if (!domainRecord) {
+      throw new NotFoundException('Domain mapping not found');
+    }
+
+    await domainRepo.remove(domainRecord);
+
+    // Remove from Redis cache
+    await this.tenantCache.deleteDomainMapping(domainRecord.domain);
+
+    return {
+      success: true,
+      message: `Domain "${domainRecord.domain}" successfully removed`,
+    };
+  }
+
+  async setPrimaryDomain(tenantId: string, domainId: string) {
+    const domainRepo = this.dataSource.getRepository(TenantDomain);
+    const target = await domainRepo.findOne({
+      where: { id: domainId, tenantId },
+    });
+
+    if (!target) {
+      throw new NotFoundException('Domain mapping not found');
+    }
+
+    // Unset all, then set primary
+    await domainRepo.update({ tenantId }, { isPrimary: false });
+    target.isPrimary = true;
+    await domainRepo.save(target);
+
+    return {
+      success: true,
+      domain: target,
     };
   }
 }

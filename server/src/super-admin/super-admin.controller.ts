@@ -3,6 +3,8 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
+  Put,
   Param,
   Body,
   Query,
@@ -75,5 +77,37 @@ export class SuperAdminController {
     @Body('newPassword') newPassword: string,
   ) {
     return this.superAdminService.resetTenantAdminPassword(id, newPassword);
+  }
+
+  // ================= TENANT DOMAIN MANAGEMENT =================
+
+  @Get('tenants/:id/domains')
+  getTenantDomains(@Param('id') id: string) {
+    return this.superAdminService.getTenantDomains(id);
+  }
+
+  @Post('tenants/:id/domains')
+  addTenantDomain(
+    @Param('id') id: string,
+    @Body('domain') domain: string,
+    @Body('isPrimary') isPrimary?: boolean,
+  ) {
+    return this.superAdminService.addTenantDomain(id, domain, isPrimary);
+  }
+
+  @Delete('tenants/:id/domains/:domainId')
+  deleteTenantDomain(
+    @Param('id') id: string,
+    @Param('domainId') domainId: string,
+  ) {
+    return this.superAdminService.deleteTenantDomain(id, domainId);
+  }
+
+  @Put('tenants/:id/domains/:domainId/primary')
+  setPrimaryDomain(
+    @Param('id') id: string,
+    @Param('domainId') domainId: string,
+  ) {
+    return this.superAdminService.setPrimaryDomain(id, domainId);
   }
 }

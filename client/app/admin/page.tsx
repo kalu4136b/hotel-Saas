@@ -31,6 +31,9 @@ import {
   X,
   CreditCard,
   Hash,
+  Globe,
+  Trash2,
+  Copy,
 } from 'lucide-react';
 import { superAdminApi, authStorage } from '@/lib/api';
 
@@ -135,8 +138,17 @@ export default function SuperAdminPortalPage() {
   // Manage Tenant Modal State
   const [manageModalOpen, setManageModalOpen] = useState(false);
   const [managingTenant, setManagingTenant] = useState<TenantItem | null>(null);
-  const [activeTab, setActiveTab] = useState<'modules' | 'subscription' | 'security'>('modules');
+  const [activeTab, setActiveTab] = useState<'modules' | 'subscription' | 'domains' | 'security'>('modules');
   const [savingChanges, setSavingChanges] = useState(false);
+
+  // Tenant Custom Domains State
+  const [tenantDomains, setTenantDomains] = useState<any[]>([]);
+  const [defaultSubdomain, setDefaultSubdomain] = useState('');
+  const [loadingDomains, setLoadingDomains] = useState(false);
+  const [newDomainInput, setNewDomainInput] = useState('');
+  const [newDomainIsPrimary, setNewDomainIsPrimary] = useState(false);
+  const [addingDomain, setAddingDomain] = useState(false);
+  const [domainActionLoading, setDomainActionLoading] = useState<string | null>(null);
 
   // Tenant Edit Buffers
   const [editModules, setEditModules] = useState<string[]>([]);
@@ -275,8 +287,97 @@ export default function SuperAdminPortalPage() {
       expiresAt: t.expiresAt ? t.expiresAt.substring(0, 10) : '',
     });
     setResetPasswordVal('');
+    setNewDomainInput('');
+    setNewDomainIsPrimary(false);
     setActiveTab('modules');
+    loadTenantDomains(t.id);
     setManageModalOpen(true);
+  };
+
+  const loadTenantDomains = async (tenantId: string) => {
+    setLoadingDomains(true);
+    try {
+      const res = await superAdminApi.getTenantDomains(tenantId);
+      setTenantDomains(res.domains || []);
+      setDefaultSubdomain(res.defaultSubdomain || '');
+    } catch (err: any) {
+      console.error('Failed to load tenant domains', err);
+    } finally {
+      setLoadingDomains(false);
+    }
+  };
+
+  const handleAddDomain = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!managingTenant || !newDomainInput.trim()) return;
+    setAddingDomain(true);
+    try {
+      await superAdminApi.addTenantDomain(
+        managingTenant.id,
+        newDomainInput.trim(),
+        newDomainIsPrimary
+      );
+      setFeedback({
+        type: 'success',
+        text: `Custom domain "${newDomainInput.trim()}" successfully attached to "${managingTenant.name}".`,
+      });
+      setNewDomainInput('');
+      setNewDomainIsPrimary(false);
+      await loadTenantDomains(managingTenant.id);
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        text: err.message || 'Failed to add custom domain',
+      });
+    } finally {
+      setAddingDomain(false);
+    }
+  };
+
+  const handleDeleteDomain = async (domainId: string, domainName: string) => {
+    if (!managingTenant) return;
+    if (
+      !confirm(
+        `Are you sure you want to remove custom domain "${domainName}" from this hotel?`
+      )
+    )
+      return;
+    setDomainActionLoading(domainId);
+    try {
+      await superAdminApi.deleteTenantDomain(managingTenant.id, domainId);
+      setFeedback({
+        type: 'success',
+        text: `Domain "${domainName}" removed successfully.`,
+      });
+      await loadTenantDomains(managingTenant.id);
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        text: err.message || 'Failed to remove domain',
+      });
+    } finally {
+      setDomainActionLoading(null);
+    }
+  };
+
+  const handleSetPrimaryDomain = async (domainId: string) => {
+    if (!managingTenant) return;
+    setDomainActionLoading(domainId);
+    try {
+      await superAdminApi.setPrimaryDomain(managingTenant.id, domainId);
+      setFeedback({
+        type: 'success',
+        text: 'Primary domain updated successfully.',
+      });
+      await loadTenantDomains(managingTenant.id);
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        text: err.message || 'Failed to set primary domain',
+      });
+    } finally {
+      setDomainActionLoading(null);
+    }
   };
 
   const handleSaveModules = async () => {
@@ -1249,6 +1350,18 @@ export default function SuperAdminPortalPage() {
               </button>
 
               <button
+                onClick={() => setActiveTab('domains')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                  activeTab === 'domains'
+                    ? 'bg-[#00C48C] text-white shadow-xs'
+                    : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>Custom Domains ({tenantDomains.length})</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('security')}
                 className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
                   activeTab === 'security'
@@ -1487,6 +1600,202 @@ export default function SuperAdminPortalPage() {
                   >
                     {savingChanges ? 'Saving Plan...' : 'Save Plan & Quotas'}
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: CUSTOM DOMAINS */}
+            {activeTab === 'domains' && (
+              <div className="space-y-5 text-xs">
+                {/* Default Subdomain Card */}
+                <div className="p-4 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-[#64748B] mb-1">
+                      Default Platform Subdomain
+                    </div>
+                    <div className="text-sm font-extrabold text-[#0F172A] flex items-center gap-2">
+                      <span>
+                        {defaultSubdomain ||
+                          `${managingTenant.slug}.hotelia.tenura.tech`}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                        Active
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = `https://${
+                          defaultSubdomain ||
+                          `${managingTenant.slug}.hotelia.tenura.tech`
+                        }`;
+                        navigator.clipboard?.writeText(url);
+                        alert(`Copied ${url} to clipboard!`);
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-[#CBD5E1] bg-white hover:bg-[#F1F5F9] text-[#334155] font-semibold flex items-center gap-1.5 transition"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy URL</span>
+                    </button>
+                    <a
+                      href={`https://${
+                        defaultSubdomain ||
+                        `${managingTenant.slug}.hotelia.tenura.tech`
+                      }`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-xl bg-[#00C48C] hover:bg-[#00B07D] text-white font-bold flex items-center gap-1.5 transition"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Open</span>
+                    </a>
+                  </div>
+                </div>
+
+                {/* Add Custom Domain Form */}
+                <form
+                  onSubmit={handleAddDomain}
+                  className="p-4 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs space-y-3"
+                >
+                  <div className="font-bold text-[#0F172A] flex items-center gap-1.5">
+                    <Plus className="w-4 h-4 text-[#00C48C]" />
+                    <span>Attach New Custom White-Label Domain</span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="flex-1 relative">
+                      <Globe className="w-4 h-4 text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="e.g. pms.grandazurehotel.com"
+                        value={newDomainInput}
+                        onChange={(e) => setNewDomainInput(e.target.value)}
+                        className="w-full pl-9 pr-3.5 py-2.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#0F172A] placeholder-[#94A3B8] focus:bg-white focus:outline-none focus:border-[#00C48C]"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-[#334155] font-medium cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={newDomainIsPrimary}
+                        onChange={(e) =>
+                          setNewDomainIsPrimary(e.target.checked)
+                        }
+                        className="rounded text-[#00C48C] focus:ring-[#00C48C]"
+                      />
+                      <span>Make Primary</span>
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={addingDomain || !newDomainInput.trim()}
+                      className="px-5 py-2.5 rounded-xl bg-[#0F172A] hover:bg-[#1E293B] text-white font-bold shadow-xs transition disabled:opacity-50 shrink-0"
+                    >
+                      {addingDomain ? 'Attaching...' : 'Attach Domain'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-[#64748B]">
+                    Enter the Fully Qualified Domain Name (FQDN) without
+                    http/https.
+                  </p>
+                </form>
+
+                {/* Attached Custom Domains List */}
+                <div className="space-y-2">
+                  <div className="font-bold text-[#0F172A] text-xs flex items-center justify-between">
+                    <span>
+                      Active White-Label Domains ({tenantDomains.length})
+                    </span>
+                    {loadingDomains && (
+                      <RefreshCw className="w-3.5 h-3.5 text-[#00C48C] animate-spin" />
+                    )}
+                  </div>
+
+                  {tenantDomains.length === 0 ? (
+                    <div className="p-6 rounded-2xl border border-dashed border-[#CBD5E1] text-center text-[#94A3B8]">
+                      <Globe className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <div className="font-semibold text-xs text-[#64748B]">
+                        No custom domains attached
+                      </div>
+                      <div className="text-[11px] mt-0.5">
+                        This hotel is currently using the default subdomain.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {tenantDomains.map((d) => (
+                        <div
+                          key={d.id}
+                          className="p-3.5 rounded-2xl bg-white border border-[#E2E8F0] shadow-2xs flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#00C48C] flex items-center justify-center shrink-0 border border-emerald-100">
+                              <Globe className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-[#0F172A] truncate flex items-center gap-2">
+                                <span>{d.domain}</span>
+                                {d.isPrimary && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]">
+                                    PRIMARY
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-[#64748B]">
+                                Added on{' '}
+                                {new Date(d.createdAt).toLocaleDateString()} •
+                                Verified CNAME
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {!d.isPrimary && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetPrimaryDomain(d.id)}
+                                disabled={domainActionLoading === d.id}
+                                className="px-2.5 py-1 rounded-lg border border-[#CBD5E1] hover:bg-[#F8FAFC] text-[11px] font-semibold text-[#475569] transition"
+                              >
+                                Set Primary
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDeleteDomain(d.id, d.domain)
+                              }
+                              disabled={domainActionLoading === d.id}
+                              className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 transition"
+                              title="Delete custom domain"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* DNS Instructions Callout */}
+                <div className="p-4 rounded-2xl bg-sky-50/70 border border-sky-200 text-sky-950 space-y-1.5">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-sky-600" />
+                    <span>DNS Configuration Guide</span>
+                  </div>
+                  <p className="text-[11px] text-sky-900/80 leading-relaxed">
+                    Instruct the client's DNS administrator to add a{' '}
+                    <strong>CNAME</strong> record pointing their custom hostname
+                    to:
+                  </p>
+                  <div className="p-2 rounded-xl bg-white/90 border border-sky-200 font-mono text-[11px] text-sky-900 flex items-center justify-between">
+                    <span>
+                      CNAME &rarr; <strong>hotelia.tenura.tech</strong>
+                    </span>
+                    <span className="text-[10px] text-[#64748B]">
+                      TTL: Auto / 3600
+                    </span>
+                  </div>
                 </div>
               </div>
             )}

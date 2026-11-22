@@ -18,6 +18,7 @@ import { SuperAdminModule } from './super-admin/super-admin.module';
 import { BarModule } from './bar/bar.module';
 import {
   Tenant,
+  TenantDomain,
   Property,
   User,
   POSOutlet,
@@ -106,6 +107,7 @@ import { HrmModule } from './hrm/hrm.module';
       database: process.env.DB_DATABASE || 'hotel_saas',
       entities: [
         Tenant,
+        TenantDomain,
         Property,
         User,
         POSOutlet,
