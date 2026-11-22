@@ -1,6 +1,8 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
+import { getTenantSlugFromHost } from './tenant';
+
 export interface UserSession {
   id: string;
   username: string;
@@ -272,6 +274,15 @@ export async function apiRequest<T = any>(
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Attach tenant slug if detected from host/subdomain or active tenant session
+  const activeTenantSlug =
+    (typeof window !== 'undefined' ? getTenantSlugFromHost() : null) ||
+    authStorage.getTenant()?.slug;
+
+  if (activeTenantSlug && !headers['X-Tenant-Slug']) {
+    headers['X-Tenant-Slug'] = activeTenantSlug;
   }
 
   const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;

@@ -18,9 +18,11 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { authApi } from '@/lib/api';
+import { useTenantBranding } from '@/lib/tenant';
 
 export default function AuthCard() {
   const router = useRouter();
+  const { tenant, isCustomTenant } = useTenantBranding();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,10 +86,12 @@ export default function AuthCard() {
             </div>
             <div>
               <span className="text-xl font-extrabold tracking-tight text-white">
-                ninth<span className="text-[#00C48C]">.</span>hotel
+                {isCustomTenant ? tenant?.name : (
+                  <>ninth<span className="text-[#00C48C]">.</span>hotel</>
+                )}
               </span>
               <span className="block text-[10px] uppercase font-bold tracking-widest text-emerald-200">
-                Hospitality Cloud
+                {isCustomTenant ? (tenant?.propertyName ? `${tenant.propertyName} • Operations` : 'Hotel Staff Portal') : 'Hospitality Cloud'}
               </span>
             </div>
           </div>
@@ -97,14 +101,16 @@ export default function AuthCard() {
         <div className="relative z-10 my-auto py-8">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/15 backdrop-blur-md text-emerald-100 border border-white/20 mb-4">
             <ShieldCheck className="w-3.5 h-3.5 text-[#00C48C]" />
-            <span>Enterprise Hospitality OS</span>
+            <span>{isCustomTenant ? `${tenant?.name} Command Center` : 'Enterprise Hospitality OS'}</span>
           </div>
 
           <h2 className="text-3xl lg:text-4xl font-extrabold tracking-tight text-white leading-tight mb-3">
-            Hotel Command &amp; Operations Center
+            {isCustomTenant ? `${tenant?.name}` : 'Hotel Command & Operations Center'}
           </h2>
           <p className="text-sm text-emerald-100/85 leading-relaxed max-w-md">
-            Unified operations console for front desk, room reservations, high-speed POS terminals, bar inventory, kitchen displays, and live financial revenue.
+            {isCustomTenant
+              ? `Unified property management console for ${tenant?.propertyName || 'front desk'}, room reservations, table POS, kitchen orders, and staff operations.`
+              : 'Unified operations console for front desk, room reservations, high-speed POS terminals, bar inventory, kitchen displays, and live financial revenue.'}
           </p>
         </div>
 
@@ -154,15 +160,32 @@ export default function AuthCard() {
         <div className="mb-6">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F1F5F9] text-[#475569] text-[11px] font-semibold mb-3">
             <Lock className="w-3 h-3 text-[#00C48C]" />
-            <span>Secure Personnel Sign-In</span>
+            <span>{isCustomTenant ? `${tenant?.name} Staff Portal` : 'Secure Personnel Sign-In'}</span>
           </div>
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-[#0F172A] mb-1">
-            Welcome Back
+            {isCustomTenant ? `Welcome to ${tenant?.name}` : 'Welcome Back'}
           </h1>
           <p className="text-xs text-[#64748B]">
-            Enter your credentials to access your hotel management console.
+            {isCustomTenant
+              ? `Enter your authorized staff credentials for ${tenant?.propertyName || 'this hotel property'}.`
+              : 'Enter your credentials to access your hotel management console.'}
           </p>
         </div>
+
+        {/* Hotel Property White-Label Indicator */}
+        {isCustomTenant && (
+          <div className="mb-5 p-3 rounded-xl bg-[#F0FDF4] border border-[#BBF7D0] flex items-center gap-2.5 text-xs text-[#166534]">
+            <Building2 className="w-4 h-4 text-[#00C48C] shrink-0" />
+            <div className="flex-1 truncate">
+              <span className="font-bold">{tenant?.name}</span>
+              {tenant?.propertyName && <span className="text-[#15803D]"> • {tenant.propertyName}</span>}
+              {tenant?.currency && <span className="text-[#16a34a] font-medium"> ({tenant.currency})</span>}
+            </div>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#DCFCE7] text-[#15803D] uppercase tracking-wider">
+              {tenant?.subscriptionTier || 'Verified'}
+            </span>
+          </div>
+        )}
 
         {/* Error Alert */}
         {error && (

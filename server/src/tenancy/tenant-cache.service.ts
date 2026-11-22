@@ -83,6 +83,35 @@ export class TenantCacheService {
   }
 
   /**
+   * Resolves public tenant information for client branding & white-labeling.
+   */
+  async getPublicTenantInfo(query: { slug?: string; domain?: string; id?: string }) {
+    let context: TenantContext | null = null;
+    if (query.slug) {
+      context = await this.getTenantContextBySlug(query.slug);
+    } else if (query.domain) {
+      context = await this.getTenantContextByDomain(query.domain);
+    } else if (query.id) {
+      context = await this.getTenantContextById(query.id);
+    }
+
+    if (!context || context.status !== TenantStatus.ACTIVE) {
+      return null;
+    }
+
+    return {
+      id: context.tenantId,
+      name: context.name,
+      slug: context.slug,
+      status: context.status,
+      subscriptionTier: context.subscriptionTier,
+      propertyName: context.property?.name,
+      currency: context.property?.currency || 'LKR',
+      timezone: context.property?.timezone || 'Asia/Colombo',
+    };
+  }
+
+  /**
    * Invalidate tenant cache across all keys when settings, plan, or status change.
    */
   async invalidateTenant(tenantId: string): Promise<void> {

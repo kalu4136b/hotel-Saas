@@ -430,12 +430,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
         {/* Brand Section */}
         <div className="flex items-center gap-2.5 px-2 mb-5">
-          <div className="w-8 h-8 rounded-xl bg-[#00C48C] text-white flex items-center justify-center shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-[#00C48C] text-white flex items-center justify-center shadow-xs shrink-0">
             <Building2 className="w-4 h-4 text-white" />
           </div>
-          <span className="text-base font-extrabold tracking-tight text-[#0F172A]">
-            ninth<span className="text-[#00C48C]">.</span>hotel
-          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-extrabold tracking-tight text-[#0F172A] truncate">
+              {tenant?.name || (
+                <>ninth<span className="text-[#00C48C]">.</span>hotel</>
+              )}
+            </div>
+            <div className="text-[10px] font-semibold text-[#64748B] truncate">
+              {property?.name || 'Hotel Command Center'}
+            </div>
+          </div>
         </div>
 
         {/* Platform Super Admin Console Banner */}
