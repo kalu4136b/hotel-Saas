@@ -11,6 +11,7 @@ import { LoginDto } from './dto/login.dto';
 import { TenantStatus } from '../entities/tenant.entity';
 import { User } from '../entities/user.entity';
 import { resolveUserPermissions } from './permissions';
+import { RedisService } from '../redis/redis.service';
 
 interface LoginAttemptRecord {
   count: number;
@@ -29,6 +30,7 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly dataSource: DataSource,
+    private readonly redis: RedisService,
   ) {}
 
   private checkRateLimit(key: string): void {
@@ -176,9 +178,13 @@ export class AuthService {
 
   async logout(userId: string) {
     if (userId) {
-      await this.dataSource
-        .getRepository(User)
-        .increment({ id: userId }, 'tokenVersion', 1);
+      await Promise.all([
+        this.dataSource
+          .getRepository(User)
+          .increment({ id: userId }, 'tokenVersion', 1),
+        this.redis.del(`auth:session:${userId}`),
+        this.redis.incr(`auth:user:${userId}:tv`),
+      ]);
     }
     return {
       success: true,

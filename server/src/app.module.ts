@@ -1,6 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { RedisModule } from './redis/redis.module';
+import { TenancyModule } from './tenancy/tenant.module';
+import { TenantResolverMiddleware } from './tenancy/tenant-resolver.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -175,6 +178,8 @@ import { HrmModule } from './hrm/hrm.module';
       synchronize: true,
       logging: ['error', 'warn'],
     }),
+    RedisModule,
+    TenancyModule,
     AuthModule,
     DashboardModule,
     PosModule,
@@ -192,5 +197,9 @@ import { HrmModule } from './hrm/hrm.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TenantResolverMiddleware).forRoutes('*');
+  }
+}
 

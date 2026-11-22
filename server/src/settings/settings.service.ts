@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { Property } from '../entities/property.entity';
 import { User, UserRole } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import { TenantCacheService } from '../tenancy/tenant-cache.service';
 import {
   SYSTEM_PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
@@ -17,7 +18,10 @@ import {
 
 @Injectable()
 export class SettingsService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly tenantCache: TenantCacheService,
+  ) {}
 
   // 1. Get Property Settings
   async getProperty(tenantId: string, propertyId: string) {
@@ -58,6 +62,9 @@ export class SettingsService {
     if (dto.serviceChargeRate !== undefined) property.serviceChargeRate = Number(dto.serviceChargeRate);
 
     const updated = await propRepo.save(property);
+
+    // Invalidate tenant & property config cache in Redis
+    await this.tenantCache.invalidateTenant(tenantId);
 
     // Audit log
     await this.dataSource.getRepository(AuditLog).save({

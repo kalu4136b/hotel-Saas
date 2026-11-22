@@ -24,6 +24,7 @@ import {
   PricingPackageDefinition,
 } from './packages.config';
 import { syncAiEntitlementWithPlan } from '../ai-assistant/services/ai-entitlement.service';
+import { TenantCacheService } from '../tenancy/tenant-cache.service';
 
 export class CreateTenantDto {
   name: string;
@@ -55,7 +56,10 @@ export class UpdateTenantSubscriptionDto {
 
 @Injectable()
 export class SuperAdminService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly tenantCache: TenantCacheService,
+  ) {}
 
   getPackagesConfig() {
     return {
@@ -435,6 +439,9 @@ export class SuperAdminService {
     tenant.modules = modules;
     await tenantRepo.save(tenant);
 
+    // Invalidate tenant cache in Redis for real-time feature flag sync
+    await this.tenantCache.invalidateTenant(id);
+
     return {
       success: true,
       id: tenant.id,
@@ -473,6 +480,9 @@ export class SuperAdminService {
     }
 
     await tenantRepo.save(tenant);
+
+    // Invalidate tenant cache in Redis for real-time subscription & status sync
+    await this.tenantCache.invalidateTenant(id);
 
     // Keep AI Co-Pilot entitlement (tier, providers, quotas) aligned with the new plan
     if (dto.subscriptionPlan) {
