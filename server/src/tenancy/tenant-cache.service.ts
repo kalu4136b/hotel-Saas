@@ -218,6 +218,8 @@ export class TenantCacheService {
       : undefined;
 
     const isEnterprise = tenant.subscriptionTier === SubscriptionTier.ENTERPRISE;
+    const effectiveStorageMode = tenant.storageMode || (isEnterprise ? 'DEDICATED' : 'SHARED');
+
     const context: TenantContext = {
       tenantId: tenant.id,
       slug: tenant.slug,
@@ -229,9 +231,14 @@ export class TenantCacheService {
       maxRooms: tenant.maxRooms,
       maxStaff: tenant.maxStaff,
       expiresAt: tenant.expiresAt ? new Date(tenant.expiresAt).toISOString() : null,
-      storageMode: isEnterprise ? 'DEDICATED' : 'SHARED',
+      storageMode: effectiveStorageMode,
       propertyId: defaultPropertyConfig?.id,
       property: defaultPropertyConfig,
+      dbHost: tenant.dbHost || undefined,
+      dbPort: tenant.dbPort || undefined,
+      dbName: tenant.dbDatabaseName || undefined,
+      dbUser: tenant.dbUsername || undefined,
+      dbPassword: tenant.dbPassword || undefined,
     };
 
     // Cache in Redis

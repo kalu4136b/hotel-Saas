@@ -110,4 +110,24 @@ export class SuperAdminController {
   ) {
     return this.superAdminService.setPrimaryDomain(id, domainId);
   }
+
+  // ================= TENANT DATABASE / HYBRID ISOLATION =================
+
+  @Get('tenants/:id/database')
+  getTenantDatabaseInfo(@Param('id') id: string) {
+    return this.superAdminService.getTenantDatabaseInfo(id);
+  }
+
+  @Post('tenants/:id/database/provision')
+  provisionDedicatedDatabase(
+    @Param('id') id: string,
+    @Body('dbName') dbName?: string,
+  ) {
+    return this.superAdminService.provisionAndIsolateExistingTenant(id, dbName);
+  }
+
+  @Post('tenants/:id/database/sync-schema')
+  syncTenantDatabaseSchema(@Param('id') id: string) {
+    return this.superAdminService.syncTenantDatabaseSchema(id);
+  }
 }

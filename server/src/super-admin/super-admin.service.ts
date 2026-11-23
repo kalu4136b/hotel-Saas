@@ -26,6 +26,8 @@ import {
 } from './packages.config';
 import { syncAiEntitlementWithPlan } from '../ai-assistant/services/ai-entitlement.service';
 import { TenantCacheService } from '../tenancy/tenant-cache.service';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
+import { tenantOperationalEntities } from '../database/tenant-entities';
 
 export class CreateTenantDto {
   name: string;
@@ -43,6 +45,12 @@ export class CreateTenantDto {
   adminEmail: string;
   adminPhone?: string;
   adminPassword: string;
+  storageMode?: 'SHARED' | 'DEDICATED';
+  dbHost?: string;
+  dbPort?: number;
+  dbDatabaseName?: string;
+  dbUsername?: string;
+  dbPassword?: string;
 }
 
 export class UpdateTenantSubscriptionDto {
@@ -60,6 +68,7 @@ export class SuperAdminService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly tenantCache: TenantCacheService,
+    private readonly tenantConnectionManager: TenantConnectionManager,
   ) {}
 
   getPackagesConfig() {
@@ -324,7 +333,24 @@ export class SuperAdminService {
           ? pkg?.annualPrice || 0
           : pkg?.monthlyPrice || 0;
 
-      // 4. Create Tenant
+      // 4. Provision Dedicated Database if DEDICATED storage mode is requested
+      let dedicatedDbName: string | null = null;
+      if (dto.storageMode === 'DEDICATED') {
+        const rawTargetDb =
+          dto.dbDatabaseName?.trim().toLowerCase() ||
+          `hotel_${uniqueSlug.replace(/[^a-z0-9_]/g, '_')}_db`;
+        const provision =
+          await this.tenantConnectionManager.provisionDedicatedDatabase({
+            dbName: rawTargetDb,
+            host: dto.dbHost,
+            port: dto.dbPort,
+            username: dto.dbUsername,
+            password: dto.dbPassword,
+          });
+        dedicatedDbName = provision.dbName;
+      }
+
+      // 5. Create Tenant in Master Catalog
       const tenant = queryRunner.manager.create(Tenant, {
         name: dto.name.trim(),
         slug: uniqueSlug,
@@ -341,6 +367,12 @@ export class SuperAdminService {
         billingCycle: dto.billingCycle || 'MONTHLY',
         maxRooms: dto.maxRooms ?? (pkg?.maxRooms || null),
         maxStaff: dto.maxStaff ?? (pkg?.maxStaff || null),
+        storageMode: dto.storageMode || 'SHARED',
+        dbDatabaseName: dedicatedDbName,
+        dbHost: dto.dbHost || null,
+        dbPort: dto.dbPort || 3306,
+        dbUsername: dto.dbUsername || null,
+        dbPassword: dto.dbPassword || null,
       } as any);
       const savedTenant = await queryRunner.manager.save(tenant);
 
@@ -405,6 +437,32 @@ export class SuperAdminService {
       await queryRunner.manager.save(audit);
 
       await queryRunner.commitTransaction();
+
+      // 9. Replicate initial Property, Outlet, and Admin User into Dedicated DB if provisioned
+      if (dedicatedDbName) {
+        try {
+          const dedicatedDs = await this.tenantConnectionManager.getDataSource({
+            tenantId: savedTenant.id,
+            slug: savedTenant.slug,
+            name: savedTenant.name,
+            status: savedTenant.status,
+            subscriptionTier: savedTenant.subscriptionTier,
+            subscriptionPlan: savedTenant.subscriptionPlan,
+            modules: savedTenant.modules,
+            storageMode: 'DEDICATED',
+            dbName: dedicatedDbName,
+            dbHost: savedTenant.dbHost || undefined,
+            dbPort: savedTenant.dbPort || undefined,
+            dbUser: savedTenant.dbUsername || undefined,
+            dbPassword: savedTenant.dbPassword || undefined,
+          });
+          await dedicatedDs.getRepository(Property).save(savedProperty);
+          await dedicatedDs.getRepository(POSOutlet).save(outlet);
+          await dedicatedDs.getRepository(User).save(savedUser);
+        } catch (e: any) {
+          console.warn('Failed to replicate initial records to dedicated DB:', e.message);
+        }
+      }
 
       return {
         success: true,
@@ -627,5 +685,128 @@ export class SuperAdminService {
       success: true,
       domain: target,
     };
+  }
+
+  // ================= TENANT DATABASE INFRASTRUCTURE =================
+
+  async getTenantDatabaseInfo(tenantId: string) {
+    const tenant = await this.dataSource.getRepository(Tenant).findOne({
+      where: { id: tenantId },
+    });
+    if (!tenant) throw new NotFoundException(`Tenant with ID ${tenantId} not found`);
+
+    const isDedicated = tenant.storageMode === 'DEDICATED';
+    const dbName = isDedicated
+      ? tenant.dbDatabaseName || `hotel_${tenant.slug}_db`
+      : process.env.DB_DATABASE || 'hotel_saas';
+
+    let tableCount = 0;
+    try {
+      const res = await this.dataSource.query(
+        `SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = ?`,
+        [dbName]
+      );
+      tableCount = Number(res[0]?.count || 0);
+    } catch {
+      // ignore
+    }
+
+    return {
+      tenantId: tenant.id,
+      tenantName: tenant.name,
+      tenantSlug: tenant.slug,
+      storageMode: tenant.storageMode || 'SHARED',
+      isDedicated,
+      dbDatabaseName: dbName,
+      dbHost: tenant.dbHost || process.env.DB_HOST || '127.0.0.1',
+      dbPort: tenant.dbPort || Number(process.env.DB_PORT) || 3306,
+      tableCount,
+      status: 'ONLINE',
+    };
+  }
+
+  async provisionAndIsolateExistingTenant(tenantId: string, customDbName?: string) {
+    const tenantRepo = this.dataSource.getRepository(Tenant);
+    const tenant = await tenantRepo.findOne({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException(`Tenant with ID ${tenantId} not found`);
+
+    if (tenant.storageMode === 'DEDICATED' && tenant.dbDatabaseName) {
+      return {
+        success: true,
+        alreadyIsolated: true,
+        dbName: tenant.dbDatabaseName,
+        message: `Tenant is already isolated in database "${tenant.dbDatabaseName}".`,
+      };
+    }
+
+    const rawTargetDb =
+      customDbName?.trim().toLowerCase() ||
+      `hotel_${tenant.slug.replace(/[^a-z0-9_]/g, '_')}_db`;
+
+    // 1. Provision new database schema and all 50+ tables
+    const provision = await this.tenantConnectionManager.provisionDedicatedDatabase({
+      dbName: rawTargetDb,
+    });
+
+    // 2. Connect to the new dedicated database
+    const dedicatedDs = await this.tenantConnectionManager.getDataSource({
+      tenantId: tenant.id,
+      slug: tenant.slug,
+      name: tenant.name,
+      status: tenant.status,
+      subscriptionTier: tenant.subscriptionTier,
+      subscriptionPlan: tenant.subscriptionPlan,
+      modules: tenant.modules,
+      storageMode: 'DEDICATED',
+      dbName: provision.dbName,
+    });
+
+    // 3. Migrate all existing operational rows from shared pool into the new database
+    let migratedTables = 0;
+    for (const entityClass of tenantOperationalEntities) {
+      try {
+        const rows = await this.dataSource.getRepository(entityClass as any).find({
+          where: { tenantId } as any,
+        });
+        if (rows && rows.length > 0) {
+          await dedicatedDs.getRepository(entityClass as any).save(rows);
+          migratedTables++;
+        }
+      } catch (err: any) {
+        // Continue with other entities
+      }
+    }
+
+    // 4. Update tenant in Master DB
+    tenant.storageMode = 'DEDICATED';
+    tenant.dbDatabaseName = provision.dbName;
+    await tenantRepo.save(tenant);
+
+    // 5. Invalidate Redis cache so routing switches instantly
+    await this.tenantCache.invalidateTenant(tenantId);
+
+    return {
+      success: true,
+      dbName: provision.dbName,
+      tablesCreated: provision.tablesCreated,
+      migratedEntities: migratedTables,
+      message: `Tenant "${tenant.name}" successfully upgraded and isolated to dedicated database "${provision.dbName}".`,
+    };
+  }
+
+  async syncTenantDatabaseSchema(tenantId: string) {
+    const tenant = await this.dataSource.getRepository(Tenant).findOne({
+      where: { id: tenantId },
+    });
+    if (!tenant) throw new NotFoundException(`Tenant with ID ${tenantId} not found`);
+
+    if (tenant.storageMode !== 'DEDICATED' || !tenant.dbDatabaseName) {
+      throw new BadRequestException('Tenant is on shared pool database. Schema is automatically managed by master.');
+    }
+
+    const context = await this.tenantCache.getTenantContextById(tenantId);
+    if (!context) throw new NotFoundException('Tenant context not resolved');
+
+    return this.tenantConnectionManager.syncDedicatedDatabaseSchema(context);
   }
 }

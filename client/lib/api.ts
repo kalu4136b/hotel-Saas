@@ -1125,6 +1125,12 @@ export const superAdminApi = {
     adminEmail: string;
     adminPhone?: string;
     adminPassword: string;
+    storageMode?: 'SHARED' | 'DEDICATED';
+    dbHost?: string;
+    dbPort?: number;
+    dbDatabaseName?: string;
+    dbUsername?: string;
+    dbPassword?: string;
   }) {
     return apiRequest('/api/super-admin/tenants', {
       method: 'POST',
@@ -1198,6 +1204,46 @@ export const superAdminApi = {
   async setPrimaryDomain(id: string, domainId: string) {
     return apiRequest(`/api/super-admin/tenants/${id}/domains/${domainId}/primary`, {
       method: 'PUT',
+    });
+  },
+
+  async getTenantDatabase(id: string) {
+    return apiRequest<{
+      tenantId: string;
+      storageMode: 'SHARED' | 'DEDICATED';
+      dbHost: string | null;
+      dbPort: number | null;
+      dbDatabaseName: string | null;
+      dbUsername: string | null;
+      isDedicated: boolean;
+      resolvedDatabase: string;
+      status: 'ONLINE' | 'ERROR';
+      tableCount?: number;
+      error?: string;
+    }>(`/api/super-admin/tenants/${id}/database`, {
+      method: 'GET',
+    });
+  },
+
+  async provisionDedicatedDatabase(id: string, options?: { dbName?: string }) {
+    return apiRequest<{
+      success: boolean;
+      message: string;
+      databaseName: string;
+      tenant: any;
+    }>(`/api/super-admin/tenants/${id}/database/provision`, {
+      method: 'POST',
+      body: JSON.stringify(options || {}),
+    });
+  },
+
+  async syncTenantDatabaseSchema(id: string) {
+    return apiRequest<{
+      success: boolean;
+      message: string;
+      tableCount: number;
+    }>(`/api/super-admin/tenants/${id}/database/sync-schema`, {
+      method: 'POST',
     });
   },
 };

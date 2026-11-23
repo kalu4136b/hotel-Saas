@@ -66,6 +66,28 @@ export class Tenant {
   @Column({ type: 'datetime', nullable: true })
   expiresAt: Date;
 
+  @Column({
+    type: 'varchar',
+    length: 20,
+    default: 'SHARED',
+  })
+  storageMode: 'SHARED' | 'DEDICATED';
+
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  dbHost: string | null;
+
+  @Column({ type: 'int', default: 3306 })
+  dbPort: number;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  dbDatabaseName: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  dbUsername: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  dbPassword: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

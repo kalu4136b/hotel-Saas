@@ -34,6 +34,9 @@ import {
   Globe,
   Trash2,
   Copy,
+  Database,
+  Server,
+  HardDrive,
 } from 'lucide-react';
 import { superAdminApi, authStorage } from '@/lib/api';
 
@@ -65,6 +68,8 @@ interface TenantItem {
   userCount: number;
   propertyCount: number;
   roomCount: number;
+  storageMode?: 'SHARED' | 'DEDICATED';
+  dbDatabaseName?: string | null;
   admin: {
     id: string;
     fullName: string;
@@ -133,12 +138,14 @@ export default function SuperAdminPortalPage() {
     adminEmail: '',
     adminPhone: '',
     adminPassword: '',
+    storageMode: 'SHARED' as 'SHARED' | 'DEDICATED',
+    dbDatabaseName: '',
   });
 
   // Manage Tenant Modal State
   const [manageModalOpen, setManageModalOpen] = useState(false);
   const [managingTenant, setManagingTenant] = useState<TenantItem | null>(null);
-  const [activeTab, setActiveTab] = useState<'modules' | 'subscription' | 'domains' | 'security'>('modules');
+  const [activeTab, setActiveTab] = useState<'modules' | 'subscription' | 'domains' | 'database' | 'security'>('modules');
   const [savingChanges, setSavingChanges] = useState(false);
 
   // Tenant Custom Domains State
@@ -149,6 +156,13 @@ export default function SuperAdminPortalPage() {
   const [newDomainIsPrimary, setNewDomainIsPrimary] = useState(false);
   const [addingDomain, setAddingDomain] = useState(false);
   const [domainActionLoading, setDomainActionLoading] = useState<string | null>(null);
+
+  // Tenant Database Infra State
+  const [tenantDbInfo, setTenantDbInfo] = useState<any>(null);
+  const [loadingDbInfo, setLoadingDbInfo] = useState(false);
+  const [isolatingDb, setIsolatingDb] = useState(false);
+  const [syncingSchema, setSyncingSchema] = useState(false);
+  const [customDbNameInput, setCustomDbNameInput] = useState('');
 
   // Tenant Edit Buffers
   const [editModules, setEditModules] = useState<string[]>([]);
@@ -256,6 +270,11 @@ export default function SuperAdminPortalPage() {
         adminEmail: onboardForm.adminEmail,
         adminPhone: onboardForm.adminPhone || undefined,
         adminPassword: onboardForm.adminPassword,
+        storageMode: onboardForm.storageMode,
+        dbDatabaseName:
+          onboardForm.storageMode === 'DEDICATED'
+            ? onboardForm.dbDatabaseName.trim() || undefined
+            : undefined,
       });
 
       setOnboardModalOpen(false);
@@ -289,8 +308,10 @@ export default function SuperAdminPortalPage() {
     setResetPasswordVal('');
     setNewDomainInput('');
     setNewDomainIsPrimary(false);
+    setCustomDbNameInput(t.dbDatabaseName || `hotel_${t.slug.replace(/[^a-zA-Z0-9]/g, '_')}_db`);
     setActiveTab('modules');
     loadTenantDomains(t.id);
+    loadTenantDbInfo(t.id);
     setManageModalOpen(true);
   };
 
@@ -377,6 +398,75 @@ export default function SuperAdminPortalPage() {
       });
     } finally {
       setDomainActionLoading(null);
+    }
+  };
+
+  // ================= TENANT DATABASE / ISOLATION HANDLERS =================
+
+  const loadTenantDbInfo = async (tenantId: string) => {
+    setLoadingDbInfo(true);
+    try {
+      const res = await superAdminApi.getTenantDatabase(tenantId);
+      setTenantDbInfo(res);
+      if (res.dbDatabaseName) {
+        setCustomDbNameInput(res.dbDatabaseName);
+      }
+    } catch (err: any) {
+      console.error('Failed to load tenant database info', err);
+    } finally {
+      setLoadingDbInfo(false);
+    }
+  };
+
+  const handleIsolateTenantDb = async () => {
+    if (!managingTenant) return;
+    if (
+      !confirm(
+        `Are you sure you want to isolate "${managingTenant.name}" into its own dedicated database? This will automatically create the private MySQL database schema, synchronize all 50+ operational tables, and route this hotel to its dedicated storage.`
+      )
+    ) {
+      return;
+    }
+    setIsolatingDb(true);
+    setFeedback(null);
+    try {
+      const res = await superAdminApi.provisionDedicatedDatabase(managingTenant.id, {
+        dbName: customDbNameInput.trim() || undefined,
+      });
+      setFeedback({
+        type: 'success',
+        text: res.message || 'Dedicated database provisioned successfully!',
+      });
+      await loadTenantDbInfo(managingTenant.id);
+      await loadPlatformData();
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        text: err.message || 'Failed to isolate tenant database',
+      });
+    } finally {
+      setIsolatingDb(false);
+    }
+  };
+
+  const handleSyncSchema = async () => {
+    if (!managingTenant) return;
+    setSyncingSchema(true);
+    setFeedback(null);
+    try {
+      const res = await superAdminApi.syncTenantDatabaseSchema(managingTenant.id);
+      setFeedback({
+        type: 'success',
+        text: res.message || 'Database schema synchronized successfully!',
+      });
+      await loadTenantDbInfo(managingTenant.id);
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        text: err.message || 'Failed to synchronize schema',
+      });
+    } finally {
+      setSyncingSchema(false);
     }
   };
 
@@ -790,6 +880,19 @@ export default function SuperAdminPortalPage() {
                               <div className="font-bold text-[#0F172A] text-xs">{t.name}</div>
                               <div className="text-[10.5px] font-mono text-[#64748B]">
                                 /{t.slug}
+                              </div>
+                              <div className="mt-1 flex items-center gap-1.5">
+                                {t.storageMode === 'DEDICATED' ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                    <Database className="w-2.5 h-2.5" />
+                                    <span>Dedicated DB</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                    <Layers className="w-2.5 h-2.5" />
+                                    <span>Shared Pool</span>
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1271,6 +1374,146 @@ export default function SuperAdminPortalPage() {
                 </div>
               </div>
 
+              {/* Step 5: Multi-Tenancy Storage Architecture */}
+              <div className="space-y-3 pt-2">
+                <div className="text-xs font-black uppercase tracking-wider text-[#00C48C] flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[#ECFDF5] text-[#065F46] flex items-center justify-center text-[10px] font-bold">
+                    5
+                  </span>
+                  <span>Database Architecture & Isolation Mode</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  {/* Option 1: Shared Pool */}
+                  <label
+                    onClick={() =>
+                      setOnboardForm({
+                        ...onboardForm,
+                        storageMode: 'SHARED',
+                      })
+                    }
+                    className={`p-3.5 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                      onboardForm.storageMode === 'SHARED'
+                        ? 'bg-white border-[#00C48C] shadow-xs ring-2 ring-[#00C48C]/15'
+                        : 'bg-[#F8FAFC] border-[#E2E8F0] hover:border-[#CBD5E1]'
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Layers className="w-4 h-4 text-[#00C48C]" />
+                          <span className="font-bold text-[#0F172A] text-xs">Shared High-Density Pool</span>
+                        </div>
+                        <input
+                          type="radio"
+                          name="storageMode"
+                          checked={onboardForm.storageMode === 'SHARED'}
+                          onChange={() =>
+                            setOnboardForm({
+                              ...onboardForm,
+                              storageMode: 'SHARED',
+                            })
+                          }
+                          className="accent-[#00C48C]"
+                        />
+                      </div>
+                      <p className="text-[11px] text-[#64748B] leading-relaxed">
+                        Default pool (`hotel_saas`). Employs row-level tenancy isolation. Instantaneous onboarding, zero additional infrastructure overhead.
+                      </p>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-[#F1F5F9] flex items-center justify-between text-[10px]">
+                      <span className="font-semibold text-slate-500">Resource Footprint</span>
+                      <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">Economical</span>
+                    </div>
+                  </label>
+
+                  {/* Option 2: Dedicated Isolated Database */}
+                  <label
+                    onClick={() => {
+                      const autoName = `hotel_${(onboardForm.name || 'tenant')
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]/g, '_')
+                        .replace(/_+/g, '_')
+                        .slice(0, 30)}_db`;
+                      setOnboardForm({
+                        ...onboardForm,
+                        storageMode: 'DEDICATED',
+                        dbDatabaseName: onboardForm.dbDatabaseName || autoName,
+                      });
+                    }}
+                    className={`p-3.5 rounded-2xl border cursor-pointer transition flex flex-col justify-between ${
+                      onboardForm.storageMode === 'DEDICATED'
+                        ? 'bg-white border-amber-500 shadow-xs ring-2 ring-amber-500/15'
+                        : 'bg-[#F8FAFC] border-[#E2E8F0] hover:border-[#CBD5E1]'
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Database className="w-4 h-4 text-amber-500" />
+                          <span className="font-bold text-[#0F172A] text-xs">Isolated Dedicated Database</span>
+                        </div>
+                        <input
+                          type="radio"
+                          name="storageMode"
+                          checked={onboardForm.storageMode === 'DEDICATED'}
+                          onChange={() => {
+                            const autoName = `hotel_${(onboardForm.name || 'tenant')
+                              .toLowerCase()
+                              .replace(/[^a-z0-9]/g, '_')
+                              .replace(/_+/g, '_')
+                              .slice(0, 30)}_db`;
+                            setOnboardForm({
+                              ...onboardForm,
+                              storageMode: 'DEDICATED',
+                              dbDatabaseName: onboardForm.dbDatabaseName || autoName,
+                            });
+                          }}
+                          className="accent-amber-500"
+                        />
+                      </div>
+                      <p className="text-[11px] text-[#64748B] leading-relaxed">
+                        Automatic physical schema creation on MySQL. Dedicated schema, dedicated connection pool, zero cross-tenant contamination.
+                      </p>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-[#F1F5F9] flex items-center justify-between text-[10px]">
+                      <span className="font-semibold text-slate-500">Resource Footprint</span>
+                      <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">Enterprise Isolation</span>
+                    </div>
+                  </label>
+                </div>
+
+                {onboardForm.storageMode === 'DEDICATED' && (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between">
+                      <label className="text-amber-900 font-bold text-xs flex items-center gap-1.5">
+                        <Server className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Dedicated Database Name (Auto-Provisioned)</span>
+                      </label>
+                      <span className="text-[10px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md font-semibold">
+                        Zero manual DB creation needed
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. hotel_grand_horizon_db"
+                      value={onboardForm.dbDatabaseName}
+                      onChange={(e) =>
+                        setOnboardForm({
+                          ...onboardForm,
+                          dbDatabaseName: e.target.value,
+                        })
+                      }
+                      className="w-full px-3.5 py-2 bg-white border border-amber-300 rounded-xl text-[#0F172A] font-mono text-xs focus:outline-none focus:border-amber-500"
+                    />
+                    <div className="text-[11px] text-amber-800 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>The backend will execute <code>CREATE DATABASE</code> and build all 50+ tables automatically during onboarding.</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Submit Buttons */}
               <div className="pt-4 border-t border-[#F1F5F9] flex items-center justify-end gap-3">
                 <button
@@ -1359,6 +1602,18 @@ export default function SuperAdminPortalPage() {
               >
                 <Globe className="w-3.5 h-3.5" />
                 <span>Custom Domains ({tenantDomains.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('database')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 ${
+                  activeTab === 'database'
+                    ? 'bg-[#00C48C] text-white shadow-xs'
+                    : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
+                }`}
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>Database & Infra</span>
               </button>
 
               <button
@@ -1797,6 +2052,160 @@ export default function SuperAdminPortalPage() {
                     </span>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* TAB: DATABASE ARCHITECTURE & HYBRID ISOLATION */}
+            {activeTab === 'database' && (
+              <div className="space-y-5 text-xs">
+                {/* Status Overview Card */}
+                <div className="p-4 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-[#64748B] flex items-center gap-1.5">
+                      <Database className="w-3.5 h-3.5 text-[#00C48C]" />
+                      <span>Database Engine & Connection Info</span>
+                    </div>
+                    <button
+                      onClick={() => loadTenantDbInfo(managingTenant.id)}
+                      disabled={loadingDbInfo}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-[#CBD5E1] text-[#334155] font-semibold text-[11px] hover:bg-[#F1F5F9] transition flex items-center gap-1"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loadingDbInfo ? 'animate-spin text-[#00C48C]' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+
+                  {loadingDbInfo ? (
+                    <div className="py-6 flex items-center justify-center gap-2 text-[#94A3B8]">
+                      <RefreshCw className="w-4 h-4 animate-spin text-[#00C48C]" />
+                      <span>Checking database connectivity and schema...</span>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="p-3 rounded-xl bg-white border border-[#E2E8F0]">
+                        <div className="text-[10px] text-[#94A3B8] uppercase font-bold">Storage Mode</div>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          {tenantDbInfo?.isDedicated ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              <Database className="w-3 h-3" />
+                              Dedicated Database
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <Layers className="w-3 h-3" />
+                              Shared High-Density
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-white border border-[#E2E8F0]">
+                        <div className="text-[10px] text-[#94A3B8] uppercase font-bold">Active Schema / Database</div>
+                        <div className="mt-1 font-mono font-bold text-[#0F172A] text-xs truncate" title={tenantDbInfo?.resolvedDatabase}>
+                          {tenantDbInfo?.resolvedDatabase || 'hotel_saas'}
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-white border border-[#E2E8F0]">
+                        <div className="text-[10px] text-[#94A3B8] uppercase font-bold">Health & Tables</div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${tenantDbInfo?.status === 'ONLINE' ? 'bg-[#00C48C]' : 'bg-rose-500'}`} />
+                          <span className="font-bold text-[#0F172A]">{tenantDbInfo?.status || 'ONLINE'}</span>
+                          {tenantDbInfo?.tableCount !== undefined && (
+                            <span className="text-[#64748B] text-[11px]">({tenantDbInfo.tableCount} tables)</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {tenantDbInfo?.error && (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{tenantDbInfo.error}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Storage Mode Action: If SHARED, allow 1-Click Upgrade to Dedicated */}
+                {!tenantDbInfo?.isDedicated ? (
+                  <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3">
+                    <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                      <Sparkles className="w-4 h-4 text-amber-600" />
+                      <span>Upgrade: Isolate into a Dedicated Physical Database</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      This hotel is currently stored in the shared high-density pool. If this customer demands isolated single-tenant compliance, elevated security, or higher throughput, you can isolate them right now. The backend will execute <code>CREATE DATABASE</code> and build all 50+ relational tables automatically without server downtime.
+                    </p>
+
+                    <div className="space-y-1.5 pt-1">
+                      <label className="block text-amber-900 font-bold text-[11px]">
+                        Target MySQL Database Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. hotel_grand_horizon_db"
+                        value={customDbNameInput}
+                        onChange={(e) => setCustomDbNameInput(e.target.value)}
+                        className="w-full px-3.5 py-2 bg-white border border-amber-300 rounded-xl text-[#0F172A] font-mono text-xs focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-end">
+                      <button
+                        onClick={handleIsolateTenantDb}
+                        disabled={isolatingDb || !customDbNameInput.trim()}
+                        className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-xs transition flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {isolatingDb ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Creating DB & Syncing Schema...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Database className="w-3.5 h-3.5" />
+                            <span>Provision Dedicated Database Now</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* If already DEDICATED, show schema maintenance & verification */
+                  <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-3">
+                    <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Isolated Database Active & Operational</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      All POS, PMS, reservation, billing, kitchen, and inventory records for <strong>{managingTenant.name}</strong> are written exclusively to physical schema <code>{tenantDbInfo?.dbDatabaseName || tenantDbInfo?.resolvedDatabase}</code>. Dynamic connection pooling maintains up to 10 dedicated socket connections.
+                    </p>
+
+                    <div className="pt-2 flex items-center justify-between border-t border-emerald-200">
+                      <span className="text-[11px] text-emerald-700">
+                        Schema synchronizer ensures newly added feature columns or tables exist in this schema.
+                      </span>
+                      <button
+                        onClick={handleSyncSchema}
+                        disabled={syncingSchema}
+                        className="px-4 py-2 rounded-xl bg-[#00C48C] hover:bg-[#00B07D] text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {syncingSchema ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Verifying Tables...</span>
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Sync / Verify Schema</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
