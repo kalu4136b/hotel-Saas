@@ -97,6 +97,28 @@ async function runSeed() {
   const demoEmail = 'admin@hotel.com';
   let adminUser = await userRepo.findOne({ where: { email: demoEmail } });
 
+  // 0. Seed Developer Platform Super Admin if not present
+  const superAdminUsername = 'superadmin';
+  const existingSuperAdmin = await userRepo.findOne({
+    where: [{ username: superAdminUsername }, { email: 'superadmin@hotel.com' }],
+  });
+  if (!existingSuperAdmin) {
+    console.log('👑 Creating Developer Platform Super Admin (superadmin)...');
+    const superAdminPasswordHash = await bcrypt.hash('SuperAdmin123!', 10);
+    await userRepo.save(
+      userRepo.create({
+        email: 'superadmin@hotel.com',
+        username: superAdminUsername,
+        fullName: 'Platform Super Administrator',
+        role: UserRole.SUPER_ADMIN,
+        passwordHash: superAdminPasswordHash,
+        phone: '+1 555-0000',
+        isActive: true,
+      }),
+    );
+    console.log('✅ Developer Super Admin seeded: superadmin / SuperAdmin123!');
+  }
+
   let tenant: Tenant;
   let property: Property;
 
