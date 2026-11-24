@@ -18,6 +18,10 @@ import {
   SuperAdminService,
   CreateTenantDto,
   UpdateTenantSubscriptionDto,
+  UpdateTenantModulesDto,
+  ResetTenantPasswordDto,
+  AddTenantDomainDto,
+  ProvisionDedicatedDatabaseDto,
 } from './super-admin.service';
 
 @Controller('api/super-admin')
@@ -58,9 +62,9 @@ export class SuperAdminController {
   @Patch('tenants/:id/modules')
   updateTenantModules(
     @Param('id') id: string,
-    @Body('modules') modules: string[],
+    @Body() dto: UpdateTenantModulesDto,
   ) {
-    return this.superAdminService.updateTenantModules(id, modules);
+    return this.superAdminService.updateTenantModules(id, dto.modules);
   }
 
   @Patch('tenants/:id/subscription')
@@ -74,9 +78,9 @@ export class SuperAdminController {
   @Post('tenants/:id/reset-password')
   resetTenantAdminPassword(
     @Param('id') id: string,
-    @Body('newPassword') newPassword: string,
+    @Body() dto: ResetTenantPasswordDto,
   ) {
-    return this.superAdminService.resetTenantAdminPassword(id, newPassword);
+    return this.superAdminService.resetTenantAdminPassword(id, dto.newPassword);
   }
 
   // ================= TENANT DOMAIN MANAGEMENT =================
@@ -89,10 +93,9 @@ export class SuperAdminController {
   @Post('tenants/:id/domains')
   addTenantDomain(
     @Param('id') id: string,
-    @Body('domain') domain: string,
-    @Body('isPrimary') isPrimary?: boolean,
+    @Body() dto: AddTenantDomainDto,
   ) {
-    return this.superAdminService.addTenantDomain(id, domain, isPrimary);
+    return this.superAdminService.addTenantDomain(id, dto.domain, dto.isPrimary);
   }
 
   @Delete('tenants/:id/domains/:domainId')
@@ -121,9 +124,9 @@ export class SuperAdminController {
   @Post('tenants/:id/database/provision')
   provisionDedicatedDatabase(
     @Param('id') id: string,
-    @Body('dbName') dbName?: string,
+    @Body() dto: ProvisionDedicatedDatabaseDto,
   ) {
-    return this.superAdminService.provisionAndIsolateExistingTenant(id, dbName);
+    return this.superAdminService.provisionAndIsolateExistingTenant(id, dto?.dbName);
   }
 
   @Post('tenants/:id/database/sync-schema')

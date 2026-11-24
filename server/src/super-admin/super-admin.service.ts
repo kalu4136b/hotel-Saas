@@ -7,6 +7,17 @@ import {
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsArray,
+  IsEmail,
+  IsEnum,
+  IsBoolean,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import {
   Tenant,
   TenantDomain,
   Property,
@@ -30,37 +41,155 @@ import { TenantConnectionManager } from '../database/tenant-connection-manager.s
 import { tenantOperationalEntities } from '../database/tenant-entities';
 
 export class CreateTenantDto {
+  @IsNotEmpty({ message: 'Hotel name is required' })
+  @IsString()
   name: string;
+
+  @IsOptional()
+  @IsString()
   slug?: string;
+
+  @IsNotEmpty({ message: 'Subscription plan is required' })
+  @IsString()
   subscriptionPlan: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   modules?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   planPrice?: number;
+
+  @IsOptional()
+  @IsEnum(['MONTHLY', 'ANNUAL', 'LIFETIME'])
   billingCycle?: 'MONTHLY' | 'ANNUAL' | 'LIFETIME';
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   maxRooms?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   maxStaff?: number;
+
+  @IsOptional()
+  @IsString()
   propertyName?: string;
+
+  @IsOptional()
+  @IsString()
   currency?: string;
+
+  @IsNotEmpty({ message: 'Admin full name is required' })
+  @IsString()
   adminFullName: string;
+
+  @IsNotEmpty({ message: 'Admin username is required' })
+  @IsString()
   adminUsername: string;
+
+  @IsNotEmpty({ message: 'Admin email is required' })
+  @IsEmail({}, { message: 'A valid admin email is required' })
   adminEmail: string;
+
+  @IsOptional()
+  @IsString()
   adminPhone?: string;
+
+  @IsNotEmpty({ message: 'Admin password is required' })
+  @IsString()
   adminPassword: string;
+
+  @IsOptional()
+  @IsEnum(['SHARED', 'DEDICATED'])
   storageMode?: 'SHARED' | 'DEDICATED';
+
+  @IsOptional()
+  @IsString()
   dbHost?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   dbPort?: number;
+
+  @IsOptional()
+  @IsString()
   dbDatabaseName?: string;
+
+  @IsOptional()
+  @IsString()
   dbUsername?: string;
+
+  @IsOptional()
+  @IsString()
   dbPassword?: string;
 }
 
 export class UpdateTenantSubscriptionDto {
+  @IsOptional()
+  @IsString()
   subscriptionPlan?: string;
+
+  @IsOptional()
+  @IsEnum(TenantStatus)
   status?: TenantStatus;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   planPrice?: number;
+
+  @IsOptional()
+  @IsEnum(['MONTHLY', 'ANNUAL', 'LIFETIME'])
   billingCycle?: 'MONTHLY' | 'ANNUAL' | 'LIFETIME';
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   maxRooms?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
   maxStaff?: number;
+
+  @IsOptional()
+  @IsString()
   expiresAt?: string | null;
+}
+
+export class UpdateTenantModulesDto {
+  @IsArray()
+  @IsString({ each: true })
+  modules: string[];
+}
+
+export class ResetTenantPasswordDto {
+  @IsNotEmpty()
+  @IsString()
+  newPassword: string;
+}
+
+export class AddTenantDomainDto {
+  @IsNotEmpty()
+  @IsString()
+  domain: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
+}
+
+export class ProvisionDedicatedDatabaseDto {
+  @IsOptional()
+  @IsString()
+  dbName?: string;
 }
 
 @Injectable()
