@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -194,6 +195,8 @@ export class ProvisionDedicatedDatabaseDto {
 
 @Injectable()
 export class SuperAdminService {
+  private readonly logger = new Logger(SuperAdminService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     private readonly tenantCache: TenantCacheService,
@@ -468,15 +471,22 @@ export class SuperAdminService {
         const rawTargetDb =
           dto.dbDatabaseName?.trim().toLowerCase() ||
           `hotel_${uniqueSlug.replace(/[^a-z0-9_]/g, '_')}_db`;
-        const provision =
-          await this.tenantConnectionManager.provisionDedicatedDatabase({
-            dbName: rawTargetDb,
-            host: dto.dbHost,
-            port: dto.dbPort,
-            username: dto.dbUsername,
-            password: dto.dbPassword,
-          });
-        dedicatedDbName = provision.dbName;
+        try {
+          const provision =
+            await this.tenantConnectionManager.provisionDedicatedDatabase({
+              dbName: rawTargetDb,
+              host: dto.dbHost,
+              port: dto.dbPort,
+              username: dto.dbUsername,
+              password: dto.dbPassword,
+            });
+          dedicatedDbName = provision.dbName;
+        } catch (dbErr: any) {
+          this.logger.error(`Dedicated DB provisioning error: ${dbErr.message}`, dbErr.stack);
+          throw new BadRequestException(
+            `Dedicated database provisioning failed: ${dbErr.message}. Ensure MySQL user has CREATE DATABASE privileges or select Shared Pool.`,
+          );
+        }
       }
 
       // 5. Create Tenant in Master Catalog
@@ -605,9 +615,19 @@ export class SuperAdminService {
           role: savedUser.role,
         },
       };
-    } catch (err) {
+    } catch (err: any) {
       await queryRunner.rollbackTransaction();
-      throw err;
+      this.logger.error(`createTenant failed: ${err.message}`, err.stack);
+      if (
+        err instanceof ConflictException ||
+        err instanceof BadRequestException ||
+        err instanceof NotFoundException
+      ) {
+        throw err;
+      }
+      throw new BadRequestException(
+        err.message || 'Failed to create tenant. Please check server logs.',
+      );
     } finally {
       await queryRunner.release();
     }
