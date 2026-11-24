@@ -1,4 +1,6 @@
 import {
+  Tenant,
+  TenantDomain,
   Property,
   User,
   POSOutlet,
@@ -46,6 +48,8 @@ import {
   AiActionConfirmation,
   AiKnowledgeDocument,
   AiToolAuditLog,
+  AiTenantEntitlement,
+  AiUsageRecord,
   HrmDepartment,
   HrmDesignation,
   HrmEmployee,
@@ -68,6 +72,8 @@ import {
 } from '../entities';
 
 export const tenantOperationalEntities = [
+  Tenant,
+  TenantDomain,
   Property,
   User,
   POSOutlet,
@@ -115,6 +121,8 @@ export const tenantOperationalEntities = [
   AiActionConfirmation,
   AiKnowledgeDocument,
   AiToolAuditLog,
+  AiTenantEntitlement,
+  AiUsageRecord,
   HrmDepartment,
   HrmDesignation,
   HrmEmployee,

@@ -595,11 +595,12 @@ export class SuperAdminService {
             dbUser: savedTenant.dbUsername || undefined,
             dbPassword: savedTenant.dbPassword || undefined,
           });
+          await dedicatedDs.getRepository(Tenant).save(savedTenant);
           await dedicatedDs.getRepository(Property).save(savedProperty);
           await dedicatedDs.getRepository(POSOutlet).save(outlet);
           await dedicatedDs.getRepository(User).save(savedUser);
         } catch (e: any) {
-          console.warn('Failed to replicate initial records to dedicated DB:', e.message);
+          this.logger.warn(`Failed to replicate initial records to dedicated DB: ${e.message}`);
         }
       }
 
