@@ -2101,8 +2101,8 @@ export default function SuperAdminPortalPage() {
 
                       <div className="p-3 rounded-xl bg-white border border-[#E2E8F0]">
                         <div className="text-[10px] text-[#94A3B8] uppercase font-bold">Active Schema / Database</div>
-                        <div className="mt-1 font-mono font-bold text-[#0F172A] text-xs truncate" title={tenantDbInfo?.resolvedDatabase}>
-                          {tenantDbInfo?.resolvedDatabase || 'hotel_saas'}
+                        <div className="mt-1 font-mono font-bold text-[#0F172A] text-xs truncate" title={tenantDbInfo?.resolvedDatabase || tenantDbInfo?.dbDatabaseName}>
+                          {tenantDbInfo?.resolvedDatabase || tenantDbInfo?.dbDatabaseName || 'hotel_saas'}
                         </div>
                       </div>
 

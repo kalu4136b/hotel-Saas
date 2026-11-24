@@ -868,6 +868,7 @@ export class SuperAdminService {
       storageMode: tenant.storageMode || 'SHARED',
       isDedicated,
       dbDatabaseName: dbName,
+      resolvedDatabase: dbName,
       dbHost: tenant.dbHost || process.env.DB_HOST || '127.0.0.1',
       dbPort: tenant.dbPort || Number(process.env.DB_PORT) || 3306,
       tableCount,
