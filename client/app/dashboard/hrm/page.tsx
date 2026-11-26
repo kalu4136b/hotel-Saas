@@ -713,7 +713,7 @@ export default function HrmPayrollPage() {
       )}
 
       {/* Navigation Sub-Module Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-[#E2E8F0] mb-6 overflow-x-auto pb-2 no-scrollbar">
+      <div className="flex border-b border-[#E2E8F0] gap-2 mb-6 overflow-x-auto no-scrollbar">
         {[
           { id: 'OVERVIEW', label: 'HRM Overview', icon: Users },
           { id: 'EMPLOYEES', label: 'Employees & Profiles', icon: Briefcase },
@@ -731,13 +731,13 @@ export default function HrmPayrollPage() {
               key={t.id}
               type="button"
               onClick={() => setActiveTab(t.id as HrmTabType)}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
                 active
-                  ? 'bg-[#00C48C] text-white shadow-xs'
-                  : 'text-[#64748B] hover:bg-white hover:text-[#0F172A]'
+                  ? 'border-[#00C48C] text-[#00C48C]'
+                  : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className="w-4 h-4" />
               <span>{t.label}</span>
             </button>
           );

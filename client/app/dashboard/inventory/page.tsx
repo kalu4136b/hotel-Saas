@@ -454,146 +454,154 @@ export default function InventoryDashboardPage() {
           </div>
         )}
 
-        {/* Modern Tab Bar */}
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-2 shadow-xs overflow-x-auto">
-          <div className="flex items-center gap-1.5 min-w-max">
-            <button
-              onClick={() => setActiveTab('OVERVIEW')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'OVERVIEW'
-                  ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Boxes className="w-4 h-4" />
-              <span>Overview</span>
-            </button>
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-[#E2E8F0] gap-2 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            onClick={() => setActiveTab('OVERVIEW')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'OVERVIEW'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <Boxes className="w-4 h-4" />
+            <span>Overview</span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('BAR')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'BAR'
-                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Wine className="w-4 h-4" />
-              <span>Bar Inventory</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('BAR')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'BAR'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <Wine className="w-4 h-4" />
+            <span>Bar Inventory</span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('KITCHEN')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'KITCHEN'
-                  ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <UtensilsCrossed className="w-4 h-4" />
-              <span>Kitchen Inventory</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('KITCHEN')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'KITCHEN'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <UtensilsCrossed className="w-4 h-4" />
+            <span>Kitchen Inventory</span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('OPERATIONAL')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'OPERATIONAL'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              <span>Operational Supplies</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('OPERATIONAL')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'OPERATIONAL'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <Building2 className="w-4 h-4" />
+            <span>Operational Supplies</span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('PURCHASE_ORDERS')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'PURCHASE_ORDERS'
-                  ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Truck className="w-4 h-4" />
-              <span>Purchase Orders</span>
-              {purchaseOrders.filter((p) => p.status === 'PENDING_APPROVAL').length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500 text-white font-mono">
-                  {purchaseOrders.filter((p) => p.status === 'PENDING_APPROVAL').length}
-                </span>
-              )}
-            </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('PURCHASE_ORDERS')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'PURCHASE_ORDERS'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <Truck className="w-4 h-4" />
+            <span>
+              Purchase Orders
+              {purchaseOrders.filter((p) => p.status === 'PENDING_APPROVAL').length > 0 &&
+                ` (${purchaseOrders.filter((p) => p.status === 'PENDING_APPROVAL').length})`}
+            </span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('GRN')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'GRN'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <PackageCheck className="w-4 h-4" />
-              <span>Goods Receipt (GRN)</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('GRN')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'GRN'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <PackageCheck className="w-4 h-4" />
+            <span>Goods Receipt (GRN)</span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('ISSUANCES')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'ISSUANCES'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Send className="w-4 h-4" />
-              <span>Dept Issuances</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('ISSUANCES')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'ISSUANCES'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <Send className="w-4 h-4" />
+            <span>Dept Issuances</span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('MOVEMENTS')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'MOVEMENTS'
-                  ? 'bg-slate-800 text-white shadow-md shadow-slate-800/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <History className="w-4 h-4" />
-              <span>Stock Ledger</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('MOVEMENTS')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'MOVEMENTS'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            <span>Stock Ledger</span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('RECIPES')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'RECIPES'
-                  ? 'bg-teal-700 text-white shadow-md shadow-teal-700/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>Recipe (BOM)</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('RECIPES')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'RECIPES'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Recipe (BOM)</span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('SUPPLIERS')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'SUPPLIERS'
-                  ? 'bg-teal-600 text-white shadow-md shadow-teal-600/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <Building className="w-4 h-4" />
-              <span>Suppliers</span>
-            </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('SUPPLIERS')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'SUPPLIERS'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <Building className="w-4 h-4" />
+            <span>Suppliers</span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('REPORTS')}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 ${
-                activeTab === 'REPORTS'
-                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/20'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              <span>Reports</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('REPORTS')}
+            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
+              activeTab === 'REPORTS'
+                ? 'border-[#00C48C] text-[#00C48C]'
+                : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Reports</span>
+          </button>
         </div>
 
         {/* Tab Content Display */}

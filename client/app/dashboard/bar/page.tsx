@@ -672,82 +672,82 @@ export default function BarPage() {
       </div>
 
       {/* ================= TAB NAVIGATION ================= */}
-      <div className="flex items-center gap-1.5 mb-6 border-b border-[#E2E8F0] pb-2 overflow-x-auto">
+      <div className="flex border-b border-[#E2E8F0] gap-2 mb-6 overflow-x-auto no-scrollbar">
         <button
           type="button"
           onClick={() => setActiveTab('RACK')}
-          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+          className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
             activeTab === 'RACK'
-              ? 'bg-[#0F172A] text-white shadow-xs'
-              : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+              ? 'border-[#00C48C] text-[#00C48C]'
+              : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
           }`}
         >
-          <Wine className="w-4 h-4 text-[#D97706]" />
+          <Wine className="w-4 h-4" />
           <span>Bottle Rack & Speed Rail</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('POURS')}
-          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+          className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
             activeTab === 'POURS'
-              ? 'bg-[#0F172A] text-white shadow-xs'
-              : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+              ? 'border-[#00C48C] text-[#00C48C]'
+              : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
           }`}
         >
-          <History className="w-4 h-4 text-[#3B82F6]" />
+          <History className="w-4 h-4" />
           <span>Pour History ({logs.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('STOCK_REPORTS')}
-          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+          className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
             activeTab === 'STOCK_REPORTS'
-              ? 'bg-[#0F172A] text-white shadow-xs'
-              : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+              ? 'border-[#00C48C] text-[#00C48C]'
+              : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
           }`}
         >
-          <DollarSign className="w-4 h-4 text-[#10B981]" />
+          <DollarSign className="w-4 h-4" />
           <span>Stock Valuation & Reports</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('ADJUSTMENTS')}
-          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+          className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
             activeTab === 'ADJUSTMENTS'
-              ? 'bg-[#0F172A] text-white shadow-xs'
-              : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+              ? 'border-[#00C48C] text-[#00C48C]'
+              : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
           }`}
         >
-          <ClipboardCheck className="w-4 h-4 text-[#8B5CF6]" />
+          <ClipboardCheck className="w-4 h-4" />
           <span>Adjustments & Audit</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('LEDGER')}
-          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+          className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
             activeTab === 'LEDGER'
-              ? 'bg-[#0F172A] text-white shadow-xs'
-              : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+              ? 'border-[#00C48C] text-[#00C48C]'
+              : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
           }`}
         >
-          <Layers className="w-4 h-4 text-[#EC4899]" />
+          <Layers className="w-4 h-4" />
           <span>Unified Ledger</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('ANALYTICS')}
-          className={`py-2 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+          className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition whitespace-nowrap shrink-0 ${
             activeTab === 'ANALYTICS'
-              ? 'bg-[#0F172A] text-white shadow-xs'
-              : 'text-[#64748B] hover:text-[#0F172A] hover:bg-[#F1F5F9]'
+              ? 'border-[#00C48C] text-[#00C48C]'
+              : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
           }`}
         >
-          <BarChart3 className="w-4 h-4 text-[#F59E0B]" />
+          <BarChart3 className="w-4 h-4" />
           <span>Analytics</span>
         </button>
       </div>
