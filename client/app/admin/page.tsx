@@ -579,13 +579,17 @@ export default function SuperAdminPortalPage() {
       {/* Top Executive Navigation Bar */}
       <header className="border-b border-[#E2E8F0] bg-white sticky top-0 z-40 px-6 lg:px-10 py-3.5 flex items-center justify-between shadow-2xs">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#00C48C] text-white flex items-center justify-center shadow-xs font-bold">
-            <Building2 className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl bg-white border border-[#E2E8F0] p-1 flex items-center justify-center shadow-xs shrink-0">
+            <img
+              src="/hotelia-mark.png"
+              alt="Hotelia"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base font-extrabold tracking-tight text-[#0F172A]">
-                ninth<span className="text-[#00C48C]">.</span>hotel
+                Hotelia
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]">
                 Platform Tenant Manager

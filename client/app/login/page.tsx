@@ -1,7 +1,7 @@
 import AuthCard from '@/components/AuthCard';
 
 export const metadata = {
-  title: 'Sign In — Antigravity Hotel SaaS',
+  title: 'Sign In — Hotelia',
   description: 'Sign in to access your hotel management console.',
 };
 

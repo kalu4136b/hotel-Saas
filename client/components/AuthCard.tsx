@@ -80,18 +80,20 @@ export default function AuthCard() {
 
         {/* Top Header & Brand */}
         <div className="relative z-10">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-sm">
-              <Building2 className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-white p-1.5 flex items-center justify-center shadow-md shrink-0">
+              <img
+                src="/hotelia-mark.png"
+                alt="Hotelia"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <span className="text-xl font-extrabold tracking-tight text-white">
-                {isCustomTenant ? tenant?.name : (
-                  <>ninth<span className="text-[#00C48C]">.</span>hotel</>
-                )}
+                {isCustomTenant ? tenant?.name : 'Hotelia'}
               </span>
               <span className="block text-[10px] uppercase font-bold tracking-widest text-emerald-200">
-                {isCustomTenant ? (tenant?.propertyName ? `${tenant.propertyName} • Operations` : 'Hotel Staff Portal') : 'Hospitality Cloud'}
+                {isCustomTenant ? (tenant?.propertyName ? `${tenant.propertyName} • Operations` : 'Hotel Staff Portal') : 'Hospitality Cloud OS'}
               </span>
             </div>
           </div>
@@ -156,6 +158,15 @@ export default function AuthCard() {
 
       {/* ================= RIGHT FORM PANEL ================= */}
       <div className="p-4 lg:p-8 flex flex-col justify-center max-w-[480px] mx-auto w-full">
+        {/* Hotelia Brand Logo */}
+        <div className="mb-5">
+          <img
+            src="/hotelia-logo.png"
+            alt="Hotelia Logo"
+            className="h-14 w-auto object-contain"
+          />
+        </div>
+
         {/* Header */}
         <div className="mb-6">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F1F5F9] text-[#475569] text-[11px] font-semibold mb-3">
@@ -308,7 +319,7 @@ export default function AuthCard() {
               </>
             ) : (
               <>
-                <span>Sign In to Hotel Console</span>
+                <span>Sign In to Hotelia</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </>
             )}

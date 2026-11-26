@@ -3172,7 +3172,7 @@ export default function HrmPayrollPage() {
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-wider text-[#00C48C]">
-                  ninth.hotel Hospitality Payroll Statement
+                  Hotelia Hospitality Payroll Statement
                 </div>
                 <h3 className="text-base font-black text-[#0F172A]">
                   Employee Payslip — {selectedPayslip.payslipNumber}

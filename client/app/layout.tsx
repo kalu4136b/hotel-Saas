@@ -2,9 +2,19 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Antigravity Hotel SaaS — Modern Hospitality Management & POS',
+  title: 'Hotelia — Modern Hospitality Management & Cloud POS',
   description:
     'Multi-tenant hotel management and point of sale platform for boutique hotels, resorts, and restaurants.',
+  icons: {
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/icon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
 };
 
 export default function RootLayout({
