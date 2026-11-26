@@ -37,6 +37,10 @@ import {
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
+  private getPropId(req: any): string | undefined {
+    return req.user?.propertyId || req.user?.property?.id;
+  }
+
   // ================= 1. INVENTORY ITEMS =================
   @Get('items')
   getItems(
@@ -49,7 +53,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.getItems(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       category || subcategory,
       search,
       lowStock === 'true',
@@ -59,7 +63,7 @@ export class InventoryController {
 
   @Get('items/:id')
   getItem(@Request() req: any, @Param('id') id: string) {
-    return this.inventoryService.getItem(req.user.tenantId, req.user.propertyId, id);
+    return this.inventoryService.getItem(req.user.tenantId, this.getPropId(req)!, id);
   }
 
   @Post('items')
@@ -96,7 +100,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.createItem(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       dto,
       req.user.userId || req.user.id,
       req.user.fullName || req.user.username,
@@ -111,7 +115,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.updateItem(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
       dto,
     );
@@ -121,7 +125,7 @@ export class InventoryController {
   deleteItem(@Request() req: any, @Param('id') id: string) {
     return this.inventoryService.deleteItem(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
     );
   }
@@ -142,7 +146,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.adjustStock(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
       req.user.userId || req.user.id,
       req.user.fullName || req.user.username,
@@ -163,7 +167,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.getPurchaseOrders(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       status,
       category,
       supplierId,
@@ -177,7 +181,7 @@ export class InventoryController {
   getPurchaseOrder(@Request() req: any, @Param('id') id: string) {
     return this.inventoryService.getPurchaseOrder(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
     );
   }
@@ -207,7 +211,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.createPurchaseOrder(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       dto,
       req.user.userId || req.user.id,
       req.user.fullName || req.user.username,
@@ -222,7 +226,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.updatePurchaseOrder(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
       dto,
     );
@@ -235,7 +239,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.approvePurchaseOrder(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
       req.user.userId || req.user.id,
       req.user.fullName || req.user.username,
@@ -250,7 +254,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.cancelPurchaseOrder(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
       reason,
     );
@@ -264,7 +268,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.receivePurchaseOrder(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
       req.user.userId || req.user.id,
       req.user.fullName || req.user.username,
@@ -285,7 +289,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.getGRNs(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       poId,
       supplierId,
       category,
@@ -300,7 +304,7 @@ export class InventoryController {
   getGRN(@Request() req: any, @Param('id') id: string) {
     return this.inventoryService.getGRN(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
     );
   }
@@ -329,7 +333,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.createGRN(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       dto,
       req.user.userId || req.user.id,
       req.user.fullName || req.user.username,
@@ -347,11 +351,11 @@ export class InventoryController {
   ) {
     return this.inventoryService.getIssuances(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       department,
       search,
       startDate,
-      endDate,
+      startDate ? endDate : endDate,
     );
   }
 
@@ -359,7 +363,7 @@ export class InventoryController {
   getIssuance(@Request() req: any, @Param('id') id: string) {
     return this.inventoryService.getIssuance(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
     );
   }
@@ -383,7 +387,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.createIssuance(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       dto,
       req.user.userId || req.user.id,
       req.user.fullName || req.user.username,
@@ -402,7 +406,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.getStockMovements(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       itemId,
       category,
       movementType,
@@ -416,7 +420,7 @@ export class InventoryController {
   getRecipe(@Request() req: any, @Param('productId') productId: string) {
     return this.inventoryService.getRecipe(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       productId,
     );
   }
@@ -430,7 +434,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.saveRecipe(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       productId,
       items || [],
     );
@@ -441,7 +445,7 @@ export class InventoryController {
   getSuppliers(@Request() req: any) {
     return this.inventoryService.getSuppliers(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
     );
   }
 
@@ -462,7 +466,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.createSupplier(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       dto,
     );
   }
@@ -475,7 +479,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.updateSupplier(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       id,
       dto,
     );
@@ -486,7 +490,7 @@ export class InventoryController {
   getSummaryStats(@Request() req: any) {
     return this.inventoryService.getInventorySummaryStats(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
     );
   }
 
@@ -497,7 +501,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.getStockReport(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       category,
     );
   }
@@ -506,7 +510,7 @@ export class InventoryController {
   getValuationReport(@Request() req: any) {
     return this.inventoryService.getValuationReport(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
     );
   }
 
@@ -517,7 +521,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.getLowStockReport(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       category,
     );
   }
@@ -530,7 +534,7 @@ export class InventoryController {
   ) {
     return this.inventoryService.getDepartmentIssuanceReport(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       startDate,
       endDate,
     );

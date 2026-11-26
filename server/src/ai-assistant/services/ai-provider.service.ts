@@ -146,6 +146,8 @@ export class AiProviderService {
     // 1. Search knowledge base for SOPs / troubleshooting queries
     const knowledgeMatches = await this.knowledgeBaseService.searchKnowledgeBase(
       userMessage,
+      undefined,
+      userContext?.tenantId,
     );
 
     // 2. Run the built-in operations engine first. It detects actionable intents

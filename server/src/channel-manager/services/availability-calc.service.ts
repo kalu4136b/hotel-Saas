@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { DataSource, In, QueryRunner } from 'typeorm';
-import { Room, RoomType, Reservation, ReservationStatus, RoomStatus } from '../../entities';
+import { QueryRunner } from 'typeorm';
+import { Room, RoomType, Reservation, ReservationStatus } from '../../entities';
+import { TenantConnectionManager } from '../../database/tenant-connection-manager.service';
 
 export interface DailyRoomAvailability {
   date: string; // YYYY-MM-DD
@@ -19,22 +20,25 @@ export interface DailyRoomAvailability {
 
 @Injectable()
 export class AvailabilityCalculationService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly tenantConn: TenantConnectionManager) {}
 
   /**
    * Calculate availability for a specific room type across a date range [startDate, endDate)
    */
   async getAvailabilityForRange(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     roomTypeId: string,
     startDateStr: string,
     endDateStr: string,
     queryRunner?: QueryRunner,
   ): Promise<{ minAvailable: number; dailyBreakdown: Record<string, number> }> {
-    const manager = queryRunner ? queryRunner.manager : this.dataSource.manager;
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const manager = queryRunner ? queryRunner.manager : ds.manager;
 
-    // 1. Total active rooms for this room type
     const totalRooms = await manager.getRepository(Room).count({
       where: {
         tenantId,
@@ -43,8 +47,6 @@ export class AvailabilityCalculationService {
       },
     });
 
-    // 2. Fetch all reservations overlapping the range
-    // Overlap condition: res.checkInDate < endDateStr AND res.checkOutDate > startDateStr
     const reservations = await manager
       .getRepository(Reservation)
       .createQueryBuilder('res')
@@ -58,7 +60,6 @@ export class AvailabilityCalculationService {
       .andWhere('res.checkOutDate > :startDate', { startDate: startDateStr })
       .getMany();
 
-    // 3. Generate daily counts
     const start = new Date(startDateStr);
     const end = new Date(endDateStr);
     const dailyBreakdown: Record<string, number> = {};
@@ -67,7 +68,6 @@ export class AvailabilityCalculationService {
     const current = new Date(start);
     while (current < end) {
       const dateKey = current.toISOString().split('T')[0];
-      // Count reservations staying on this night
       const occupied = reservations.filter((r) => {
         const rIn = new Date(r.checkInDate);
         const rOut = new Date(r.checkOutDate);
@@ -90,15 +90,19 @@ export class AvailabilityCalculationService {
    * Get 14-day or 30-day availability & restriction grid for all room types
    */
   async getAvailabilityGrid(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     daysAhead = 14,
     startDateStr?: string,
   ): Promise<DailyRoomAvailability[]> {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
     const start = startDateStr ? new Date(startDateStr) : new Date();
     start.setHours(0, 0, 0, 0);
 
-    const roomTypes = await this.dataSource.getRepository(RoomType).find({
+    const roomTypes = await ds.getRepository(RoomType).find({
       where: { tenantId, propertyId, isActive: true },
       order: { name: 'ASC' },
     });
@@ -106,7 +110,7 @@ export class AvailabilityCalculationService {
     const result: DailyRoomAvailability[] = [];
 
     for (const rt of roomTypes) {
-      const totalRooms = await this.dataSource.getRepository(Room).count({
+      const totalRooms = await ds.getRepository(Room).count({
         where: { tenantId, propertyId, roomTypeId: rt.id },
       });
 
@@ -152,8 +156,8 @@ export class AvailabilityCalculationService {
    * Validate that required inventory is available before confirming a booking
    */
   async assertInventoryAvailable(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     roomTypeId: string,
     checkInDate: string,
     checkOutDate: string,
@@ -161,8 +165,8 @@ export class AvailabilityCalculationService {
     queryRunner?: QueryRunner,
   ): Promise<void> {
     const { minAvailable } = await this.getAvailabilityForRange(
-      tenantId,
-      propertyId,
+      rawTenantId,
+      rawPropertyId,
       roomTypeId,
       checkInDate,
       checkOutDate,

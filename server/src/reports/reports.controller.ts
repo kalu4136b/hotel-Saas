@@ -17,7 +17,7 @@ export class ReportsController {
   ) {
     return this.reportsService.getDailySalesReport(
       req.user.tenantId,
-      req.user.propertyId,
+      req.user.propertyId || req.user.property?.id,
       startDate,
       endDate,
     );
@@ -31,7 +31,7 @@ export class ReportsController {
   ) {
     return this.reportsService.getPaymentMethodReport(
       req.user.tenantId,
-      req.user.propertyId,
+      req.user.propertyId || req.user.property?.id,
       startDate,
       endDate,
     );
@@ -45,7 +45,7 @@ export class ReportsController {
   ) {
     return this.reportsService.getItemSalesReport(
       req.user.tenantId,
-      req.user.propertyId,
+      req.user.propertyId || req.user.property?.id,
       startDate,
       endDate,
     );
@@ -59,7 +59,7 @@ export class ReportsController {
   ) {
     return this.reportsService.getCancellationReport(
       req.user.tenantId,
-      req.user.propertyId,
+      req.user.propertyId || req.user.property?.id,
       startDate,
       endDate,
     );

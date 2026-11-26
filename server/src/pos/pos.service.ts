@@ -2,10 +2,9 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, In } from 'typeorm';
+import { In } from 'typeorm';
 import { Category } from '../entities/category.entity';
 import { Product } from '../entities/product.entity';
 import { DiningTable, TableStatus } from '../entities/dining-table.entity';
@@ -22,41 +21,53 @@ import { AuditLog } from '../entities/audit-log.entity';
 import { Reservation, ReservationStatus } from '../entities/reservation.entity';
 import { GuestFolio, FolioStatus } from '../entities/guest-folio.entity';
 import { FolioItem, FolioChargeType } from '../entities/folio-item.entity';
-import { Room } from '../entities/room.entity';
 import { EventsGateway } from '../events/events.gateway';
 import { InventoryService } from '../inventory/inventory.service';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
 
 @Injectable()
 export class PosService {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly tenantConn: TenantConnectionManager,
     private readonly eventsGateway: EventsGateway,
     private readonly inventoryService: InventoryService,
   ) {}
 
   // ================= MASTER DATA =================
-  async getCategories(tenantId: string, propertyId: string) {
-    return this.dataSource.getRepository(Category).find({
+  async getCategories(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return ds.getRepository(Category).find({
       where: { tenantId, propertyId, isActive: true },
       order: { sortOrder: 'ASC', name: 'ASC' },
     });
   }
 
-  async getProducts(tenantId: string, propertyId: string, categoryId?: string) {
+  async getProducts(rawTenantId: string, rawPropertyId: string, categoryId?: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
     const where: any = { tenantId, propertyId, isActive: true };
     if (categoryId) {
       where.categoryId = categoryId;
     }
 
-    return this.dataSource.getRepository(Product).find({
+    return ds.getRepository(Product).find({
       where,
       relations: { category: true },
       order: { name: 'ASC' },
     });
   }
 
-  async getTables(tenantId: string, propertyId: string) {
-    return this.dataSource.getRepository(DiningTable).find({
+  async getTables(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return ds.getRepository(DiningTable).find({
       where: { tenantId, propertyId, isActive: true },
       order: { tableNumber: 'ASC' },
     });
@@ -64,13 +75,17 @@ export class PosService {
 
   // 1. Create Dining Table
   async createTable(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: { tableNumber: string; capacity?: number },
   ) {
-    const tableRepo = this.dataSource.getRepository(DiningTable);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const tableRepo = ds.getRepository(DiningTable);
     const existing = await tableRepo.findOne({
-      where: { propertyId, tableNumber: dto.tableNumber.trim(), isActive: true },
+      where: { tenantId, propertyId, tableNumber: dto.tableNumber.trim(), isActive: true },
     });
     if (existing) {
       throw new ConflictException(`Table ${dto.tableNumber} already exists`);
@@ -88,8 +103,12 @@ export class PosService {
   }
 
   // 2. Delete Dining Table
-  async deleteTable(tenantId: string, propertyId: string, tableId: string) {
-    const tableRepo = this.dataSource.getRepository(DiningTable);
+  async deleteTable(rawTenantId: string, rawPropertyId: string, tableId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const tableRepo = ds.getRepository(DiningTable);
     const table = await tableRepo.findOne({
       where: { id: tableId, tenantId, propertyId },
     });
@@ -105,12 +124,16 @@ export class PosService {
 
   // 3. Create Category
   async createCategory(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: { name: string; description?: string; sortOrder?: number },
   ) {
-    const catRepo = this.dataSource.getRepository(Category);
-    const count = await catRepo.count({ where: { propertyId } });
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const catRepo = ds.getRepository(Category);
+    const count = await catRepo.count({ where: { tenantId, propertyId } });
     const category = catRepo.create({
       tenantId,
       propertyId,
@@ -124,8 +147,8 @@ export class PosService {
 
   // 4. Create Product / Menu Dish
   async createProduct(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       name: string;
       sku?: string;
@@ -135,8 +158,19 @@ export class PosService {
       description?: string;
     },
   ) {
-    const prodRepo = this.dataSource.getRepository(Product);
-    const count = await prodRepo.count({ where: { propertyId } });
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const cat = await ds.getRepository(Category).findOne({
+      where: { id: dto.categoryId, tenantId, propertyId },
+    });
+    if (!cat) {
+      throw new NotFoundException('Category not found for this property');
+    }
+
+    const prodRepo = ds.getRepository(Product);
+    const count = await prodRepo.count({ where: { tenantId, propertyId } });
     const sku = dto.sku?.trim() || `DSH-${(100 + count + 1).toString()}`;
 
     const product = prodRepo.create({
@@ -155,17 +189,22 @@ export class PosService {
 
   // 5. Update Product (Toggle Availability or Edit Price)
   async updateProduct(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     productId: string,
     dto: {
       name?: string;
       price?: number;
       isActive?: boolean;
+      isAvailable?: boolean;
       description?: string;
     },
   ) {
-    const prodRepo = this.dataSource.getRepository(Product);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const prodRepo = ds.getRepository(Product);
     const product = await prodRepo.findOne({
       where: { id: productId, tenantId, propertyId },
     });
@@ -174,14 +213,19 @@ export class PosService {
     if (dto.name !== undefined) product.name = dto.name.trim();
     if (dto.price !== undefined) product.price = Number(dto.price);
     if (dto.isActive !== undefined) product.isActive = Boolean(dto.isActive);
+    else if (dto.isAvailable !== undefined) product.isActive = Boolean(dto.isAvailable);
     if (dto.description !== undefined) product.description = dto.description;
 
     return prodRepo.save(product);
   }
 
   // 6. Delete Product
-  async deleteProduct(tenantId: string, propertyId: string, productId: string) {
-    const prodRepo = this.dataSource.getRepository(Product);
+  async deleteProduct(rawTenantId: string, rawPropertyId: string, productId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const prodRepo = ds.getRepository(Product);
     const product = await prodRepo.findOne({
       where: { id: productId, tenantId, propertyId },
     });
@@ -193,9 +237,10 @@ export class PosService {
   }
 
   // ================= SHIFTS =================
-  async getCurrentShift(userId: string, tenantId: string) {
-    if (!tenantId) return null;
-    return this.dataSource.getRepository(POSShift).findOne({
+  async getCurrentShift(userId: string, rawTenantId: string) {
+    if (!rawTenantId) return null;
+    const { ds, tenantId } = await this.tenantConn.getDataSourceForTenant(rawTenantId);
+    return ds.getRepository(POSShift).findOne({
       where: { userId, tenantId, status: ShiftStatus.OPEN },
       order: { openedAt: 'DESC' },
     });
@@ -203,12 +248,16 @@ export class PosService {
 
   async openShift(
     userId: string,
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     startingFloat: number,
     notes?: string,
   ) {
-    const shiftRepo = this.dataSource.getRepository(POSShift);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const shiftRepo = ds.getRepository(POSShift);
     const existing = await shiftRepo.findOne({
       where: { userId, tenantId, status: ShiftStatus.OPEN },
     });
@@ -234,11 +283,12 @@ export class PosService {
   async closeShift(
     shiftId: string,
     userId: string,
-    tenantId: string,
+    rawTenantId: string,
     actualCashCount: number,
     notes?: string,
   ) {
-    const shiftRepo = this.dataSource.getRepository(POSShift);
+    const { ds, tenantId } = await this.tenantConn.getDataSourceForTenant(rawTenantId);
+    const shiftRepo = ds.getRepository(POSShift);
     const shift = await shiftRepo.findOne({
       where: { id: shiftId, tenantId, status: ShiftStatus.OPEN },
     });
@@ -248,11 +298,12 @@ export class PosService {
     }
 
     // Calculate cash sales processed during this shift
-    const cashSalesRaw = await this.dataSource
+    const cashSalesRaw = await ds
       .getRepository(Payment)
       .createQueryBuilder('p')
       .select('COALESCE(SUM(p.amountPaid), 0)', 'totalCash')
       .where('p.shiftId = :shiftId', { shiftId })
+      .andWhere('p.tenantId = :tenantId', { tenantId })
       .andWhere('p.paymentMethod = :method', { method: PaymentMethod.CASH })
       .andWhere('p.status = :status', { status: PaymentStatus.COMPLETED })
       .getRawOne();
@@ -273,12 +324,21 @@ export class PosService {
   }
 
   // ================= ORDERS =================
-  async getOrders(tenantId: string, propertyId: string, status?: OrderStatus, tableId?: string) {
+  async getOrders(
+    rawTenantId: string,
+    rawPropertyId: string,
+    status?: OrderStatus,
+    tableId?: string,
+  ) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
     const where: any = { tenantId, propertyId };
     if (status) where.status = status;
     if (tableId) where.tableId = tableId;
 
-    return this.dataSource.getRepository(Order).find({
+    return ds.getRepository(Order).find({
       where,
       relations: { items: true },
       order: { createdAt: 'DESC' },
@@ -286,31 +346,36 @@ export class PosService {
     });
   }
 
-  async getOrder(orderId: string, tenantId: string) {
-    const order = await this.dataSource.getRepository(Order).findOne({
+  async getOrder(orderId: string, rawTenantId: string) {
+    const { ds, tenantId } = await this.tenantConn.getDataSourceForTenant(rawTenantId);
+    const order = await ds.getRepository(Order).findOne({
       where: { id: orderId, tenantId },
       relations: { items: true },
     });
 
     if (!order) throw new NotFoundException('Order not found');
 
-    const bill = await this.dataSource.getRepository(Bill).findOne({
+    const bill = await ds.getRepository(Bill).findOne({
       where: { orderId: order.id, tenantId },
     });
 
     return { ...order, bill: bill || null };
   }
 
-  async getTableActiveOrder(tableId: string, tenantId: string, propertyId: string) {
-    const table = await this.dataSource.getRepository(DiningTable).findOne({
+  async getTableActiveOrder(tableId: string, rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const table = await ds.getRepository(DiningTable).findOne({
       where: { id: tableId, tenantId, propertyId },
     });
     if (!table) throw new NotFoundException('Table not found');
 
     let order: Order | null = null;
     if (table.currentOrderId) {
-      order = await this.dataSource.getRepository(Order).findOne({
-        where: { id: table.currentOrderId, tenantId },
+      order = await ds.getRepository(Order).findOne({
+        where: { id: table.currentOrderId, tenantId, propertyId },
         relations: { items: true },
       });
       if (order && (order.status === OrderStatus.PAID || order.status === OrderStatus.CANCELLED)) {
@@ -319,7 +384,7 @@ export class PosService {
     }
 
     if (!order) {
-      order = await this.dataSource.getRepository(Order).findOne({
+      order = await ds.getRepository(Order).findOne({
         where: {
           tableId,
           tenantId,
@@ -341,13 +406,13 @@ export class PosService {
         if (table.status === TableStatus.AVAILABLE) {
           table.status = TableStatus.OCCUPIED;
         }
-        await this.dataSource.getRepository(DiningTable).save(table);
+        await ds.getRepository(DiningTable).save(table);
       }
     }
 
     if (!order) return null;
 
-    const bill = await this.dataSource.getRepository(Bill).findOne({
+    const bill = await ds.getRepository(Bill).findOne({
       where: { orderId: order.id, tenantId },
     });
 
@@ -364,14 +429,19 @@ export class PosService {
       items: Array<{ productId: string; quantity: number; notes?: string }>;
     },
     userId: string,
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
   ) {
     if (!dto.items || dto.items.length === 0) {
       throw new BadRequestException('Order must contain at least one item');
     }
 
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -387,7 +457,7 @@ export class PosService {
       let tableNumber: string | undefined = undefined;
       if (dto.orderType === OrderType.DINE_IN && dto.tableId) {
         const table = await queryRunner.manager.findOne(DiningTable, {
-          where: { id: dto.tableId, tenantId },
+          where: { id: dto.tableId, tenantId, propertyId },
         });
         if (!table) throw new NotFoundException('Selected dining table not found');
         if (table.status === TableStatus.OCCUPIED) {
@@ -404,7 +474,7 @@ export class PosService {
       // 4. Resolve Products & Prices from DB (Enforcing Backend Pricing Authority)
       const productIds = dto.items.map((i) => i.productId);
       const products = await queryRunner.manager.find(Product, {
-        where: productIds.map((id) => ({ id, tenantId, isActive: true })),
+        where: productIds.map((id) => ({ id, tenantId, propertyId, isActive: true })),
       });
       const productMap = new Map(products.map((p) => [p.id, p]));
 
@@ -414,7 +484,9 @@ export class PosService {
       for (const itemInput of dto.items) {
         const prod = productMap.get(itemInput.productId);
         if (!prod) {
-          throw new BadRequestException(`Product with ID ${itemInput.productId} not found or inactive`);
+          throw new BadRequestException(
+            `Product with ID ${itemInput.productId} not found or inactive`,
+          );
         }
 
         const qty = Math.max(1, Number(itemInput.quantity) || 1);
@@ -442,7 +514,7 @@ export class PosService {
       const serviceAmount = Number(((subtotal * serviceRate) / 100).toFixed(2));
       const totalAmount = Number((subtotal + taxAmount + serviceAmount).toFixed(2));
 
-      // Generate human-friendly order number e.g. ORD-2026-1049
+      // Generate human-friendly order number e.g. ORD-0001
       const orderCount = await queryRunner.manager.count(Order, { where: { tenantId } });
       const orderNumber = `ORD-${String(orderCount + 1).padStart(4, '0')}`;
 
@@ -477,10 +549,14 @@ export class PosService {
 
       // 7. Update Table status to OCCUPIED if dine-in
       if (dto.orderType === OrderType.DINE_IN && dto.tableId) {
-        await queryRunner.manager.update(DiningTable, dto.tableId, {
-          status: TableStatus.OCCUPIED,
-          currentOrderId: savedOrder.id,
-        });
+        await queryRunner.manager.update(
+          DiningTable,
+          { id: dto.tableId, tenantId, propertyId },
+          {
+            status: TableStatus.OCCUPIED,
+            currentOrderId: savedOrder.id,
+          },
+        );
       }
 
       await queryRunner.commitTransaction();
@@ -496,14 +572,19 @@ export class PosService {
   }
 
   // ================= KOT (KITCHEN DISPATCH) =================
-  async sendToKitchen(orderId: string, tenantId: string, propertyId: string) {
-    const queryRunner = this.dataSource.createQueryRunner();
+  async sendToKitchen(orderId: string, rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
       const order = await queryRunner.manager.findOne(Order, {
-        where: { id: orderId, tenantId },
+        where: { id: orderId, tenantId, propertyId },
         relations: { items: true },
       });
 
@@ -529,7 +610,8 @@ export class PosService {
         tenantId,
         propertyId,
         orderId: order.id,
-        tableNumber: order.tableNumber || (order.orderType === OrderType.TAKEAWAY ? 'Takeaway' : 'Walk-in'),
+        tableNumber:
+          order.tableNumber || (order.orderType === OrderType.TAKEAWAY ? 'Takeaway' : 'Walk-in'),
         status: KOTStatus.PENDING,
         notes: order.notes || undefined,
       });
@@ -589,8 +671,12 @@ export class PosService {
     }
   }
 
-  async getKitchenKots(tenantId: string, propertyId: string) {
-    return this.dataSource.getRepository(KOT).find({
+  async getKitchenKots(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return ds.getRepository(KOT).find({
       where: {
         tenantId,
         propertyId,
@@ -601,8 +687,9 @@ export class PosService {
     });
   }
 
-  async updateKotStatus(kotId: string, status: KOTStatus, tenantId: string) {
-    const kotRepo = this.dataSource.getRepository(KOT);
+  async updateKotStatus(kotId: string, status: KOTStatus, rawTenantId: string) {
+    const { ds, tenantId } = await this.tenantConn.getDataSourceForTenant(rawTenantId);
+    const kotRepo = ds.getRepository(KOT);
     const kot = await kotRepo.findOne({
       where: { id: kotId, tenantId },
       relations: { items: true },
@@ -614,8 +701,8 @@ export class PosService {
     const saved = await kotRepo.save(kot);
 
     // Update associated order status accordingly
-    const orderRepo = this.dataSource.getRepository(Order);
-    const order = await orderRepo.findOne({ where: { id: kot.orderId } });
+    const orderRepo = ds.getRepository(Order);
+    const order = await orderRepo.findOne({ where: { id: kot.orderId, tenantId } });
     if (order && order.status !== OrderStatus.BILLED && order.status !== OrderStatus.PAID) {
       if (status === KOTStatus.IN_PREPARATION) {
         order.status = OrderStatus.IN_PREPARATION;
@@ -635,14 +722,23 @@ export class PosService {
   }
 
   // ================= BILLING & PAYMENTS =================
-  async generateBill(orderId: string, userId: string, tenantId: string, propertyId: string) {
-    const queryRunner = this.dataSource.createQueryRunner();
+  async generateBill(
+    orderId: string,
+    userId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
+  ) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
       const order = await queryRunner.manager.findOne(Order, {
-        where: { id: orderId, tenantId },
+        where: { id: orderId, tenantId, propertyId },
         relations: { items: true },
       });
 
@@ -683,9 +779,13 @@ export class PosService {
 
       // If dine-in, update table status to BILLED
       if (order.tableId) {
-        await queryRunner.manager.update(DiningTable, order.tableId, {
-          status: TableStatus.BILLED,
-        });
+        await queryRunner.manager.update(
+          DiningTable,
+          { id: order.tableId, tenantId },
+          {
+            status: TableStatus.BILLED,
+          },
+        );
       }
 
       await queryRunner.commitTransaction();
@@ -708,16 +808,20 @@ export class PosService {
       roomId?: string;
     },
     userId: string,
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
       const order = await queryRunner.manager.findOne(Order, {
-        where: { id: orderId, tenantId },
+        where: { id: orderId, tenantId, propertyId },
         relations: { items: true },
       });
 
@@ -760,20 +864,26 @@ export class PosService {
       const paid = Number(dto.amountPaid);
 
       if (dto.paymentMethod === PaymentMethod.CASH && paid < totalDue) {
-        throw new BadRequestException(`Amount tendered ($${paid}) is less than total due ($${totalDue})`);
+        throw new BadRequestException(
+          `Amount tendered ($${paid}) is less than total due ($${totalDue})`,
+        );
       }
 
-      const changeGiven = dto.paymentMethod === PaymentMethod.CASH ? Number((paid - totalDue).toFixed(2)) : 0;
+      const changeGiven =
+        dto.paymentMethod === PaymentMethod.CASH ? Number((paid - totalDue).toFixed(2)) : 0;
       let transactionRef = dto.transactionRef;
 
       // Handle Charge to Room Folio
       if (dto.paymentMethod === PaymentMethod.ROOM_CHARGE) {
         if (!dto.roomId) {
-          throw new BadRequestException('Please select an active guest room to charge this order to.');
+          throw new BadRequestException(
+            'Please select an active guest room to charge this order to.',
+          );
         }
 
         const reservation = await queryRunner.manager.findOne(Reservation, {
           where: {
+            tenantId,
             propertyId,
             roomId: dto.roomId,
             status: ReservationStatus.CHECKED_IN,
@@ -782,22 +892,28 @@ export class PosService {
         });
 
         if (!reservation) {
-          throw new BadRequestException('No active checked-in guest found in the selected room.');
+          throw new BadRequestException(
+            'No active checked-in guest found in the selected room.',
+          );
         }
 
         const folio = await queryRunner.manager.findOne(GuestFolio, {
-          where: { reservationId: reservation.id },
+          where: { reservationId: reservation.id, tenantId, propertyId },
         });
 
         if (!folio) {
-          throw new BadRequestException(`No active folio exists for Room ${reservation.room?.roomNumber || dto.roomId}.`);
+          throw new BadRequestException(
+            `No active folio exists for Room ${reservation.room?.roomNumber || dto.roomId}.`,
+          );
         }
 
         // Post charge to folio items
         const folioItem = queryRunner.manager.create(FolioItem, {
           folioId: folio.id,
           chargeType: FolioChargeType.RESTAURANT_POS,
-          description: `Restaurant Order #${order.orderNumber} (${order.tableNumber ? 'Table ' + order.tableNumber : 'Takeaway'})`,
+          description: `Restaurant Order #${order.orderNumber} (${
+            order.tableNumber ? 'Table ' + order.tableNumber : 'Takeaway'
+          })`,
           amount: totalDue,
           referenceId: order.orderNumber,
         });
@@ -811,7 +927,9 @@ export class PosService {
         }
         await queryRunner.manager.save(folio);
 
-        transactionRef = `Folio #${folio.id.substring(0, 8).toUpperCase()} - Room ${reservation.room?.roomNumber || ''} (${reservation.guest?.fullName || 'Guest'})`;
+        transactionRef = `Folio #${folio.id.substring(0, 8).toUpperCase()} - Room ${
+          reservation.room?.roomNumber || ''
+        } (${reservation.guest?.fullName || 'Guest'})`;
       }
 
       const paymentCount = await queryRunner.manager.count(Payment, { where: { tenantId } });
@@ -842,10 +960,14 @@ export class PosService {
 
       // Release Table back to AVAILABLE
       if (order.tableId) {
-        await queryRunner.manager.update(DiningTable, order.tableId, {
-          status: TableStatus.AVAILABLE,
-          currentOrderId: () => 'NULL',
-        });
+        await queryRunner.manager.update(
+          DiningTable,
+          { id: order.tableId, tenantId },
+          {
+            status: TableStatus.AVAILABLE,
+            currentOrderId: () => 'NULL',
+          },
+        );
       }
 
       // Audit Log Entry
@@ -893,8 +1015,9 @@ export class PosService {
   }
 
   // ================= CANCELLATIONS =================
-  async cancelOrder(orderId: string, reason: string, userId: string, tenantId: string) {
-    const orderRepo = this.dataSource.getRepository(Order);
+  async cancelOrder(orderId: string, reason: string, userId: string, rawTenantId: string) {
+    const { ds, tenantId } = await this.tenantConn.getDataSourceForTenant(rawTenantId);
+    const orderRepo = ds.getRepository(Order);
     const order = await orderRepo.findOne({ where: { id: orderId, tenantId } });
 
     if (!order) throw new NotFoundException('Order not found');
@@ -909,10 +1032,13 @@ export class PosService {
 
     // Release Table
     if (order.tableId) {
-      await this.dataSource.getRepository(DiningTable).update(order.tableId, {
-        status: TableStatus.AVAILABLE,
-        currentOrderId: () => 'NULL',
-      });
+      await ds.getRepository(DiningTable).update(
+        { id: order.tableId, tenantId },
+        {
+          status: TableStatus.AVAILABLE,
+          currentOrderId: () => 'NULL',
+        },
+      );
     }
 
     return order;

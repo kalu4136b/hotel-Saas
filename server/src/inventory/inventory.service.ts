@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { DataSource, In } from 'typeorm';
+import { In } from 'typeorm';
 import {
   InventoryItem,
   MainInventoryCategory,
@@ -23,23 +23,29 @@ import {
   OperationalStockIssuance,
   OperationalStockIssuanceItem,
   IssuanceStatus,
+  Product,
 } from '../entities';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
 
 @Injectable()
 export class InventoryService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly tenantConn: TenantConnectionManager) {}
 
   // ================= 1. INVENTORY ITEMS =================
 
   async getItems(
-    tenantId: string,
-    propertyId: string,
-    category?: string, // MainCategory (BAR, KITCHEN, OPERATIONAL) or subcategory
+    rawTenantId: string,
+    rawPropertyId: string,
+    category?: string,
     search?: string,
     lowStockOnly?: boolean,
     itemType?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(InventoryItem)
       .createQueryBuilder('item')
       .leftJoinAndSelect('item.defaultSupplier', 'supplier')
@@ -78,8 +84,12 @@ export class InventoryService {
     return qb.getMany();
   }
 
-  async getItem(tenantId: string, propertyId: string, id: string) {
-    const item = await this.dataSource.getRepository(InventoryItem).findOne({
+  async getItem(rawTenantId: string, rawPropertyId: string, id: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const item = await ds.getRepository(InventoryItem).findOne({
       where: { id, tenantId, propertyId },
       relations: { defaultSupplier: true },
     });
@@ -88,8 +98,8 @@ export class InventoryService {
   }
 
   async createItem(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       name: string;
       sku?: string;
@@ -120,26 +130,42 @@ export class InventoryService {
     userId = 'SYSTEM',
     userName = 'System Administrator',
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
+      if (dto.defaultSupplierId) {
+        const sup = await queryRunner.manager.getRepository(Supplier).findOne({
+          where: { id: dto.defaultSupplierId, tenantId, propertyId },
+        });
+        if (!sup) {
+          throw new NotFoundException('Selected supplier not found for this property');
+        }
+      }
+
       const repo = queryRunner.manager.getRepository(InventoryItem);
 
-      // Determine mainCategory fallback
       let mainCat = dto.mainCategory;
       if (!mainCat) {
         if (dto.category === InventoryCategory.BEVERAGES) {
           mainCat = MainInventoryCategory.BAR;
-        } else if (dto.category === InventoryCategory.AMENITIES || dto.category === InventoryCategory.PACKAGING) {
+        } else if (
+          dto.category === InventoryCategory.AMENITIES ||
+          dto.category === InventoryCategory.PACKAGING
+        ) {
           mainCat = MainInventoryCategory.OPERATIONAL;
         } else {
           mainCat = MainInventoryCategory.KITCHEN;
         }
       }
 
-      const conversionFactor = Number(dto.conversionFactor) > 0 ? Number(dto.conversionFactor) : 1.0;
+      const conversionFactor =
+        Number(dto.conversionFactor) > 0 ? Number(dto.conversionFactor) : 1.0;
       let costPerUnit = Number(dto.costPerUnit || 0);
       let purchaseCost = Number(dto.purchaseCost || 0);
 
@@ -172,7 +198,8 @@ export class InventoryService {
         purchaseCost,
         costPerUnit,
         sellingPrice: dto.sellingPrice !== undefined ? Number(dto.sellingPrice) : undefined,
-        isSellingItem: mainCat === MainInventoryCategory.OPERATIONAL ? false : (dto.isSellingItem ?? false),
+        isSellingItem:
+          mainCat === MainInventoryCategory.OPERATIONAL ? false : (dto.isSellingItem ?? false),
         taxRate: Number(dto.taxRate || 0),
         expiryTracking: dto.expiryTracking ?? false,
         batchTracking: dto.batchTracking ?? false,
@@ -219,14 +246,27 @@ export class InventoryService {
   }
 
   async updateItem(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     id: string,
     dto: Partial<InventoryItem>,
   ) {
-    const repo = this.dataSource.getRepository(InventoryItem);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(InventoryItem);
     const item = await repo.findOne({ where: { id, tenantId, propertyId } });
     if (!item) throw new NotFoundException('Inventory item not found');
+
+    if (dto.defaultSupplierId) {
+      const sup = await ds.getRepository(Supplier).findOne({
+        where: { id: dto.defaultSupplierId, tenantId, propertyId },
+      });
+      if (!sup) {
+        throw new NotFoundException('Selected supplier not found for this property');
+      }
+    }
 
     if (dto.name !== undefined) item.name = dto.name.trim();
     if (dto.sku !== undefined) item.sku = dto.sku;
@@ -257,8 +297,12 @@ export class InventoryService {
     return repo.save(item);
   }
 
-  async deleteItem(tenantId: string, propertyId: string, id: string) {
-    const repo = this.dataSource.getRepository(InventoryItem);
+  async deleteItem(rawTenantId: string, rawPropertyId: string, id: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(InventoryItem);
     const item = await repo.findOne({ where: { id, tenantId, propertyId } });
     if (!item) throw new NotFoundException('Inventory item not found');
 
@@ -267,13 +311,13 @@ export class InventoryService {
   }
 
   async adjustStock(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     itemId: string,
     userId: string,
     userName: string,
     dto: {
-      quantity: number; // positive to add, negative to deduct
+      quantity: number;
       movementType?: StockMovementType;
       unitCost?: number;
       reason: string;
@@ -281,7 +325,11 @@ export class InventoryService {
       department?: string;
     },
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -337,8 +385,8 @@ export class InventoryService {
   // ================= 2. PURCHASE ORDERS (PO) =================
 
   async getPurchaseOrders(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     status?: string,
     category?: string,
     supplierId?: string,
@@ -346,7 +394,11 @@ export class InventoryService {
     startDate?: string,
     endDate?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(PurchaseOrder)
       .createQueryBuilder('po')
       .leftJoinAndSelect('po.supplier', 'supplier')
@@ -360,7 +412,9 @@ export class InventoryService {
     }
 
     if (category && category !== 'ALL') {
-      qb.andWhere('(po.inventoryCategory = :category OR po.inventoryCategory = "ALL")', { category });
+      qb.andWhere('(po.inventoryCategory = :category OR po.inventoryCategory = "ALL")', {
+        category,
+      });
     }
 
     if (supplierId) {
@@ -368,10 +422,9 @@ export class InventoryService {
     }
 
     if (search) {
-      qb.andWhere(
-        '(LOWER(po.poNumber) LIKE :q OR LOWER(supplier.name) LIKE :q)',
-        { q: `%${search.toLowerCase()}%` },
-      );
+      qb.andWhere('(LOWER(po.poNumber) LIKE :q OR LOWER(supplier.name) LIKE :q)', {
+        q: `%${search.toLowerCase()}%`,
+      });
     }
 
     if (startDate) {
@@ -385,8 +438,12 @@ export class InventoryService {
     return qb.getMany();
   }
 
-  async getPurchaseOrder(tenantId: string, propertyId: string, id: string) {
-    const po = await this.dataSource.getRepository(PurchaseOrder).findOne({
+  async getPurchaseOrder(rawTenantId: string, rawPropertyId: string, id: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const po = await ds.getRepository(PurchaseOrder).findOne({
       where: { id, tenantId, propertyId },
       relations: {
         supplier: true,
@@ -398,8 +455,8 @@ export class InventoryService {
   }
 
   async createPurchaseOrder(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       supplierId: string;
       inventoryCategory?: ProcurementCategory;
@@ -407,7 +464,7 @@ export class InventoryService {
       deliveryLocation?: string;
       paymentTerms?: string;
       notes?: string;
-      status?: PurchaseOrderStatus; // default PENDING_APPROVAL or DRAFT
+      status?: PurchaseOrderStatus;
       items: Array<{
         inventoryItemId: string;
         purchaseUnit?: string;
@@ -421,13 +478,32 @@ export class InventoryService {
     userId = 'SYSTEM',
     userName = 'Purchasing Officer',
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
       if (!dto.items || dto.items.length === 0) {
         throw new BadRequestException('At least one item is required in the Purchase Order');
+      }
+
+      const supplier = await queryRunner.manager.getRepository(Supplier).findOne({
+        where: { id: dto.supplierId, tenantId, propertyId },
+      });
+      if (!supplier) {
+        throw new NotFoundException('Selected supplier not found for this property');
+      }
+
+      const uniqueInvIds = [...new Set(dto.items.map((i) => i.inventoryItemId))];
+      const validInvItems = await queryRunner.manager.getRepository(InventoryItem).find({
+        where: { id: In(uniqueInvIds), tenantId, propertyId },
+      });
+      if (validInvItems.length !== uniqueInvIds.length) {
+        throw new BadRequestException('One or more inventory items do not belong to this property');
       }
 
       const poCount = await queryRunner.manager.getRepository(PurchaseOrder).count({
@@ -504,12 +580,16 @@ export class InventoryService {
   }
 
   async updatePurchaseOrder(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     id: string,
     dto: any,
   ) {
-    const poRepo = this.dataSource.getRepository(PurchaseOrder);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const poRepo = ds.getRepository(PurchaseOrder);
     const po = await poRepo.findOne({
       where: { id, tenantId, propertyId },
       relations: { items: true },
@@ -536,13 +616,17 @@ export class InventoryService {
   }
 
   async approvePurchaseOrder(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     id: string,
     userId: string,
     userName: string,
   ) {
-    const poRepo = this.dataSource.getRepository(PurchaseOrder);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const poRepo = ds.getRepository(PurchaseOrder);
     const po = await poRepo.findOne({
       where: { id, tenantId, propertyId },
     });
@@ -565,17 +649,20 @@ export class InventoryService {
     po.approvedByName = userName;
     po.approvedAt = new Date();
 
-    // IMPORTANT: Approving a PO does NOT alter stock! Stock increases ONLY via GRN.
     return poRepo.save(po);
   }
 
   async cancelPurchaseOrder(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     id: string,
     reason?: string,
   ) {
-    const poRepo = this.dataSource.getRepository(PurchaseOrder);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const poRepo = ds.getRepository(PurchaseOrder);
     const po = await poRepo.findOne({
       where: { id, tenantId, propertyId },
     });
@@ -596,8 +683,8 @@ export class InventoryService {
   // ================= 3. GOODS RECEIVED NOTE (GRN) =================
 
   async getGRNs(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     poId?: string,
     supplierId?: string,
     category?: string,
@@ -606,7 +693,11 @@ export class InventoryService {
     startDate?: string,
     endDate?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(GoodsReceivedNote)
       .createQueryBuilder('grn')
       .leftJoinAndSelect('grn.supplier', 'supplier')
@@ -625,7 +716,9 @@ export class InventoryService {
     }
 
     if (category && category !== 'ALL') {
-      qb.andWhere('(grn.inventoryCategory = :category OR grn.inventoryCategory = "ALL")', { category });
+      qb.andWhere('(grn.inventoryCategory = :category OR grn.inventoryCategory = "ALL")', {
+        category,
+      });
     }
 
     if (status) {
@@ -650,8 +743,12 @@ export class InventoryService {
     return qb.getMany();
   }
 
-  async getGRN(tenantId: string, propertyId: string, id: string) {
-    const grn = await this.dataSource.getRepository(GoodsReceivedNote).findOne({
+  async getGRN(rawTenantId: string, rawPropertyId: string, id: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const grn = await ds.getRepository(GoodsReceivedNote).findOne({
       where: { id, tenantId, propertyId },
       relations: {
         supplier: true,
@@ -663,10 +760,9 @@ export class InventoryService {
     return grn;
   }
 
-  // ATOMIC GRN RECEIPT AGAINST APPROVED PURCHASE ORDER
   async createGRN(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       purchaseOrderId: string;
       deliveryNoteNumber?: string;
@@ -687,7 +783,11 @@ export class InventoryService {
     userId = 'SYSTEM',
     userName = 'Receiving Officer',
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -706,14 +806,19 @@ export class InventoryService {
         throw new BadRequestException('Cannot receive goods against a Cancelled Purchase Order');
       }
 
-      if (po.status === PurchaseOrderStatus.DRAFT || po.status === PurchaseOrderStatus.PENDING_APPROVAL) {
+      if (
+        po.status === PurchaseOrderStatus.DRAFT ||
+        po.status === PurchaseOrderStatus.PENDING_APPROVAL
+      ) {
         throw new BadRequestException(
           `Purchase Order ${po.poNumber} is in ${po.status} status. GRN can only be processed against APPROVED Purchase Orders.`,
         );
       }
 
       if (po.status === PurchaseOrderStatus.FULLY_RECEIVED) {
-        throw new BadRequestException(`Purchase Order ${po.poNumber} has already been fully received`);
+        throw new BadRequestException(
+          `Purchase Order ${po.poNumber} has already been fully received`,
+        );
       }
 
       const grnCount = await queryRunner.manager.getRepository(GoodsReceivedNote).count({
@@ -769,12 +874,10 @@ export class InventoryService {
         totalRejected += qtyRejected;
         totalReceivedValue += lineTotal;
 
-        // 1. Update PO item received and rejected counts
         poItem.quantityReceived = Number(poItem.quantityReceived) + qtyAccepted;
         poItem.quantityRejected = Number(poItem.quantityRejected || 0) + qtyRejected;
         await queryRunner.manager.getRepository(PurchaseOrderItem).save(poItem);
 
-        // 2. Fetch inventory item and INCREMENT STOCK ONLY BY ACCEPTED QUANTITY
         const inv = await queryRunner.manager.getRepository(InventoryItem).findOne({
           where: { id: poItem.inventoryItemId, tenantId, propertyId },
         });
@@ -786,14 +889,12 @@ export class InventoryService {
           const newStock = previousStock + stockUnitsToAdd;
 
           inv.currentStock = newStock;
-          // Update moving average or latest cost per stock unit
           if (stockUnitsToAdd > 0) {
             inv.costPerUnit = Number((unitCost / conversionFactor).toFixed(2));
             inv.purchaseCost = unitCost;
           }
           await queryRunner.manager.getRepository(InventoryItem).save(inv);
 
-          // 3. Record official Stock Movement
           if (qtyAccepted > 0) {
             const movement = queryRunner.manager.getRepository(StockMovement).create({
               tenantId,
@@ -816,7 +917,6 @@ export class InventoryService {
           }
         }
 
-        // 4. Create GRN item record
         const grnItem = queryRunner.manager.getRepository(GoodsReceivedNoteItem).create({
           purchaseOrderItemId: poItem.id,
           inventoryItemId: poItem.inventoryItemId,
@@ -834,7 +934,6 @@ export class InventoryService {
         grnItems.push(grnItem);
       }
 
-      // 5. Update PO status automatically based on whether any pending items remain
       const allPoItemsFullyReceived = po.items.every(
         (pi) => Number(pi.quantityReceived) >= Number(pi.quantityOrdered) - 0.001,
       );
@@ -848,7 +947,6 @@ export class InventoryService {
       }
       await poRepo.save(po);
 
-      // 6. Create and save Goods Received Note
       const grn = queryRunner.manager.getRepository(GoodsReceivedNote).create({
         tenantId,
         propertyId,
@@ -880,31 +978,45 @@ export class InventoryService {
     }
   }
 
-  // Backward-compatible receivePurchaseOrder wrapper: creates a 100% accepted GRN
-  async receivePurchaseOrder(tenantId: string, propertyId: string, poId: string, userId: string, userName = 'Storekeeper') {
-    const po = await this.dataSource.getRepository(PurchaseOrder).findOne({
+  async receivePurchaseOrder(
+    rawTenantId: string,
+    rawPropertyId: string,
+    poId: string,
+    userId: string,
+    userName = 'Storekeeper',
+  ) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const po = await ds.getRepository(PurchaseOrder).findOne({
       where: { id: poId, tenantId, propertyId },
       relations: { items: true },
     });
     if (!po) throw new NotFoundException('Purchase Order not found');
 
-    // Automatically transition to approved if it was still in ordered/draft
-    if (po.status === PurchaseOrderStatus.DRAFT || po.status === PurchaseOrderStatus.PENDING_APPROVAL || po.status === PurchaseOrderStatus.ORDERED) {
+    if (
+      po.status === PurchaseOrderStatus.DRAFT ||
+      po.status === PurchaseOrderStatus.PENDING_APPROVAL ||
+      po.status === PurchaseOrderStatus.ORDERED
+    ) {
       po.status = PurchaseOrderStatus.APPROVED;
-      await this.dataSource.getRepository(PurchaseOrder).save(po);
+      await ds.getRepository(PurchaseOrder).save(po);
     }
 
-    const itemsToReceive = po.items.map((i) => {
-      const remaining = Number(i.quantityOrdered) - Number(i.quantityReceived);
-      return {
-        purchaseOrderItemId: i.id,
-        inventoryItemId: i.inventoryItemId,
-        quantityReceiving: remaining,
-        quantityAccepted: remaining,
-        quantityRejected: 0,
-        unitCost: Number(i.unitCost),
-      };
-    }).filter((i) => i.quantityReceiving > 0);
+    const itemsToReceive = po.items
+      .map((i) => {
+        const remaining = Number(i.quantityOrdered) - Number(i.quantityReceived);
+        return {
+          purchaseOrderItemId: i.id,
+          inventoryItemId: i.inventoryItemId,
+          quantityReceiving: remaining,
+          quantityAccepted: remaining,
+          quantityRejected: 0,
+          unitCost: Number(i.unitCost),
+        };
+      })
+      .filter((i) => i.quantityReceiving > 0);
 
     if (itemsToReceive.length === 0) {
       throw new BadRequestException('All items in this Purchase Order are already received');
@@ -926,14 +1038,18 @@ export class InventoryService {
   // ================= 4. OPERATIONAL STOCK ISSUANCE =================
 
   async getIssuances(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     department?: string,
     search?: string,
     startDate?: string,
     endDate?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(OperationalStockIssuance)
       .createQueryBuilder('iss')
       .leftJoinAndSelect('iss.items', 'item')
@@ -963,8 +1079,12 @@ export class InventoryService {
     return qb.getMany();
   }
 
-  async getIssuance(tenantId: string, propertyId: string, id: string) {
-    const iss = await this.dataSource.getRepository(OperationalStockIssuance).findOne({
+  async getIssuance(rawTenantId: string, rawPropertyId: string, id: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const iss = await ds.getRepository(OperationalStockIssuance).findOne({
       where: { id, tenantId, propertyId },
       relations: { items: { inventoryItem: true } },
     });
@@ -973,8 +1093,8 @@ export class InventoryService {
   }
 
   async createIssuance(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       department: string;
       receivedByName: string;
@@ -990,7 +1110,11 @@ export class InventoryService {
     userId = 'SYSTEM',
     userName = 'Storekeeper',
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -1028,11 +1152,9 @@ export class InventoryService {
           );
         }
 
-        // Deduct inventory stock
         const newStock = previousStock - qty;
         item.currentStock = newStock;
 
-        // If reusable equipment, update current assigned department
         if (item.itemType === ItemType.REUSABLE_EQUIPMENT) {
           item.assignedDepartment = dto.department;
           if (reqItem.assetTag) item.assetTag = reqItem.assetTag;
@@ -1043,7 +1165,6 @@ export class InventoryService {
         totalQty += qty;
         const lineCost = Number((qty * Number(item.costPerUnit)).toFixed(2));
 
-        // Record stock movement
         const movement = queryRunner.manager.getRepository(StockMovement).create({
           tenantId,
           propertyId,
@@ -1093,7 +1214,9 @@ export class InventoryService {
         items: issuanceItems,
       });
 
-      const savedIssuance = await queryRunner.manager.getRepository(OperationalStockIssuance).save(issuance);
+      const savedIssuance = await queryRunner.manager
+        .getRepository(OperationalStockIssuance)
+        .save(issuance);
       await queryRunner.commitTransaction();
       return savedIssuance;
     } catch (err) {
@@ -1107,15 +1230,19 @@ export class InventoryService {
   // ================= 5. STOCK MOVEMENTS AUDIT LOG =================
 
   async getStockMovements(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     itemId?: string,
     category?: string,
     movementType?: string,
     startDate?: string,
     endDate?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(StockMovement)
       .createQueryBuilder('sm')
       .leftJoinAndSelect('sm.inventoryItem', 'item')
@@ -1127,7 +1254,9 @@ export class InventoryService {
     }
 
     if (category) {
-      qb.andWhere('(sm.inventoryCategory = :category OR item.mainCategory = :category)', { category });
+      qb.andWhere('(sm.inventoryCategory = :category OR item.mainCategory = :category)', {
+        category,
+      });
     }
 
     if (movementType) {
@@ -1147,8 +1276,12 @@ export class InventoryService {
 
   // ================= 6. RECIPE (BOM) MANAGEMENT =================
 
-  async getRecipe(tenantId: string, propertyId: string, productId: string) {
-    return this.dataSource.getRepository(RecipeItem).find({
+  async getRecipe(rawTenantId: string, rawPropertyId: string, productId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return ds.getRepository(RecipeItem).find({
       where: { tenantId, propertyId, productId },
       relations: { inventoryItem: true },
       order: { createdAt: 'ASC' },
@@ -1156,16 +1289,39 @@ export class InventoryService {
   }
 
   async saveRecipe(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     productId: string,
     items: Array<{ inventoryItemId: string; quantityRequired: number }>,
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
+      const product = await queryRunner.manager.getRepository(Product).findOne({
+        where: { id: productId, tenantId, propertyId },
+      });
+      if (!product) {
+        throw new NotFoundException('Product not found for this property');
+      }
+
+      if (items.length > 0) {
+        const uniqueInvIds = [...new Set(items.map((i) => i.inventoryItemId))];
+        const validInvItems = await queryRunner.manager.getRepository(InventoryItem).find({
+          where: { id: In(uniqueInvIds), tenantId, propertyId },
+        });
+        if (validInvItems.length !== uniqueInvIds.length) {
+          throw new BadRequestException(
+            'One or more recipe ingredients do not belong to this property',
+          );
+        }
+      }
+
       const recipeRepo = queryRunner.manager.getRepository(RecipeItem);
       await recipeRepo.delete({ tenantId, propertyId, productId });
 
@@ -1191,17 +1347,20 @@ export class InventoryService {
     }
   }
 
-  // Deduct inventory when POS dishes/drinks are sold
   async deductIngredientsForOrder(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     orderItems: Array<{ productId: string; quantity: number }>,
     orderReference: string,
   ) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
     const productIds = orderItems.map((oi) => oi.productId);
     if (productIds.length === 0) return;
 
-    const recipes = await this.dataSource.getRepository(RecipeItem).find({
+    const recipes = await ds.getRepository(RecipeItem).find({
       where: { tenantId, propertyId, productId: In(productIds) },
       relations: { inventoryItem: true },
     });
@@ -1236,16 +1395,20 @@ export class InventoryService {
 
   // ================= 7. SUPPLIERS =================
 
-  async getSuppliers(tenantId: string, propertyId: string) {
-    return this.dataSource.getRepository(Supplier).find({
+  async getSuppliers(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return ds.getRepository(Supplier).find({
       where: { tenantId, propertyId, isActive: true },
       order: { name: 'ASC' },
     });
   }
 
   async createSupplier(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       name: string;
       supplierCode?: string;
@@ -1257,37 +1420,64 @@ export class InventoryService {
       taxNumber?: string;
     },
   ) {
-    const repo = this.dataSource.getRepository(Supplier);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(Supplier);
     const supplier = repo.create({
+      name: dto.name?.trim(),
+      supplierCode: dto.supplierCode,
+      contactPerson: dto.contactPerson,
+      email: dto.email,
+      phone: dto.phone,
+      address: dto.address,
+      paymentTerms: dto.paymentTerms,
+      taxNumber: dto.taxNumber,
       tenantId,
       propertyId,
-      ...dto,
     });
     return repo.save(supplier);
   }
 
   async updateSupplier(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     id: string,
     dto: Partial<Supplier>,
   ) {
-    const repo = this.dataSource.getRepository(Supplier);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(Supplier);
     const supplier = await repo.findOne({ where: { id, tenantId, propertyId } });
     if (!supplier) throw new NotFoundException('Supplier not found');
 
-    Object.assign(supplier, dto);
+    if (dto.name !== undefined) supplier.name = dto.name.trim();
+    if (dto.supplierCode !== undefined) supplier.supplierCode = dto.supplierCode;
+    if (dto.contactPerson !== undefined) supplier.contactPerson = dto.contactPerson;
+    if (dto.email !== undefined) supplier.email = dto.email;
+    if (dto.phone !== undefined) supplier.phone = dto.phone;
+    if (dto.address !== undefined) supplier.address = dto.address;
+    if (dto.paymentTerms !== undefined) supplier.paymentTerms = dto.paymentTerms;
+    if (dto.taxNumber !== undefined) supplier.taxNumber = dto.taxNumber;
+    if (dto.isActive !== undefined) supplier.isActive = Boolean(dto.isActive);
+
     return repo.save(supplier);
   }
 
   // ================= 8. INVENTORY REPORTS & ANALYTICS =================
 
-  async getInventorySummaryStats(tenantId: string, propertyId: string) {
-    const invRepo = this.dataSource.getRepository(InventoryItem);
-    const poRepo = this.dataSource.getRepository(PurchaseOrder);
-    const grnRepo = this.dataSource.getRepository(GoodsReceivedNote);
+  async getInventorySummaryStats(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const invRepo = ds.getRepository(InventoryItem);
+    const poRepo = ds.getRepository(PurchaseOrder);
+    const grnRepo = ds.getRepository(GoodsReceivedNote);
 
-    // SQL Aggregations by category
     const stats = await invRepo
       .createQueryBuilder('item')
       .select([
@@ -1343,8 +1533,12 @@ export class InventoryService {
     };
   }
 
-  async getStockReport(tenantId: string, propertyId: string, category?: string) {
-    const qb = this.dataSource
+  async getStockReport(rawTenantId: string, rawPropertyId: string, category?: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(InventoryItem)
       .createQueryBuilder('item')
       .leftJoinAndSelect('item.defaultSupplier', 'supplier')
@@ -1392,8 +1586,12 @@ export class InventoryService {
     });
   }
 
-  async getValuationReport(tenantId: string, propertyId: string) {
-    const qb = this.dataSource
+  async getValuationReport(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(InventoryItem)
       .createQueryBuilder('item')
       .select([
@@ -1420,8 +1618,12 @@ export class InventoryService {
     }));
   }
 
-  async getLowStockReport(tenantId: string, propertyId: string, category?: string) {
-    const qb = this.dataSource
+  async getLowStockReport(rawTenantId: string, rawPropertyId: string, category?: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(InventoryItem)
       .createQueryBuilder('item')
       .leftJoinAndSelect('item.defaultSupplier', 'supplier')
@@ -1455,13 +1657,24 @@ export class InventoryService {
         reorderLevel: reorder,
         suggestedReorderQuantity: Number(suggestedReorder.toFixed(2)),
         costPerUnit: Number(i.costPerUnit),
-        supplier: i.defaultSupplier ? { id: i.defaultSupplier.id, name: i.defaultSupplier.name } : null,
+        supplier: i.defaultSupplier
+          ? { id: i.defaultSupplier.id, name: i.defaultSupplier.name }
+          : null,
       };
     });
   }
 
-  async getDepartmentIssuanceReport(tenantId: string, propertyId: string, startDate?: string, endDate?: string) {
-    const qb = this.dataSource
+  async getDepartmentIssuanceReport(
+    rawTenantId: string,
+    rawPropertyId: string,
+    startDate?: string,
+    endDate?: string,
+  ) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(OperationalStockIssuanceItem)
       .createQueryBuilder('ii')
       .innerJoin('ii.issuance', 'iss')

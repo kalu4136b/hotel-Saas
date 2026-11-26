@@ -1,20 +1,25 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
 import { Order, OrderStatus } from '../entities/order.entity';
 import { Payment, PaymentStatus } from '../entities/payment.entity';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly tenantConn: TenantConnectionManager) {}
 
   // 1. Daily Sales Summary Report
   async getDailySalesReport(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     startDate?: string,
     endDate?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+
+    const qb = ds
       .getRepository(Order)
       .createQueryBuilder('o')
       .select([
@@ -54,12 +59,17 @@ export class ReportsService {
 
   // 2. Payment Method Reconciliation Report
   async getPaymentMethodReport(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     startDate?: string,
     endDate?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+
+    const qb = ds
       .getRepository(Payment)
       .createQueryBuilder('p')
       .select([
@@ -94,12 +104,17 @@ export class ReportsService {
 
   // 3. Product & Category Item Sales Performance Report
   async getItemSalesReport(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     startDate?: string,
     endDate?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+
+    const qb = ds
       .createQueryBuilder()
       .select('oi.productName', 'productName')
       .addSelect('COALESCE(c.name, "Uncategorized")', 'categoryName')
@@ -108,8 +123,8 @@ export class ReportsService {
       .addSelect('AVG(oi.unitPrice)', 'avgPrice')
       .from('order_items', 'oi')
       .innerJoin('orders', 'o', 'o.id = oi.orderId')
-      .leftJoin('products', 'p', 'p.id = oi.productId')
-      .leftJoin('categories', 'c', 'c.id = p.categoryId')
+      .leftJoin('products', 'p', 'p.id = oi.productId AND p.tenantId = o.tenantId')
+      .leftJoin('categories', 'c', 'c.id = p.categoryId AND c.tenantId = o.tenantId')
       .where('o.tenantId = :tenantId', { tenantId })
       .andWhere('o.propertyId = :propertyId', { propertyId })
       .andWhere('o.status = :status', { status: OrderStatus.PAID });
@@ -138,12 +153,17 @@ export class ReportsService {
 
   // 4. Void & Cancellation Audit Report
   async getCancellationReport(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     startDate?: string,
     endDate?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+
+    const qb = ds
       .getRepository(Order)
       .createQueryBuilder('o')
       .select([

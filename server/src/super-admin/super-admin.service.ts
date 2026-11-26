@@ -40,6 +40,7 @@ import { syncAiEntitlementWithPlan } from '../ai-assistant/services/ai-entitleme
 import { TenantCacheService } from '../tenancy/tenant-cache.service';
 import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
 import { tenantOperationalEntities } from '../database/tenant-entities';
+import { RedisService } from '../redis/redis.service';
 
 export class CreateTenantDto {
   @IsNotEmpty({ message: 'Hotel name is required' })
@@ -201,6 +202,7 @@ export class SuperAdminService {
     private readonly dataSource: DataSource,
     private readonly tenantCache: TenantCacheService,
     private readonly tenantConnectionManager: TenantConnectionManager,
+    private readonly redis: RedisService,
   ) {}
 
   getPackagesConfig() {
@@ -239,13 +241,22 @@ export class SuperAdminService {
       }
     }
 
-    const [totalUsers, totalProperties, totalRooms, totalOrders] =
-      await Promise.all([
-        userRepo.count(),
-        propertyRepo.count(),
-        roomRepo.count(),
-        orderRepo.count(),
+    const [totalUsers, totalProperties] = await Promise.all([
+      userRepo.count(),
+      propertyRepo.count(),
+    ]);
+
+    const activeSources = await this.tenantConnectionManager.getAllActiveDataSources();
+    let totalRooms = 0;
+    let totalOrders = 0;
+    for (const ds of activeSources) {
+      const [rc, oc] = await Promise.all([
+        ds.getRepository(Room).count(),
+        ds.getRepository(Order).count(),
       ]);
+      totalRooms += rc;
+      totalOrders += oc;
+    }
 
     return {
       totalTenants,
@@ -301,10 +312,23 @@ export class SuperAdminService {
         let roomCount = 0;
         if (properties.length > 0) {
           const propIds = properties.map((p) => p.id);
-          roomCount = await roomRepo
-            .createQueryBuilder('room')
-            .where('room.propertyId IN (:...propIds)', { propIds })
-            .getCount();
+          let targetRoomRepo = roomRepo;
+          if (tenant.storageMode === 'DEDICATED' && tenant.dbDatabaseName) {
+            try {
+              const { ds } = await this.tenantConnectionManager.getDataSourceForTenant(tenant.id);
+              targetRoomRepo = ds.getRepository(Room);
+            } catch {
+              // Fallback to 0 if dedicated DB unreachable
+              targetRoomRepo = null as any;
+            }
+          }
+          if (targetRoomRepo) {
+            roomCount = await targetRoomRepo
+              .createQueryBuilder('room')
+              .where('room.tenantId = :tenantId', { tenantId: tenant.id })
+              .andWhere('room.propertyId IN (:...propIds)', { propIds })
+              .getCount();
+          }
         }
 
         const modules: string[] =
@@ -375,8 +399,18 @@ export class SuperAdminService {
       throw new NotFoundException(`Tenant with ID ${id} not found`);
     }
 
+    let targetDs = this.dataSource;
+    if (tenant.storageMode === 'DEDICATED' && tenant.dbDatabaseName) {
+      try {
+        const { ds } = await this.tenantConnectionManager.getDataSourceForTenant(id);
+        targetDs = ds;
+      } catch {
+        targetDs = this.dataSource;
+      }
+    }
+
     const [users, properties] = await Promise.all([
-      this.dataSource.getRepository(User).find({
+      targetDs.getRepository(User).find({
         where: { tenantId: id },
         select: {
           id: true,
@@ -391,7 +425,7 @@ export class SuperAdminService {
           createdAt: true,
         },
       }),
-      this.dataSource.getRepository(Property).find({
+      targetDs.getRepository(Property).find({
         where: { tenantId: id },
       }),
     ]);
@@ -648,8 +682,22 @@ export class SuperAdminService {
     tenant.modules = modules;
     await tenantRepo.save(tenant);
 
-    // Invalidate tenant cache in Redis for real-time feature flag sync
+    if (tenant.storageMode === 'DEDICATED' && tenant.dbDatabaseName) {
+      try {
+        const { ds } = await this.tenantConnectionManager.getDataSourceForTenant(id);
+        await ds.getRepository(Tenant).save(tenant);
+      } catch {
+        // Non-blocking mirror sync
+      }
+    }
+
+    // Invalidate tenant & user session caches in Redis for real-time feature flag sync
     await this.tenantCache.invalidateTenant(id);
+    const tenantUsers = await this.dataSource.getRepository(User).find({
+      where: { tenantId: id },
+      select: { id: true },
+    });
+    await Promise.all(tenantUsers.map((u) => this.redis.del(`auth:session:${u.id}`)));
 
     return {
       success: true,
@@ -690,8 +738,22 @@ export class SuperAdminService {
 
     await tenantRepo.save(tenant);
 
-    // Invalidate tenant cache in Redis for real-time subscription & status sync
+    if (tenant.storageMode === 'DEDICATED' && tenant.dbDatabaseName) {
+      try {
+        const { ds } = await this.tenantConnectionManager.getDataSourceForTenant(id);
+        await ds.getRepository(Tenant).save(tenant);
+      } catch {
+        // Non-blocking mirror sync
+      }
+    }
+
+    // Invalidate tenant & user session caches in Redis for real-time subscription & status sync
     await this.tenantCache.invalidateTenant(id);
+    const tenantUsers = await this.dataSource.getRepository(User).find({
+      where: { tenantId: id },
+      select: { id: true },
+    });
+    await Promise.all(tenantUsers.map((u) => this.redis.del(`auth:session:${u.id}`)));
 
     // Keep AI Co-Pilot entitlement (tier, providers, quotas) aligned with the new plan
     if (dto.subscriptionPlan) {
@@ -722,6 +784,23 @@ export class SuperAdminService {
     adminUser.passwordHash = await bcrypt.hash(newPassword, salt);
     adminUser.tokenVersion = (adminUser.tokenVersion || 0) + 1;
     await userRepo.save(adminUser);
+
+    await this.redis.del(`auth:session:${adminUser.id}`);
+
+    try {
+      const { ds, isDedicated } = await this.tenantConnectionManager.getDataSourceForTenant(id);
+      if (isDedicated) {
+        const dedUserRepo = ds.getRepository(User);
+        const dedAdmin = await dedUserRepo.findOne({ where: { id: adminUser.id, tenantId: id } });
+        if (dedAdmin) {
+          dedAdmin.passwordHash = adminUser.passwordHash;
+          dedAdmin.tokenVersion = adminUser.tokenVersion;
+          await dedUserRepo.save(dedAdmin);
+        }
+      }
+    } catch {
+      // Non-blocking mirror sync
+    }
 
     return {
       success: true,

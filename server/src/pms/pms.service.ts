@@ -4,7 +4,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { DataSource, In } from 'typeorm';
+import { In } from 'typeorm';
 import {
   RoomType,
   Room,
@@ -22,27 +22,32 @@ import {
   Property,
 } from '../entities';
 import { EventsGateway } from '../events/events.gateway';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
 
 @Injectable()
 export class PmsService {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly tenantConn: TenantConnectionManager,
     private readonly eventsGateway: EventsGateway,
   ) {}
 
   // ==========================================
   // 1. ROOM TYPES
   // ==========================================
-  async getRoomTypes(tenantId: string, propertyId: string) {
-    return this.dataSource.getRepository(RoomType).find({
+  async getRoomTypes(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return ds.getRepository(RoomType).find({
       where: { tenantId, propertyId, isActive: true },
       order: { basePricePerNight: 'ASC' },
     });
   }
 
   async createRoomType(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       name: string;
       code?: string;
@@ -53,7 +58,11 @@ export class PmsService {
       description?: string;
     },
   ) {
-    const repo = this.dataSource.getRepository(RoomType);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(RoomType);
     const roomType = repo.create({
       tenantId,
       propertyId,
@@ -71,8 +80,12 @@ export class PmsService {
   // ==========================================
   // 2. ROOMS
   // ==========================================
-  async getRooms(tenantId: string, propertyId: string) {
-    return this.dataSource.getRepository(Room).find({
+  async getRooms(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return ds.getRepository(Room).find({
       where: { tenantId, propertyId },
       relations: { roomType: true },
       order: { floor: 'ASC', roomNumber: 'ASC' },
@@ -80,8 +93,8 @@ export class PmsService {
   }
 
   async createRoom(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       roomTypeId: string;
       roomNumber: string;
@@ -89,9 +102,20 @@ export class PmsService {
       notes?: string;
     },
   ) {
-    const roomRepo = this.dataSource.getRepository(Room);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const roomType = await ds.getRepository(RoomType).findOne({
+      where: { id: dto.roomTypeId, tenantId, propertyId },
+    });
+    if (!roomType) {
+      throw new NotFoundException('Selected room type not found on this property');
+    }
+
+    const roomRepo = ds.getRepository(Room);
     const existing = await roomRepo.findOne({
-      where: { propertyId, roomNumber: dto.roomNumber.trim() },
+      where: { tenantId, propertyId, roomNumber: dto.roomNumber.trim() },
     });
     if (existing) {
       throw new ConflictException(`Room ${dto.roomNumber} already exists on this property`);
@@ -111,12 +135,16 @@ export class PmsService {
   }
 
   async updateCleanliness(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     roomId: string,
     status: CleanlinessStatus,
   ) {
-    const roomRepo = this.dataSource.getRepository(Room);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const roomRepo = ds.getRepository(Room);
     const room = await roomRepo.findOne({ where: { id: roomId, tenantId, propertyId } });
     if (!room) throw new NotFoundException('Room not found');
 
@@ -131,12 +159,18 @@ export class PmsService {
   }
 
   async bulkUpdateCleanliness(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     roomIds: string[],
     status: CleanlinessStatus,
   ) {
-    const roomRepo = this.dataSource.getRepository(Room);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    if (!roomIds || roomIds.length === 0) return [];
+
+    const roomRepo = ds.getRepository(Room);
     const rooms = await roomRepo.find({
       where: {
         id: In(roomIds),
@@ -151,7 +185,7 @@ export class PmsService {
       await roomRepo.save(room);
       try {
         this.eventsGateway.notifyRoomStatusUpdate(propertyId, room);
-      } catch (err) {
+      } catch {
         // Continue
       }
     }
@@ -159,12 +193,16 @@ export class PmsService {
   }
 
   async updateRoomNotes(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     roomId: string,
     notes: string,
   ) {
-    const roomRepo = this.dataSource.getRepository(Room);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const roomRepo = ds.getRepository(Room);
     const room = await roomRepo.findOne({
       where: { id: roomId, tenantId, propertyId },
       relations: { roomType: true },
@@ -182,12 +220,16 @@ export class PmsService {
   }
 
   async updateOccupancyStatus(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     roomId: string,
     status: RoomStatus,
   ) {
-    const roomRepo = this.dataSource.getRepository(Room);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const roomRepo = ds.getRepository(Room);
     const room = await roomRepo.findOne({ where: { id: roomId, tenantId, propertyId } });
     if (!room) throw new NotFoundException('Room not found');
 
@@ -204,8 +246,12 @@ export class PmsService {
   // ==========================================
   // 3. GUESTS
   // ==========================================
-  async getGuests(tenantId: string, propertyId: string) {
-    return this.dataSource.getRepository(Guest).find({
+  async getGuests(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return ds.getRepository(Guest).find({
       where: { tenantId, propertyId },
       order: { fullName: 'ASC' },
       take: 100,
@@ -213,8 +259,8 @@ export class PmsService {
   }
 
   async createGuest(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       fullName: string;
       email?: string;
@@ -225,7 +271,11 @@ export class PmsService {
       notes?: string;
     },
   ) {
-    const repo = this.dataSource.getRepository(Guest);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(Guest);
     const guest = repo.create({
       tenantId,
       propertyId,
@@ -244,12 +294,16 @@ export class PmsService {
   // 4. RESERVATIONS
   // ==========================================
   async getReservations(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     status?: string,
     search?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(Reservation)
       .createQueryBuilder('res')
       .leftJoinAndSelect('res.guest', 'guest')
@@ -274,8 +328,8 @@ export class PmsService {
   }
 
   async createReservation(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       guestName: string;
       guestEmail?: string;
@@ -294,7 +348,11 @@ export class PmsService {
     },
     userId: string,
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -302,6 +360,7 @@ export class PmsService {
       // 1. Resolve or create Guest
       let guest = await queryRunner.manager.getRepository(Guest).findOne({
         where: {
+          tenantId,
           propertyId,
           fullName: dto.guestName.trim(),
         },
@@ -322,9 +381,19 @@ export class PmsService {
 
       // 2. Resolve RoomType & Rates
       const roomType = await queryRunner.manager.getRepository(RoomType).findOne({
-        where: { id: dto.roomTypeId, propertyId },
+        where: { id: dto.roomTypeId, tenantId, propertyId },
       });
       if (!roomType) throw new NotFoundException('Selected room type not found');
+
+      // Validate pre-assigned room belongs to this tenant/property
+      if (dto.roomId) {
+        const assignedRoom = await queryRunner.manager.getRepository(Room).findOne({
+          where: { id: dto.roomId, tenantId, propertyId },
+        });
+        if (!assignedRoom) {
+          throw new NotFoundException('Selected room not found on this property');
+        }
+      }
 
       // 3. Compute nights
       const start = new Date(dto.checkInDate);
@@ -343,7 +412,7 @@ export class PmsService {
       // 4. Generate Reservation Number
       const count = await queryRunner.manager
         .getRepository(Reservation)
-        .count({ where: { propertyId } });
+        .count({ where: { tenantId, propertyId } });
       const reservationNumber = `BK-${(9040 + count + 1).toString()}`;
 
       // 5. Create Reservation
@@ -375,7 +444,7 @@ export class PmsService {
       if (dto.roomId) {
         await queryRunner.manager
           .getRepository(Room)
-          .update(dto.roomId, { status: RoomStatus.RESERVED });
+          .update({ id: dto.roomId, tenantId, propertyId }, { status: RoomStatus.RESERVED });
       }
 
       // Log Audit
@@ -407,13 +476,17 @@ export class PmsService {
   // 5. CHECK-IN
   // ==========================================
   async checkIn(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     reservationId: string,
     roomId: string,
     userId: string,
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -445,10 +518,14 @@ export class PmsService {
       if (!room) throw new NotFoundException('Assigned room not found');
 
       if (room.status === RoomStatus.OCCUPIED && reservation.roomId !== room.id) {
-        throw new BadRequestException(`Room ${room.roomNumber} is currently occupied by another guest`);
+        throw new BadRequestException(
+          `Room ${room.roomNumber} is currently occupied by another guest`,
+        );
       }
       if (room.status === RoomStatus.MAINTENANCE) {
-        throw new BadRequestException(`Room ${room.roomNumber} is under maintenance and cannot be checked in`);
+        throw new BadRequestException(
+          `Room ${room.roomNumber} is under maintenance and cannot be checked in`,
+        );
       }
       if (room.status === RoomStatus.OUT_OF_SERVICE) {
         throw new BadRequestException(`Room ${room.roomNumber} is out of service`);
@@ -474,13 +551,13 @@ export class PmsService {
       // Create or retrieve Guest Folio
       const folioRepo = queryRunner.manager.getRepository(GuestFolio);
       let folio = await folioRepo.findOne({
-        where: { reservationId: reservation.id },
+        where: { reservationId: reservation.id, tenantId, propertyId },
       });
 
       if (!folio) {
         // Lodging total + property tax
         const prop = await queryRunner.manager.getRepository(Property).findOne({
-          where: { id: propertyId },
+          where: { id: propertyId, tenantId },
         });
         const taxRate = Number(prop?.defaultTaxRate || 10) / 100;
         const lodgingAmount = Number(reservation.totalAmount);
@@ -570,12 +647,16 @@ export class PmsService {
   // 6. CHECK-OUT
   // ==========================================
   async checkOut(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     reservationId: string,
     userId: string,
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
@@ -594,7 +675,7 @@ export class PmsService {
       // Check Folio Balance
       const folioRepo = queryRunner.manager.getRepository(GuestFolio);
       const folio = await folioRepo.findOne({
-        where: { reservationId: reservation.id },
+        where: { reservationId: reservation.id, tenantId, propertyId },
       });
 
       if (folio && Number(folio.balanceDue) > 0.05) {
@@ -611,10 +692,13 @@ export class PmsService {
 
       // Release Room & Set to DIRTY
       if (reservation.roomId) {
-        await queryRunner.manager.getRepository(Room).update(reservation.roomId, {
-          status: RoomStatus.AVAILABLE,
-          cleanlinessStatus: CleanlinessStatus.DIRTY,
-        });
+        await queryRunner.manager.getRepository(Room).update(
+          { id: reservation.roomId, tenantId, propertyId },
+          {
+            status: RoomStatus.AVAILABLE,
+            cleanlinessStatus: CleanlinessStatus.DIRTY,
+          },
+        );
       }
 
       // Update Reservation Status
@@ -664,8 +748,12 @@ export class PmsService {
   // ==========================================
   // 7. GUEST FOLIOS
   // ==========================================
-  async getFolio(tenantId: string, propertyId: string, reservationId: string) {
-    const folio = await this.dataSource.getRepository(GuestFolio).findOne({
+  async getFolio(rawTenantId: string, rawPropertyId: string, reservationId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const folio = await ds.getRepository(GuestFolio).findOne({
       where: { reservationId, tenantId, propertyId },
       relations: {
         guest: true,
@@ -680,8 +768,8 @@ export class PmsService {
   }
 
   async postFolioCharge(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     reservationId: string,
     dto: {
       chargeType: FolioChargeType;
@@ -690,14 +778,18 @@ export class PmsService {
       referenceId?: string;
     },
   ) {
-    const folioRepo = this.dataSource.getRepository(GuestFolio);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const folioRepo = ds.getRepository(GuestFolio);
     const folio = await folioRepo.findOne({
       where: { reservationId, tenantId, propertyId },
     });
     if (!folio) throw new NotFoundException('Guest folio not found');
 
     const amount = Number(dto.amount);
-    await this.dataSource.getRepository(FolioItem).save({
+    await ds.getRepository(FolioItem).save({
       folioId: folio.id,
       chargeType: dto.chargeType || FolioChargeType.OTHER,
       description: dto.description.trim(),
@@ -706,7 +798,9 @@ export class PmsService {
     });
 
     folio.totalCharges = Number((Number(folio.totalCharges) + amount).toFixed(2));
-    folio.balanceDue = Number((Number(folio.totalCharges) - Number(folio.totalPayments)).toFixed(2));
+    folio.balanceDue = Number(
+      (Number(folio.totalCharges) - Number(folio.totalPayments)).toFixed(2),
+    );
     if (folio.balanceDue > 0.05 && folio.status === FolioStatus.SETTLED) {
       folio.status = FolioStatus.OPEN;
     }
@@ -720,8 +814,8 @@ export class PmsService {
   }
 
   async postFolioPayment(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     reservationId: string,
     dto: {
       paymentMethod: string;
@@ -729,17 +823,26 @@ export class PmsService {
       receiptNumber?: string;
     },
   ) {
-    const folioRepo = this.dataSource.getRepository(GuestFolio);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const folioRepo = ds.getRepository(GuestFolio);
     const folio = await folioRepo.findOne({
       where: { reservationId, tenantId, propertyId },
     });
     if (!folio) throw new NotFoundException('Guest folio not found');
 
     const amount = Number(dto.amount);
-    const count = await this.dataSource.getRepository(FolioPayment).count();
+    const count = await ds
+      .getRepository(FolioPayment)
+      .createQueryBuilder('fp')
+      .innerJoin('fp.folio', 'f')
+      .where('f.tenantId = :tenantId', { tenantId })
+      .getCount();
     const receiptNumber = dto.receiptNumber || `FOL-RCP-${(1000 + count + 1).toString()}`;
 
-    await this.dataSource.getRepository(FolioPayment).save({
+    await ds.getRepository(FolioPayment).save({
       folioId: folio.id,
       paymentMethod: dto.paymentMethod || 'CARD',
       amount,
@@ -747,7 +850,9 @@ export class PmsService {
     });
 
     folio.totalPayments = Number((Number(folio.totalPayments) + amount).toFixed(2));
-    folio.balanceDue = Number((Number(folio.totalCharges) - Number(folio.totalPayments)).toFixed(2));
+    folio.balanceDue = Number(
+      (Number(folio.totalCharges) - Number(folio.totalPayments)).toFixed(2),
+    );
     if (folio.balanceDue <= 0.05) {
       folio.status = FolioStatus.SETTLED;
     }

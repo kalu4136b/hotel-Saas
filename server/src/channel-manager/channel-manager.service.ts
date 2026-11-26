@@ -2,9 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  ConflictException,
 } from '@nestjs/common';
-import { DataSource, In, Like } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import {
   ChannelConnection,
   ChannelCode,
@@ -17,16 +16,10 @@ import {
   SyncJobType,
   ChannelSyncLog,
   ChannelReservation,
-  ChannelWebhookEvent,
-  WebhookEventStatus,
   RoomType,
-  Room,
   Reservation,
   ReservationStatus,
   Guest,
-  GuestFolio,
-  FolioStatus,
-  Property,
 } from '../entities';
 import { ChannelEncryptionService } from './services/encryption.service';
 import { AvailabilityCalculationService } from './services/availability-calc.service';
@@ -36,6 +29,7 @@ import {
   ChannelCredentials,
   ExternalReservation,
 } from './adapters/base.adapter';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
 
 export const SUPPORTED_CHANNELS = [
   {
@@ -85,7 +79,7 @@ export const SUPPORTED_CHANNELS = [
 @Injectable()
 export class ChannelManagerService {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly tenantConn: TenantConnectionManager,
     private readonly encryptionService: ChannelEncryptionService,
     private readonly availabilityCalcService: AvailabilityCalculationService,
     private readonly pricingEngineService: PricingEngineService,
@@ -95,12 +89,15 @@ export class ChannelManagerService {
   /**
    * 1. Centralized Channel Manager Dashboard
    */
-  async getDashboardOverview(tenantId: string, propertyId: string) {
-    const connRepo = this.dataSource.getRepository(ChannelConnection);
-    const jobRepo = this.dataSource.getRepository(ChannelSyncJob);
-    const resRepo = this.dataSource.getRepository(ChannelReservation);
+  async getDashboardOverview(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const connRepo = ds.getRepository(ChannelConnection);
+    const jobRepo = ds.getRepository(ChannelSyncJob);
+    const resRepo = ds.getRepository(ChannelReservation);
 
-    // Ensure all supported channels have a row for this property
     await this.ensureAllConnectionsExist(tenantId, propertyId);
 
     const connections = await connRepo.find({
@@ -113,9 +110,7 @@ export class ChannelManagerService {
       (c) => c.status === ChannelConnectionStatus.CONNECTED,
     ).length;
     const activeChannels = connections.filter(
-      (c) =>
-        c.status === ChannelConnectionStatus.CONNECTED &&
-        c.autoSyncEnabled,
+      (c) => c.status === ChannelConnectionStatus.CONNECTED && c.autoSyncEnabled,
     ).length;
     const inactiveChannels = connections.filter(
       (c) =>
@@ -129,7 +124,6 @@ export class ChannelManagerService {
         c.syncHealth === SyncHealth.CRITICAL,
     ).length;
 
-    // Last successful sync across any channel
     const lastSuccessfulSyncConnection = [...connections]
       .filter((c) => c.lastSuccessfulSyncAt)
       .sort(
@@ -158,7 +152,6 @@ export class ChannelManagerService {
       where: { tenantId, propertyId },
     });
 
-    // Decorate connection objects with metadata
     const channelCards = connections.map((conn) => {
       const meta = SUPPORTED_CHANNELS.find((s) => s.code === conn.channelCode);
       const adapter = this.syncEngineService.getAdapter(conn.channelCode);
@@ -178,8 +171,7 @@ export class ChannelManagerService {
         lastErrorMessage: conn.lastErrorMessage,
         requiresOfficialPartnerApproval:
           adapter?.capabilities.requiresOfficialPartnerApproval || false,
-        officialDocumentationUrl:
-          adapter?.capabilities.officialDocumentationUrl || '',
+        officialDocumentationUrl: adapter?.capabilities.officialDocumentationUrl || '',
       };
     });
 
@@ -202,8 +194,12 @@ export class ChannelManagerService {
   /**
    * 2. Ensure connection records exist for all supported channels
    */
-  async ensureAllConnectionsExist(tenantId: string, propertyId: string) {
-    const connRepo = this.dataSource.getRepository(ChannelConnection);
+  async ensureAllConnectionsExist(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const connRepo = ds.getRepository(ChannelConnection);
     const existing = await connRepo.find({ where: { tenantId, propertyId } });
     const existingCodes = new Set(existing.map((e) => e.channelCode));
 
@@ -226,8 +222,12 @@ export class ChannelManagerService {
   /**
    * 3. Get connection details
    */
-  async getConnection(tenantId: string, propertyId: string, channelCode: ChannelCode) {
-    const connRepo = this.dataSource.getRepository(ChannelConnection);
+  async getConnection(rawTenantId: string, rawPropertyId: string, channelCode: ChannelCode) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const connRepo = ds.getRepository(ChannelConnection);
     const conn = await connRepo.findOne({
       where: { tenantId, propertyId, channelCode },
     });
@@ -236,7 +236,6 @@ export class ChannelManagerService {
     const meta = SUPPORTED_CHANNELS.find((s) => s.code === conn.channelCode);
     const adapter = this.syncEngineService.getAdapter(conn.channelCode);
 
-    // Decrypt credentials for viewing/editing (with password masked)
     let decryptedCreds: ChannelCredentials = {};
     if (conn.encryptedCredentials) {
       decryptedCreds =
@@ -265,8 +264,8 @@ export class ChannelManagerService {
    * 4. Update credentials and connection configuration
    */
   async updateConnection(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     channelCode: ChannelCode,
     dto: {
       credentials: ChannelCredentials;
@@ -274,19 +273,20 @@ export class ChannelManagerService {
       autoSyncEnabled?: boolean;
     },
   ) {
-    const connRepo = this.dataSource.getRepository(ChannelConnection);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const connRepo = ds.getRepository(ChannelConnection);
     const conn = await connRepo.findOne({
       where: { tenantId, propertyId, channelCode },
     });
     if (!conn) throw new NotFoundException('Channel connection not found');
 
-    // Merge credentials if masked
-    let mergedCreds = { ...dto.credentials };
+    const mergedCreds = { ...dto.credentials };
     if (conn.encryptedCredentials) {
       const existing =
-        this.encryptionService.decryptObject<ChannelCredentials>(
-          conn.encryptedCredentials,
-        ) || {};
+        this.encryptionService.decryptObject<ChannelCredentials>(conn.encryptedCredentials) || {};
 
       if (dto.credentials.password === '••••••••') {
         mergedCreds.password = existing.password;
@@ -296,7 +296,6 @@ export class ChannelManagerService {
       }
     }
 
-    // Encrypt credentials
     conn.encryptedCredentials = this.encryptionService.encryptObject(mergedCreds);
     if (dto.externalPropertyId !== undefined) {
       conn.externalPropertyId = dto.externalPropertyId.trim();
@@ -308,7 +307,6 @@ export class ChannelManagerService {
     conn.status = ChannelConnectionStatus.CONNECTING;
     const saved = await connRepo.save(conn);
 
-    // Automatically test connection
     const testResult = await this.testConnection(tenantId, propertyId, channelCode);
     return { connection: saved, testResult };
   }
@@ -316,8 +314,12 @@ export class ChannelManagerService {
   /**
    * 5. Test live connection
    */
-  async testConnection(tenantId: string, propertyId: string, channelCode: ChannelCode) {
-    const connRepo = this.dataSource.getRepository(ChannelConnection);
+  async testConnection(rawTenantId: string, rawPropertyId: string, channelCode: ChannelCode) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const connRepo = ds.getRepository(ChannelConnection);
     const conn = await connRepo.findOne({
       where: { tenantId, propertyId, channelCode },
     });
@@ -327,9 +329,7 @@ export class ChannelManagerService {
     if (!adapter) throw new BadRequestException(`Unsupported channel: ${channelCode}`);
 
     const credentials = conn.encryptedCredentials
-      ? this.encryptionService.decryptObject<ChannelCredentials>(
-          conn.encryptedCredentials,
-        ) || {}
+      ? this.encryptionService.decryptObject<ChannelCredentials>(conn.encryptedCredentials) || {}
       : {};
 
     const health = await adapter.testConnection(credentials);
@@ -358,8 +358,12 @@ export class ChannelManagerService {
   /**
    * 6. Disconnect channel
    */
-  async disconnectChannel(tenantId: string, propertyId: string, channelCode: ChannelCode) {
-    const connRepo = this.dataSource.getRepository(ChannelConnection);
+  async disconnectChannel(rawTenantId: string, rawPropertyId: string, channelCode: ChannelCode) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const connRepo = ds.getRepository(ChannelConnection);
     const conn = await connRepo.findOne({
       where: { tenantId, propertyId, channelCode },
     });
@@ -374,8 +378,12 @@ export class ChannelManagerService {
   /**
    * 7. Reconnect channel
    */
-  async reconnectChannel(tenantId: string, propertyId: string, channelCode: ChannelCode) {
-    const connRepo = this.dataSource.getRepository(ChannelConnection);
+  async reconnectChannel(rawTenantId: string, rawPropertyId: string, channelCode: ChannelCode) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const connRepo = ds.getRepository(ChannelConnection);
     const conn = await connRepo.findOne({
       where: { tenantId, propertyId, channelCode },
     });
@@ -391,11 +399,12 @@ export class ChannelManagerService {
   // ==========================================
 
   private async verifyConnectionOwnership(
+    ds: DataSource,
     tenantId: string,
     propertyId: string,
     connectionId: string,
   ): Promise<ChannelConnection> {
-    const conn = await this.dataSource.getRepository(ChannelConnection).findOne({
+    const conn = await ds.getRepository(ChannelConnection).findOne({
       where: { id: connectionId, tenantId, propertyId },
     });
     if (!conn) {
@@ -408,10 +417,14 @@ export class ChannelManagerService {
   // ROOM MAPPINGS
   // ==========================================
 
-  async getRoomMappings(tenantId: string, propertyId: string, connectionId: string) {
-    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
-    const mappingRepo = this.dataSource.getRepository(ChannelRoomMapping);
-    const roomTypeRepo = this.dataSource.getRepository(RoomType);
+  async getRoomMappings(rawTenantId: string, rawPropertyId: string, connectionId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    await this.verifyConnectionOwnership(ds, tenantId, propertyId, connectionId);
+    const mappingRepo = ds.getRepository(ChannelRoomMapping);
+    const roomTypeRepo = ds.getRepository(RoomType);
 
     const internalRoomTypes = await roomTypeRepo.find({
       where: { tenantId, propertyId, isActive: true },
@@ -430,8 +443,8 @@ export class ChannelManagerService {
   }
 
   async saveRoomMapping(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     connectionId: string,
     dto: {
       roomTypeId: string;
@@ -442,8 +455,20 @@ export class ChannelManagerService {
       syncRates?: boolean;
     },
   ) {
-    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
-    const repo = this.dataSource.getRepository(ChannelRoomMapping);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    await this.verifyConnectionOwnership(ds, tenantId, propertyId, connectionId);
+
+    const roomType = await ds.getRepository(RoomType).findOne({
+      where: { id: dto.roomTypeId, tenantId, propertyId },
+    });
+    if (!roomType) {
+      throw new NotFoundException('Selected room type does not belong to this property');
+    }
+
+    const repo = ds.getRepository(ChannelRoomMapping);
     let mapping = await repo.findOne({
       where: { connectionId, roomTypeId: dto.roomTypeId },
     });
@@ -462,7 +487,8 @@ export class ChannelManagerService {
     } else {
       mapping.externalRoomId = dto.externalRoomId.trim();
       mapping.externalRoomName = dto.externalRoomName?.trim() || mapping.externalRoomName;
-      mapping.externalMaxOccupancy = Number(dto.externalMaxOccupancy) || mapping.externalMaxOccupancy;
+      mapping.externalMaxOccupancy =
+        Number(dto.externalMaxOccupancy) || mapping.externalMaxOccupancy;
       if (dto.syncAvailability !== undefined) mapping.syncAvailability = dto.syncAvailability;
       if (dto.syncRates !== undefined) mapping.syncRates = dto.syncRates;
     }
@@ -471,13 +497,17 @@ export class ChannelManagerService {
   }
 
   async deleteRoomMapping(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     connectionId: string,
     mappingId: string,
   ) {
-    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
-    const repo = this.dataSource.getRepository(ChannelRoomMapping);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    await this.verifyConnectionOwnership(ds, tenantId, propertyId, connectionId);
+    const repo = ds.getRepository(ChannelRoomMapping);
     const mapping = await repo.findOne({ where: { id: mappingId, connectionId } });
     if (!mapping) throw new NotFoundException('Mapping not found');
     return repo.remove(mapping);
@@ -486,9 +516,17 @@ export class ChannelManagerService {
   /**
    * Automatic mapping suggestions based on room type name similarity
    */
-  async autoSuggestRoomMappings(tenantId: string, propertyId: string, connectionId: string) {
-    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
-    const roomTypes = await this.dataSource.getRepository(RoomType).find({
+  async autoSuggestRoomMappings(
+    rawTenantId: string,
+    rawPropertyId: string,
+    connectionId: string,
+  ) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    await this.verifyConnectionOwnership(ds, tenantId, propertyId, connectionId);
+    const roomTypes = await ds.getRepository(RoomType).find({
       where: { tenantId, propertyId, isActive: true },
     });
 
@@ -505,17 +543,21 @@ export class ChannelManagerService {
   // RATE PLAN MAPPINGS
   // ==========================================
 
-  async getRatePlanMappings(tenantId: string, propertyId: string, connectionId: string) {
-    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
-    return this.dataSource.getRepository(ChannelRatePlanMapping).find({
+  async getRatePlanMappings(rawTenantId: string, rawPropertyId: string, connectionId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    await this.verifyConnectionOwnership(ds, tenantId, propertyId, connectionId);
+    return ds.getRepository(ChannelRatePlanMapping).find({
       where: { connectionId },
       order: { internalRatePlanCode: 'ASC' },
     });
   }
 
   async saveRatePlanMapping(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     connectionId: string,
     dto: {
       internalRatePlanCode: string;
@@ -525,8 +567,12 @@ export class ChannelManagerService {
       cancellationPolicy?: any;
     },
   ) {
-    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
-    const repo = this.dataSource.getRepository(ChannelRatePlanMapping);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    await this.verifyConnectionOwnership(ds, tenantId, propertyId, connectionId);
+    const repo = ds.getRepository(ChannelRatePlanMapping);
     let mapping = await repo.findOne({
       where: {
         connectionId,
@@ -546,7 +592,8 @@ export class ChannelManagerService {
       });
     } else {
       mapping.externalRatePlanId = dto.externalRatePlanId.trim();
-      mapping.externalRatePlanName = dto.externalRatePlanName?.trim() || mapping.externalRatePlanName;
+      mapping.externalRatePlanName =
+        dto.externalRatePlanName?.trim() || mapping.externalRatePlanName;
       if (dto.mealPlan) mapping.mealPlan = dto.mealPlan;
       if (dto.cancellationPolicy) mapping.cancellationPolicy = dto.cancellationPolicy;
     }
@@ -555,13 +602,17 @@ export class ChannelManagerService {
   }
 
   async deleteRatePlanMapping(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     connectionId: string,
     mappingId: string,
   ) {
-    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
-    const repo = this.dataSource.getRepository(ChannelRatePlanMapping);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    await this.verifyConnectionOwnership(ds, tenantId, propertyId, connectionId);
+    const repo = ds.getRepository(ChannelRatePlanMapping);
     const mapping = await repo.findOne({ where: { id: mappingId, connectionId } });
     if (!mapping) throw new NotFoundException('Rate plan mapping not found');
     return repo.remove(mapping);
@@ -571,9 +622,13 @@ export class ChannelManagerService {
   // PRICING RULES
   // ==========================================
 
-  async getPricingRules(tenantId: string, propertyId: string, connectionId: string) {
-    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
-    return this.dataSource.getRepository(ChannelPricingRule).find({
+  async getPricingRules(rawTenantId: string, rawPropertyId: string, connectionId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    await this.verifyConnectionOwnership(ds, tenantId, propertyId, connectionId);
+    return ds.getRepository(ChannelPricingRule).find({
       where: { connectionId },
       relations: { roomType: true },
       order: { createdAt: 'DESC' },
@@ -581,8 +636,8 @@ export class ChannelManagerService {
   }
 
   async savePricingRule(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     connectionId: string,
     dto: {
       roomTypeId?: string;
@@ -591,8 +646,22 @@ export class ChannelManagerService {
       applyToAllRoomTypes?: boolean;
     },
   ) {
-    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
-    const repo = this.dataSource.getRepository(ChannelPricingRule);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    await this.verifyConnectionOwnership(ds, tenantId, propertyId, connectionId);
+
+    if (dto.roomTypeId) {
+      const roomType = await ds.getRepository(RoomType).findOne({
+        where: { id: dto.roomTypeId, tenantId, propertyId },
+      });
+      if (!roomType) {
+        throw new NotFoundException('Selected room type does not belong to this property');
+      }
+    }
+
+    const repo = ds.getRepository(ChannelPricingRule);
     const rule = repo.create({
       connectionId,
       roomTypeId: dto.roomTypeId || null,
@@ -606,13 +675,17 @@ export class ChannelManagerService {
   }
 
   async deletePricingRule(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     connectionId: string,
     ruleId: string,
   ) {
-    await this.verifyConnectionOwnership(tenantId, propertyId, connectionId);
-    const repo = this.dataSource.getRepository(ChannelPricingRule);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    await this.verifyConnectionOwnership(ds, tenantId, propertyId, connectionId);
+    const repo = ds.getRepository(ChannelPricingRule);
     const rule = await repo.findOne({ where: { id: ruleId, connectionId } });
     if (!rule) throw new NotFoundException('Pricing rule not found');
     return repo.remove(rule);
@@ -622,8 +695,8 @@ export class ChannelManagerService {
   // AVAILABILITY & RATES MATRIX
   // ==========================================
 
-  async getAvailabilityGrid(tenantId: string, propertyId: string, days = 14) {
-    return this.availabilityCalcService.getAvailabilityGrid(tenantId, propertyId, days);
+  async getAvailabilityGrid(rawTenantId: string, rawPropertyId: string, days = 14) {
+    return this.availabilityCalcService.getAvailabilityGrid(rawTenantId, rawPropertyId, days);
   }
 
   // ==========================================
@@ -631,23 +704,22 @@ export class ChannelManagerService {
   // ==========================================
 
   async triggerSync(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     channelCode: ChannelCode,
     jobType = SyncJobType.FULL_SYNC,
   ) {
-    const connRepo = this.dataSource.getRepository(ChannelConnection);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const connRepo = ds.getRepository(ChannelConnection);
     const conn = await connRepo.findOne({
       where: { tenantId, propertyId, channelCode },
     });
     if (!conn) throw new NotFoundException('Channel connection not found');
 
-    return this.syncEngineService.enqueueJob(
-      tenantId,
-      propertyId,
-      conn.id,
-      jobType,
-    );
+    return this.syncEngineService.enqueueJob(tenantId, propertyId, conn.id, jobType);
   }
 
   // ==========================================
@@ -655,12 +727,16 @@ export class ChannelManagerService {
   // ==========================================
 
   async getChannelReservations(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     channelCode?: string,
     search?: string,
   ) {
-    const qb = this.dataSource
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const qb = ds
       .getRepository(ChannelReservation)
       .createQueryBuilder('cr')
       .leftJoinAndSelect('cr.reservation', 'res')
@@ -689,20 +765,28 @@ export class ChannelManagerService {
   // SYNC LOGS & RETRIES
   // ==========================================
 
-  async getSyncLogs(tenantId: string, propertyId: string, limit = 50) {
-    return this.dataSource.getRepository(ChannelSyncLog).find({
+  async getSyncLogs(rawTenantId: string, rawPropertyId: string, limit = 50) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return ds.getRepository(ChannelSyncLog).find({
       where: { tenantId, propertyId },
       order: { createdAt: 'DESC' },
       take: limit,
     });
   }
 
-  async retryFailedJob(tenantId: string, propertyId: string, jobId: string) {
-    const job = await this.dataSource.getRepository(ChannelSyncJob).findOne({
+  async retryFailedJob(rawTenantId: string, rawPropertyId: string, jobId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const job = await ds.getRepository(ChannelSyncJob).findOne({
       where: { id: jobId, tenantId, propertyId },
     });
     if (!job) throw new NotFoundException('Sync job not found');
-    return this.syncEngineService.retryJob(job.id);
+    return this.syncEngineService.retryJob(tenantId, job.id);
   }
 
   // ==========================================
@@ -710,21 +794,26 @@ export class ChannelManagerService {
   // ==========================================
 
   async ingestExternalReservation(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     connectionId: string,
     resData: ExternalReservation,
   ) {
-    const queryRunner = this.dataSource.createQueryRunner();
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const queryRunner = ds.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // 1. Idempotency Check: Does this external reservation already exist?
+      // 1. Idempotency Check
       const existingChannelRes = await queryRunner.manager
         .getRepository(ChannelReservation)
         .findOne({
           where: {
+            tenantId,
             propertyId,
             externalReservationId: resData.externalId,
             channelCode: resData.channelCode as ChannelCode,
@@ -733,7 +822,6 @@ export class ChannelManagerService {
         });
 
       if (existingChannelRes) {
-        // Handle cancellation
         if (resData.status === 'CANCELLED') {
           existingChannelRes.channelStatus = 'CANCELLED';
           await queryRunner.manager.getRepository(ChannelReservation).save(existingChannelRes);
@@ -755,33 +843,33 @@ export class ChannelManagerService {
       // 2. Resolve internal room type from external mapping
       let roomTypeId = resData.roomTypeId;
       if (!roomTypeId && resData.externalRoomId) {
-        const mapping = await queryRunner.manager
-          .getRepository(ChannelRoomMapping)
-          .findOne({
-            where: {
-              connectionId,
-              externalRoomId: resData.externalRoomId,
-            },
-          });
+        const mapping = await queryRunner.manager.getRepository(ChannelRoomMapping).findOne({
+          where: {
+            connectionId,
+            externalRoomId: resData.externalRoomId,
+          },
+        });
         if (mapping) roomTypeId = mapping.roomTypeId;
       }
 
-      // Fallback to first available room type if unmapped
-      if (!roomTypeId) {
-        const firstType = await queryRunner.manager.getRepository(RoomType).findOne({
-          where: { tenantId, propertyId, isActive: true },
+      let roomType: RoomType | null = null;
+      if (roomTypeId) {
+        roomType = await queryRunner.manager.getRepository(RoomType).findOne({
+          where: { id: roomTypeId, tenantId, propertyId },
         });
-        if (!firstType) throw new BadRequestException('No room types available on property');
-        roomTypeId = firstType.id;
       }
 
-      const roomType = await queryRunner.manager
-        .getRepository(RoomType)
-        .findOne({ where: { id: roomTypeId } });
+      if (!roomType) {
+        roomType = await queryRunner.manager.getRepository(RoomType).findOne({
+          where: { tenantId, propertyId, isActive: true },
+        });
+        if (!roomType) throw new BadRequestException('No room types available on property');
+        roomTypeId = roomType.id;
+      }
 
       // 3. Resolve or create Guest
       let guest = await queryRunner.manager.getRepository(Guest).findOne({
-        where: { propertyId, fullName: resData.guestName.trim() },
+        where: { tenantId, propertyId, fullName: resData.guestName.trim() },
       });
 
       if (!guest) {
@@ -808,7 +896,7 @@ export class ChannelManagerService {
       // 5. Generate internal reservation number
       const count = await queryRunner.manager
         .getRepository(Reservation)
-        .count({ where: { propertyId } });
+        .count({ where: { tenantId, propertyId } });
       const reservationNumber = `OTA-${resData.channelCode.slice(0, 3)}-${(8000 + count + 1).toString()}`;
 
       // 6. Create internal Reservation

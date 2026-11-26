@@ -1,7 +1,16 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  ForbiddenException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { DataSource, EntityTarget, ObjectLiteral, Repository } from 'typeorm';
 import { TenantContext } from '../tenancy/tenant-context.interface';
+import { TenantCacheService } from '../tenancy/tenant-cache.service';
 import { tenantOperationalEntities } from './tenant-entities';
+import { Property, Tenant, TenantStatus } from '../entities';
 
 export interface ProvisionResult {
   success: boolean;
@@ -9,20 +18,188 @@ export interface ProvisionResult {
   tablesCreated: number;
 }
 
+export interface ResolvedTenantScope {
+  ds: DataSource;
+  tenantId: string;
+  propertyId: string;
+  isDedicated: boolean;
+  context: TenantContext;
+}
+
 @Injectable()
 export class TenantConnectionManager implements OnModuleDestroy {
   private readonly logger = new Logger(TenantConnectionManager.name);
   private readonly tenantDataSources = new Map<string, DataSource>();
 
-  constructor(private readonly defaultDataSource: DataSource) {}
+  constructor(
+    private readonly defaultDataSource: DataSource,
+    private readonly tenantCacheService: TenantCacheService,
+  ) {}
+
+  /**
+   * Returns the master control-plane DataSource (hotel_saas).
+   */
+  getMasterDataSource(): DataSource {
+    return this.defaultDataSource;
+  }
+
+  /**
+   * Enforces a non-empty tenantId string so TypeORM never strips `undefined` in WHERE clauses.
+   */
+  assertValidTenantId(tenantId?: string | null): string {
+    if (!tenantId || typeof tenantId !== 'string' || !tenantId.trim()) {
+      throw new ForbiddenException(
+        'Tenant isolation error: Missing or invalid tenant context in session.',
+      );
+    }
+    return tenantId.trim();
+  }
+
+  /**
+   * Resolves the active TypeORM DataSource for a tenantId, plus validated non-empty tenantId & propertyId.
+   * Guarantees:
+   * - DEDICATED tenants NEVER fall back to the shared pool database.
+   * - `tenantId` and `propertyId` are always non-empty strings (preventing TypeORM undefined-filter leaks).
+   */
+  async resolveTenantScope(
+    tenantId?: string | null,
+    propertyId?: string | null,
+  ): Promise<ResolvedTenantScope> {
+    const validTenantId = this.assertValidTenantId(tenantId);
+    const context = await this.tenantCacheService.getTenantContextById(validTenantId);
+    if (!context) {
+      throw new NotFoundException(`Tenant ${validTenantId} not found`);
+    }
+
+    const isDedicated = context.storageMode === 'DEDICATED';
+    const ds = await this.getDataSource(context);
+
+    let validPropertyId =
+      (typeof propertyId === 'string' && propertyId.trim()) ||
+      (typeof context.propertyId === 'string' && context.propertyId.trim()) ||
+      '';
+
+    if (!validPropertyId) {
+      let prop = await ds.getRepository(Property).findOne({
+        where: { tenantId: validTenantId },
+        order: { createdAt: 'ASC' },
+      });
+
+      // Self-heal if dedicated DB was missing the initial Tenant/Property mirror row
+      if (!prop && isDedicated) {
+        const masterProp = await this.defaultDataSource.getRepository(Property).findOne({
+          where: { tenantId: validTenantId },
+          order: { createdAt: 'ASC' },
+        });
+        if (masterProp) {
+          const masterTenant = await this.defaultDataSource.getRepository(Tenant).findOne({
+            where: { id: validTenantId },
+          });
+          if (masterTenant) {
+            await ds.getRepository(Tenant).save(masterTenant);
+          }
+          prop = await ds.getRepository(Property).save(masterProp);
+        }
+      }
+
+      if (prop?.id) {
+        validPropertyId = prop.id;
+      }
+    }
+
+    if (!validPropertyId) {
+      throw new ForbiddenException(
+        'Tenant isolation error: No active property context found for this tenant.',
+      );
+    }
+
+    return {
+      ds,
+      tenantId: validTenantId,
+      propertyId: validPropertyId,
+      isDedicated,
+      context,
+    };
+  }
+
+  /**
+   * Resolves the active TypeORM DataSource for a given tenantId (for tenant-level queries that don't require propertyId).
+   */
+  async getDataSourceForTenant(tenantId?: string | null): Promise<{
+    ds: DataSource;
+    tenantId: string;
+    isDedicated: boolean;
+    context: TenantContext;
+  }> {
+    const validTenantId = this.assertValidTenantId(tenantId);
+    const context = await this.tenantCacheService.getTenantContextById(validTenantId);
+    if (!context) {
+      throw new NotFoundException(`Tenant ${validTenantId} not found`);
+    }
+    const ds = await this.getDataSource(context);
+    return {
+      ds,
+      tenantId: validTenantId,
+      isDedicated: context.storageMode === 'DEDICATED',
+      context,
+    };
+  }
+
+  /**
+   * Helper to get a tenant-routed TypeORM Repository directly.
+   */
+  async getRepository<T extends ObjectLiteral>(
+    tenantId: string,
+    entity: EntityTarget<T>,
+  ): Promise<Repository<T>> {
+    const { ds } = await this.getDataSourceForTenant(tenantId);
+    return ds.getRepository(entity);
+  }
+
+  /**
+   * Returns all active DataSources (shared master + all active DEDICATED tenant DataSources)
+   * for background workers (e.g. Channel Manager sync queue) or unauthenticated webhook/iCal lookups.
+   */
+  async getAllActiveDataSources(): Promise<DataSource[]> {
+    const sources: DataSource[] = [this.defaultDataSource];
+    try {
+      const dedicatedTenants = await this.defaultDataSource.getRepository(Tenant).find({
+        where: { storageMode: 'DEDICATED', status: TenantStatus.ACTIVE },
+      });
+      for (const t of dedicatedTenants) {
+        if (!t.dbDatabaseName) continue;
+        try {
+          const ctx = await this.tenantCacheService.getTenantContextById(t.id);
+          if (ctx) {
+            const ds = await this.getDataSource(ctx);
+            if (ds !== this.defaultDataSource) {
+              sources.push(ds);
+            }
+          }
+        } catch (err: any) {
+          this.logger.warn(`Skipping unreachable dedicated DB for tenant ${t.slug}: ${err.message}`);
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed enumerating dedicated tenants: ${err.message}`);
+    }
+    return sources;
+  }
 
   /**
    * Retrieves active TypeORM DataSource for the given tenant context.
    * Returns default pooled connection for SHARED mode, or isolated connection for DEDICATED mode.
+   * NEVER falls back to shared pool if tenant is DEDICATED.
    */
   async getDataSource(context?: TenantContext): Promise<DataSource> {
-    if (!context || context.storageMode === 'SHARED' || !context.dbName) {
+    if (!context || context.storageMode !== 'DEDICATED') {
       return this.defaultDataSource;
+    }
+
+    if (!context.dbName) {
+      throw new ServiceUnavailableException(
+        `Dedicated database is not configured for tenant "${context.slug}".`,
+      );
     }
 
     const tenantId = context.tenantId;
@@ -63,8 +240,12 @@ export class TenantConnectionManager implements OnModuleDestroy {
       this.tenantDataSources.set(tenantId, dedicatedDs);
       return dedicatedDs;
     } catch (err: any) {
-      this.logger.error(`Failed to connect dedicated DB ${database} for tenant ${context.slug}: ${err.message}. Falling back to default pool.`);
-      return this.defaultDataSource;
+      this.logger.error(
+        `CRITICAL: Failed to connect dedicated DB ${database} for tenant ${context.slug}: ${err.message}`,
+      );
+      throw new ServiceUnavailableException(
+        `Dedicated database "${database}" for tenant "${context.name}" is unavailable: ${err.message}`,
+      );
     }
   }
 

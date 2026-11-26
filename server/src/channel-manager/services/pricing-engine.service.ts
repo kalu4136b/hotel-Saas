@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
 import { ChannelPricingRule, PricingAdjustmentType } from '../../entities';
+import { TenantConnectionManager } from '../../database/tenant-connection-manager.service';
 
 export interface CalculatedRate {
   baseRate: number;
@@ -12,17 +12,19 @@ export interface CalculatedRate {
 
 @Injectable()
 export class PricingEngineService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly tenantConn: TenantConnectionManager) {}
 
   /**
    * Calculate external channel rate based on base price and connection pricing rules
    */
   async calculateExternalRate(
+    rawTenantId: string,
     connectionId: string,
     roomTypeId: string,
     baseRate: number,
   ): Promise<CalculatedRate> {
-    const repo = this.dataSource.getRepository(ChannelPricingRule);
+    const { ds } = await this.tenantConn.getDataSourceForTenant(rawTenantId);
+    const repo = ds.getRepository(ChannelPricingRule);
 
     // 1. Check for specific room type rule
     let rule = await repo.findOne({

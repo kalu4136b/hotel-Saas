@@ -3,7 +3,6 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
 import {
   AiConversation,
   AiMessage,
@@ -11,11 +10,12 @@ import {
 } from '../../entities';
 import { ToolExecutorService, ToolExecutionUser } from './tool-executor.service';
 import { ProposedAction } from './ai-provider.service';
+import { TenantConnectionManager } from '../../database/tenant-connection-manager.service';
 
 @Injectable()
 export class ConversationService {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly tenantConn: TenantConnectionManager,
     private readonly toolExecutor: ToolExecutorService,
   ) {}
 
@@ -26,19 +26,22 @@ export class ConversationService {
     user: ToolExecutionUser,
     conversationId?: string,
   ): Promise<AiConversation> {
-    const repo = this.dataSource.getRepository(AiConversation);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      user.tenantId,
+      user.propertyId,
+    );
+    const repo = ds.getRepository(AiConversation);
 
     if (conversationId) {
       const existing = await repo.findOne({
-        where: { id: conversationId, tenantId: user.tenantId, propertyId: user.propertyId },
+        where: { id: conversationId, tenantId, propertyId },
       });
       if (existing) return existing;
     }
 
-    // Create new conversation
     const newConv = repo.create({
-      tenantId: user.tenantId,
-      propertyId: user.propertyId,
+      tenantId,
+      propertyId,
       userId: user.id,
       title: 'Operational Assistant Session',
       detectedLanguage: 'EN',
@@ -52,8 +55,12 @@ export class ConversationService {
    * List user's conversations
    */
   async getUserConversations(user: ToolExecutionUser): Promise<AiConversation[]> {
-    return this.dataSource.getRepository(AiConversation).find({
-      where: { tenantId: user.tenantId, propertyId: user.propertyId, userId: user.id },
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      user.tenantId,
+      user.propertyId,
+    );
+    return ds.getRepository(AiConversation).find({
+      where: { tenantId, propertyId, userId: user.id },
       order: { updatedAt: 'DESC' },
       take: 20,
     });
@@ -66,14 +73,16 @@ export class ConversationService {
     conversationId: string,
     user: ToolExecutionUser,
   ): Promise<AiMessage[]> {
-    // Ensure the conversation belongs to the caller's tenant
-    const conversation = await this.dataSource.getRepository(AiConversation).findOne({
-      where: { id: conversationId, tenantId: user.tenantId },
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      user.tenantId,
+      user.propertyId,
+    );
+    const conversation = await ds.getRepository(AiConversation).findOne({
+      where: { id: conversationId, tenantId, propertyId },
     });
     if (!conversation) return [];
 
-    // Latest 50 messages, returned in chronological order
-    const latest = await this.dataSource.getRepository(AiMessage).find({
+    const latest = await ds.getRepository(AiMessage).find({
       where: { conversationId },
       order: { createdAt: 'DESC' },
       take: 50,
@@ -85,6 +94,7 @@ export class ConversationService {
    * Add a message to a conversation
    */
   async addMessage(
+    rawTenantId: string,
     conversationId: string,
     role: 'user' | 'assistant' | 'system',
     content: string,
@@ -99,7 +109,16 @@ export class ConversationService {
       modelId?: string;
     },
   ): Promise<AiMessage> {
-    const msgRepo = this.dataSource.getRepository(AiMessage);
+    const { ds, tenantId } = await this.tenantConn.getDataSourceForTenant(rawTenantId);
+    const convRepo = ds.getRepository(AiConversation);
+    const conversation = await convRepo.findOne({
+      where: { id: conversationId, tenantId },
+    });
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found for this tenant');
+    }
+
+    const msgRepo = ds.getRepository(AiMessage);
     const msg = msgRepo.create({
       conversationId,
       role,
@@ -116,10 +135,10 @@ export class ConversationService {
 
     const saved = await msgRepo.save(msg);
 
-    // Update conversation lastMessageAt
-    await this.dataSource
-      .getRepository(AiConversation)
-      .update(conversationId, { lastMessageAt: new Date(), updatedAt: new Date() });
+    await convRepo.update(
+      { id: conversationId, tenantId },
+      { lastMessageAt: new Date(), updatedAt: new Date() },
+    );
 
     return saved;
   }
@@ -132,15 +151,18 @@ export class ConversationService {
     user: ToolExecutionUser,
     action: ProposedAction,
   ): Promise<AiActionConfirmation> {
-    const repo = this.dataSource.getRepository(AiActionConfirmation);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      user.tenantId,
+      user.propertyId,
+    );
+    const repo = ds.getRepository(AiActionConfirmation);
 
-    // Expiry: 10 minutes from now
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     const confirmation = repo.create({
       conversationId,
-      tenantId: user.tenantId,
-      propertyId: user.propertyId,
+      tenantId,
+      propertyId,
       userId: user.id,
       actionType: action.actionType,
       targetEntity: action.targetEntity,
@@ -166,9 +188,13 @@ export class ConversationService {
     executionResult?: any;
     message: string;
   }> {
-    const repo = this.dataSource.getRepository(AiActionConfirmation);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      user.tenantId,
+      user.propertyId,
+    );
+    const repo = ds.getRepository(AiActionConfirmation);
     const confirmation = await repo.findOne({
-      where: { id: actionConfirmationId, tenantId: user.tenantId, propertyId: user.propertyId },
+      where: { id: actionConfirmationId, tenantId, propertyId },
     });
 
     if (!confirmation) {
@@ -184,7 +210,9 @@ export class ConversationService {
     if (new Date() > new Date(confirmation.expiresAt)) {
       confirmation.status = 'EXPIRED';
       await repo.save(confirmation);
-      throw new BadRequestException('Action confirmation has expired. Please request the action again.');
+      throw new BadRequestException(
+        'Action confirmation has expired. Please request the action again.',
+      );
     }
 
     if (decision === 'REJECT') {
@@ -197,12 +225,10 @@ export class ConversationService {
       };
     }
 
-    // Execute the action
     confirmation.status = 'CONFIRMED';
     confirmation.confirmedAt = new Date();
     await repo.save(confirmation);
 
-    // Map actionType to toolName
     const toolMap: Record<string, string> = {
       UPDATE_ROOM_CLEANLINESS: 'update_room_cleanliness',
       UPDATE_ROOM_OCCUPANCY: 'update_room_occupancy',
@@ -221,8 +247,8 @@ export class ConversationService {
     const result = await this.toolExecutor.executeTool(
       toolName,
       confirmation.parameters,
-      user,
-      true, // isConfirmed
+      { ...user, tenantId, propertyId },
+      true,
     );
 
     if (result.success) {
@@ -236,8 +262,8 @@ export class ConversationService {
     confirmation.updatedAt = new Date();
     await repo.save(confirmation);
 
-    // Add confirmation execution result message to the conversation
     await this.addMessage(
+      tenantId,
       confirmation.conversationId,
       'assistant',
       result.success

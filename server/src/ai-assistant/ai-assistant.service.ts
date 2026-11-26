@@ -71,6 +71,7 @@ export class AiAssistantService {
     // 2. Persist user message
     const { detectedLanguage } = this.multilingualService.extractSemanticTokens(rawMessage);
     await this.conversationService.addMessage(
+      user.tenantId,
       conversation.id,
       'user',
       rawMessage,
@@ -183,6 +184,7 @@ export class AiAssistantService {
     const answeredProviderId = aiResult.providerId || targetEngine.providerId;
     const answeredModelId = aiResult.modelUsed || targetEngine.modelId;
     const savedAssistantMsg = await this.conversationService.addMessage(
+      user.tenantId,
       conversation.id,
       'assistant',
       assistantContent,

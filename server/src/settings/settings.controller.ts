@@ -30,7 +30,10 @@ export class SettingsController {
 
   @Get('property')
   async getProperty(@Request() req: any) {
-    return this.settingsService.getProperty(req.user.tenantId, req.user.propertyId);
+    return this.settingsService.getProperty(
+      req.user.tenantId,
+      req.user.propertyId || req.user.property?.id,
+    );
   }
 
   @RequirePermissions('settings')
@@ -50,9 +53,9 @@ export class SettingsController {
   ) {
     return this.settingsService.updateProperty(
       req.user.tenantId,
-      req.user.propertyId,
+      req.user.propertyId || req.user.property?.id,
       dto,
-      req.user.id,
+      req.user.id || req.user.userId,
     );
   }
 
@@ -79,9 +82,9 @@ export class SettingsController {
   ) {
     return this.settingsService.createUser(
       req.user.tenantId,
-      req.user.propertyId,
+      req.user.propertyId || req.user.property?.id,
       dto,
-      req.user.id,
+      req.user.id || req.user.userId,
     );
   }
 
@@ -103,7 +106,7 @@ export class SettingsController {
       id,
       dto,
       req.user.tenantId,
-      req.user.id,
+      req.user.id || req.user.userId,
     );
   }
 
@@ -118,13 +121,16 @@ export class SettingsController {
       id,
       isActive,
       req.user.tenantId,
-      req.user.id,
+      req.user.id || req.user.userId,
     );
   }
 
   @RequirePermissions('settings')
   @Get('audit-logs')
   async getAuditLogs(@Request() req: any) {
-    return this.settingsService.getAuditLogs(req.user.tenantId, req.user.propertyId);
+    return this.settingsService.getAuditLogs(
+      req.user.tenantId,
+      req.user.propertyId || req.user.property?.id,
+    );
   }
 }

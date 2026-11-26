@@ -20,10 +20,18 @@ import { CleanlinessStatus, RoomStatus, FolioChargeType } from '../entities';
 export class PmsController {
   constructor(private readonly pmsService: PmsService) {}
 
+  private getPropId(req: any): string | undefined {
+    return req.user?.propertyId || req.user?.property?.id;
+  }
+
+  private getUserId(req: any): string {
+    return req.user?.id || req.user?.userId;
+  }
+
   // 1. Room Types
   @Get('room-types')
   getRoomTypes(@Request() req: any) {
-    return this.pmsService.getRoomTypes(req.user.tenantId, req.user.propertyId);
+    return this.pmsService.getRoomTypes(req.user.tenantId, this.getPropId(req)!);
   }
 
   @Post('room-types')
@@ -40,13 +48,13 @@ export class PmsController {
       description?: string;
     },
   ) {
-    return this.pmsService.createRoomType(req.user.tenantId, req.user.propertyId, dto);
+    return this.pmsService.createRoomType(req.user.tenantId, this.getPropId(req)!, dto);
   }
 
   // 2. Rooms & Cleanliness
   @Get('rooms')
   getRooms(@Request() req: any) {
-    return this.pmsService.getRooms(req.user.tenantId, req.user.propertyId);
+    return this.pmsService.getRooms(req.user.tenantId, this.getPropId(req)!);
   }
 
   @Post('rooms')
@@ -60,7 +68,7 @@ export class PmsController {
       notes?: string;
     },
   ) {
-    return this.pmsService.createRoom(req.user.tenantId, req.user.propertyId, dto);
+    return this.pmsService.createRoom(req.user.tenantId, this.getPropId(req)!, dto);
   }
 
   @Patch('rooms/:id/cleanliness')
@@ -71,7 +79,7 @@ export class PmsController {
   ) {
     return this.pmsService.updateCleanliness(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       roomId,
       status,
     );
@@ -85,7 +93,7 @@ export class PmsController {
   ) {
     return this.pmsService.bulkUpdateCleanliness(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       roomIds,
       status,
     );
@@ -99,7 +107,7 @@ export class PmsController {
   ) {
     return this.pmsService.updateRoomNotes(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       roomId,
       notes,
     );
@@ -113,7 +121,7 @@ export class PmsController {
   ) {
     return this.pmsService.updateOccupancyStatus(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       roomId,
       status,
     );
@@ -122,7 +130,7 @@ export class PmsController {
   // 3. Guests
   @Get('guests')
   getGuests(@Request() req: any) {
-    return this.pmsService.getGuests(req.user.tenantId, req.user.propertyId);
+    return this.pmsService.getGuests(req.user.tenantId, this.getPropId(req)!);
   }
 
   @Post('guests')
@@ -139,7 +147,7 @@ export class PmsController {
       notes?: string;
     },
   ) {
-    return this.pmsService.createGuest(req.user.tenantId, req.user.propertyId, dto);
+    return this.pmsService.createGuest(req.user.tenantId, this.getPropId(req)!, dto);
   }
 
   // 4. Reservations
@@ -151,7 +159,7 @@ export class PmsController {
   ) {
     return this.pmsService.getReservations(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       status,
       search,
     );
@@ -180,9 +188,9 @@ export class PmsController {
   ) {
     return this.pmsService.createReservation(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       dto,
-      req.user.id,
+      this.getUserId(req),
     );
   }
 
@@ -195,10 +203,10 @@ export class PmsController {
   ) {
     return this.pmsService.checkIn(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       reservationId,
       roomId,
-      req.user.id,
+      this.getUserId(req),
     );
   }
 
@@ -209,9 +217,9 @@ export class PmsController {
   ) {
     return this.pmsService.checkOut(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       reservationId,
-      req.user.id,
+      this.getUserId(req),
     );
   }
 
@@ -223,7 +231,7 @@ export class PmsController {
   ) {
     return this.pmsService.getFolio(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       reservationId,
     );
   }
@@ -242,7 +250,7 @@ export class PmsController {
   ) {
     return this.pmsService.postFolioCharge(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       reservationId,
       dto,
     );
@@ -261,7 +269,7 @@ export class PmsController {
   ) {
     return this.pmsService.postFolioPayment(
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       reservationId,
       dto,
     );

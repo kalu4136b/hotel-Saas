@@ -95,7 +95,7 @@ export class AiAssistantController {
     const user = {
       id: req.user.id || req.user.sub,
       tenantId: req.user.tenantId,
-      propertyId: req.user.propertyId,
+      propertyId: req.user.propertyId || req.user.property?.id,
       role: req.user.role || 'STAFF',
       permissions: req.user.permissions || null,
       tenantModules: req.user.tenant?.modules ?? null,
@@ -122,7 +122,7 @@ export class AiAssistantController {
     const user = {
       id: req.user.id || req.user.sub,
       tenantId: req.user.tenantId,
-      propertyId: req.user.propertyId,
+      propertyId: req.user.propertyId || req.user.property?.id,
       role: req.user.role || 'STAFF',
       permissions: req.user.permissions || null,
     };
@@ -142,7 +142,7 @@ export class AiAssistantController {
     const user = {
       id: req.user.id || req.user.sub,
       tenantId: req.user.tenantId,
-      propertyId: req.user.propertyId,
+      propertyId: req.user.propertyId || req.user.property?.id,
       role: req.user.role || 'STAFF',
       permissions: req.user.permissions || null,
     };
@@ -157,7 +157,7 @@ export class AiAssistantController {
     const user = {
       id: req.user.id || req.user.sub,
       tenantId: req.user.tenantId,
-      propertyId: req.user.propertyId,
+      propertyId: req.user.propertyId || req.user.property?.id,
       role: req.user.role || 'STAFF',
       permissions: req.user.permissions || null,
     };
@@ -172,7 +172,7 @@ export class AiAssistantController {
     const user = {
       id: req.user.id || req.user.sub,
       tenantId: req.user.tenantId,
-      propertyId: req.user.propertyId,
+      propertyId: req.user.propertyId || req.user.property?.id,
       role: req.user.role || 'STAFF',
       permissions: req.user.permissions || null,
     };

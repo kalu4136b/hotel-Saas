@@ -4,7 +4,6 @@ import {
   Param,
   Body,
   Headers,
-  Req,
   HttpCode,
   HttpStatus,
   BadRequestException,
@@ -26,11 +25,12 @@ import {
 import { ChannelManagerService } from '../channel-manager.service';
 import { SyncEngineService } from '../services/sync-engine.service';
 import { ChannelEncryptionService } from '../services/encryption.service';
+import { TenantConnectionManager } from '../../database/tenant-connection-manager.service';
 
 @Controller('api/channel-manager/webhooks')
 export class ChannelWebhookController {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly tenantConn: TenantConnectionManager,
     private readonly channelManagerService: ChannelManagerService,
     private readonly syncEngineService: SyncEngineService,
     private readonly encryptionService: ChannelEncryptionService,
@@ -45,23 +45,34 @@ export class ChannelWebhookController {
     @Headers() headers: Record<string, string>,
   ) {
     const channelCode = channelCodeStr.toUpperCase() as ChannelCode;
-    const connRepo = this.dataSource.getRepository(ChannelConnection);
-    const eventRepo = this.dataSource.getRepository(ChannelWebhookEvent);
-    const logRepo = this.dataSource.getRepository(ChannelSyncLog);
 
-    const connection = await connRepo.findOne({
-      where: { id: connectionId, channelCode },
-    });
+    // Locate target connection across shared and dedicated tenant databases
+    const sources = await this.tenantConn.getAllActiveDataSources();
+    let matchedDs: DataSource | null = null;
+    let connection: ChannelConnection | null = null;
 
-    if (!connection) {
+    for (const ds of sources) {
+      const found = await ds.getRepository(ChannelConnection).findOne({
+        where: { id: connectionId, channelCode },
+      });
+      if (found) {
+        matchedDs = ds;
+        connection = found;
+        break;
+      }
+    }
+
+    if (!connection || !matchedDs) {
       throw new NotFoundException('Target channel connection not found');
     }
+
+    const eventRepo = matchedDs.getRepository(ChannelWebhookEvent);
+    const logRepo = matchedDs.getRepository(ChannelSyncLog);
 
     if (connection.status === ChannelConnectionStatus.DISABLED) {
       throw new UnauthorizedException('Channel connection is currently disabled');
     }
 
-    // Verify webhook secret if configured on the connection or environment
     const creds: any = connection.encryptedCredentials
       ? this.encryptionService.decryptObject(connection.encryptedCredentials) || {}
       : {};
@@ -116,7 +127,6 @@ export class ChannelWebhookController {
     await eventRepo.save(event);
 
     // 3. Process Reservation Action
-    let processOutcome = 'PROCESSED';
     try {
       if (
         (result.actionRequired === 'CREATE_RESERVATION' ||

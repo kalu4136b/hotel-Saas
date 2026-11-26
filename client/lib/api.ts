@@ -276,13 +276,17 @@ export async function apiRequest<T = any>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  // Attach tenant slug if detected from host/subdomain or active tenant session
+  // Attach tenant slug & ID from active session (or subdomain when unauthenticated)
+  const sessionTenant = !isSuperAdminCall ? authStorage.getTenant() : null;
   const activeTenantSlug =
-    (typeof window !== 'undefined' ? getTenantSlugFromHost() : null) ||
-    authStorage.getTenant()?.slug;
+    sessionTenant?.slug ||
+    (typeof window !== 'undefined' ? getTenantSlugFromHost() : null);
 
   if (activeTenantSlug && !headers['X-Tenant-Slug']) {
     headers['X-Tenant-Slug'] = activeTenantSlug;
+  }
+  if (sessionTenant?.id && !headers['X-Tenant-Id']) {
+    headers['X-Tenant-Id'] = sessionTenant.id;
   }
 
   const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;

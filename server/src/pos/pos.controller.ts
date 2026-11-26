@@ -23,10 +23,18 @@ import { PaymentMethod } from '../entities/payment.entity';
 export class PosController {
   constructor(private readonly posService: PosService) {}
 
+  private getPropId(req: any): string | undefined {
+    return req.user?.propertyId || req.user?.property?.id;
+  }
+
+  private getUserId(req: any): string {
+    return req.user?.id || req.user?.userId;
+  }
+
   // Master Data
   @Get('categories')
   async getCategories(@Request() req: any) {
-    return this.posService.getCategories(req.user.tenantId, req.user.propertyId);
+    return this.posService.getCategories(req.user.tenantId, this.getPropId(req)!);
   }
 
   @Post('categories')
@@ -34,12 +42,12 @@ export class PosController {
     @Request() req: any,
     @Body() dto: { name: string; code?: string; sortOrder?: number },
   ) {
-    return this.posService.createCategory(req.user.tenantId, req.user.propertyId, dto);
+    return this.posService.createCategory(req.user.tenantId, this.getPropId(req)!, dto);
   }
 
   @Get('products')
   async getProducts(@Request() req: any, @Query('categoryId') categoryId?: string) {
-    return this.posService.getProducts(req.user.tenantId, req.user.propertyId, categoryId);
+    return this.posService.getProducts(req.user.tenantId, this.getPropId(req)!, categoryId);
   }
 
   @Post('products')
@@ -55,7 +63,7 @@ export class PosController {
       description?: string;
     },
   ) {
-    return this.posService.createProduct(req.user.tenantId, req.user.propertyId, dto);
+    return this.posService.createProduct(req.user.tenantId, this.getPropId(req)!, dto);
   }
 
   @Patch('products/:id')
@@ -70,17 +78,17 @@ export class PosController {
       description?: string;
     },
   ) {
-    return this.posService.updateProduct(req.user.tenantId, req.user.propertyId, productId, dto);
+    return this.posService.updateProduct(req.user.tenantId, this.getPropId(req)!, productId, dto);
   }
 
   @Delete('products/:id')
   async deleteProduct(@Request() req: any, @Param('id') productId: string) {
-    return this.posService.deleteProduct(req.user.tenantId, req.user.propertyId, productId);
+    return this.posService.deleteProduct(req.user.tenantId, this.getPropId(req)!, productId);
   }
 
   @Get('tables')
   async getTables(@Request() req: any) {
-    return this.posService.getTables(req.user.tenantId, req.user.propertyId);
+    return this.posService.getTables(req.user.tenantId, this.getPropId(req)!);
   }
 
   @Post('tables')
@@ -88,23 +96,23 @@ export class PosController {
     @Request() req: any,
     @Body() dto: { tableNumber: string; capacity?: number },
   ) {
-    return this.posService.createTable(req.user.tenantId, req.user.propertyId, dto);
+    return this.posService.createTable(req.user.tenantId, this.getPropId(req)!, dto);
   }
 
   @Get('tables/:id/active-order')
   async getTableActiveOrder(@Request() req: any, @Param('id') tableId: string) {
-    return this.posService.getTableActiveOrder(tableId, req.user.tenantId, req.user.propertyId);
+    return this.posService.getTableActiveOrder(tableId, req.user.tenantId, this.getPropId(req)!);
   }
 
   @Delete('tables/:id')
   async deleteTable(@Request() req: any, @Param('id') tableId: string) {
-    return this.posService.deleteTable(req.user.tenantId, req.user.propertyId, tableId);
+    return this.posService.deleteTable(req.user.tenantId, this.getPropId(req)!, tableId);
   }
 
   // Shifts
   @Get('shifts/current')
   async getCurrentShift(@Request() req: any) {
-    return this.posService.getCurrentShift(req.user.id, req.user.tenantId);
+    return this.posService.getCurrentShift(this.getUserId(req), req.user.tenantId);
   }
 
   @Post('shifts/open')
@@ -113,9 +121,9 @@ export class PosController {
     @Body() body: { startingFloat: number; notes?: string },
   ) {
     return this.posService.openShift(
-      req.user.id,
+      this.getUserId(req),
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
       body.startingFloat,
       body.notes,
     );
@@ -128,7 +136,7 @@ export class PosController {
   ) {
     return this.posService.closeShift(
       body.shiftId,
-      req.user.id,
+      this.getUserId(req),
       req.user.tenantId,
       body.actualCashCount,
       body.notes,
@@ -142,7 +150,7 @@ export class PosController {
     @Query('status') status?: OrderStatus,
     @Query('tableId') tableId?: string,
   ) {
-    return this.posService.getOrders(req.user.tenantId, req.user.propertyId, status, tableId);
+    return this.posService.getOrders(req.user.tenantId, this.getPropId(req)!, status, tableId);
   }
 
   @Get('orders/:id')
@@ -165,21 +173,21 @@ export class PosController {
   ) {
     return this.posService.createOrder(
       dto,
-      req.user.id,
+      this.getUserId(req),
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
     );
   }
 
   // KOT
   @Post('orders/:id/kot')
   async sendToKitchen(@Request() req: any, @Param('id') id: string) {
-    return this.posService.sendToKitchen(id, req.user.tenantId, req.user.propertyId);
+    return this.posService.sendToKitchen(id, req.user.tenantId, this.getPropId(req)!);
   }
 
   @Get('kitchen/kots')
   async getKitchenKots(@Request() req: any) {
-    return this.posService.getKitchenKots(req.user.tenantId, req.user.propertyId);
+    return this.posService.getKitchenKots(req.user.tenantId, this.getPropId(req)!);
   }
 
   @Patch('kitchen/kots/:id/status')
@@ -196,9 +204,9 @@ export class PosController {
   async generateBill(@Request() req: any, @Param('id') id: string) {
     return this.posService.generateBill(
       id,
-      req.user.id,
+      this.getUserId(req),
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
     );
   }
 
@@ -218,9 +226,9 @@ export class PosController {
     return this.posService.settlePayment(
       id,
       dto,
-      req.user.id,
+      this.getUserId(req),
       req.user.tenantId,
-      req.user.propertyId,
+      this.getPropId(req)!,
     );
   }
 
@@ -233,7 +241,7 @@ export class PosController {
     return this.posService.cancelOrder(
       id,
       reason || 'Customer request',
-      req.user.id,
+      this.getUserId(req),
       req.user.tenantId,
     );
   }

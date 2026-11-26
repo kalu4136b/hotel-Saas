@@ -39,12 +39,12 @@ export class HrmController {
   // ================= 1. OVERVIEW & SEED DEFAULTS =================
   @Get('overview')
   getOverview(@Request() req: any) {
-    return this.hrmService.getOverview(req.user.tenantId, req.user.propertyId);
+    return this.hrmService.getOverview(req.user.tenantId, (req.user.propertyId || req.user.property?.id));
   }
 
   @Post('seed-defaults')
   seedDefaults(@Request() req: any) {
-    return this.hrmService.seedDefaults(req.user.tenantId, req.user.propertyId);
+    return this.hrmService.seedDefaults(req.user.tenantId, (req.user.propertyId || req.user.property?.id));
   }
 
   // ================= 2. DEPARTMENTS & DESIGNATIONS =================
@@ -52,7 +52,7 @@ export class HrmController {
   getDepartments(@Request() req: any) {
     return this.hrmService.getDepartments(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
     );
   }
 
@@ -61,7 +61,7 @@ export class HrmController {
   createDepartment(@Request() req: any, @Body() dto: any) {
     return this.hrmService.createDepartment(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       dto,
     );
   }
@@ -75,7 +75,7 @@ export class HrmController {
   ) {
     return this.hrmService.updateDepartment(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       id,
       dto,
     );
@@ -86,7 +86,7 @@ export class HrmController {
   deleteDepartment(@Request() req: any, @Param('id') id: string) {
     return this.hrmService.deleteDepartment(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       id,
     );
   }
@@ -95,7 +95,7 @@ export class HrmController {
   getDesignations(@Request() req: any) {
     return this.hrmService.getDesignations(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
     );
   }
 
@@ -104,7 +104,7 @@ export class HrmController {
   createDesignation(@Request() req: any, @Body() dto: any) {
     return this.hrmService.createDesignation(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       dto,
     );
   }
@@ -119,7 +119,7 @@ export class HrmController {
   ) {
     return this.hrmService.getEmployees(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       { departmentId, status, search },
     );
   }
@@ -129,7 +129,7 @@ export class HrmController {
   getEmployeeById(@Request() req: any, @Param('id') id: string) {
     return this.hrmService.getEmployeeById(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       id,
     );
   }
@@ -139,8 +139,8 @@ export class HrmController {
   createEmployee(@Request() req: any, @Body() dto: any) {
     return this.hrmService.createEmployee(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       dto,
     );
   }
@@ -154,8 +154,8 @@ export class HrmController {
   ) {
     return this.hrmService.updateEmployee(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       id,
       dto,
     );
@@ -170,8 +170,8 @@ export class HrmController {
   ) {
     return this.hrmService.addEmployeeDocument(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       id,
       dto,
     );
@@ -182,7 +182,7 @@ export class HrmController {
   getShiftTemplates(@Request() req: any) {
     return this.hrmService.getShiftTemplates(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
     );
   }
 
@@ -191,7 +191,7 @@ export class HrmController {
   createShiftTemplate(@Request() req: any, @Body() dto: any) {
     return this.hrmService.createShiftTemplate(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       dto,
     );
   }
@@ -205,7 +205,7 @@ export class HrmController {
   ) {
     return this.hrmService.getRoster(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       startDate,
       endDate,
       departmentId,
@@ -217,8 +217,8 @@ export class HrmController {
   createRosterAssignment(@Request() req: any, @Body() dto: any) {
     return this.hrmService.createRosterAssignment(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       dto,
     );
   }
@@ -231,7 +231,7 @@ export class HrmController {
   ) {
     return this.hrmService.publishRoster(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       dto.startDate,
       dto.endDate,
     );
@@ -242,7 +242,7 @@ export class HrmController {
   deleteRosterAssignment(@Request() req: any, @Param('id') id: string) {
     return this.hrmService.deleteRosterAssignment(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       id,
     );
   }
@@ -258,7 +258,7 @@ export class HrmController {
   ) {
     return this.hrmService.getAttendance(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       date,
       startDate,
       endDate,
@@ -271,8 +271,8 @@ export class HrmController {
   recordAttendance(@Request() req: any, @Body() dto: any) {
     return this.hrmService.recordAttendance(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       dto,
     );
   }
@@ -286,8 +286,8 @@ export class HrmController {
   ) {
     return this.hrmService.regularizeAttendance(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       id,
       dto,
     );
@@ -298,7 +298,7 @@ export class HrmController {
   getLeaveTypes(@Request() req: any) {
     return this.hrmService.getLeaveTypes(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
     );
   }
 
@@ -310,7 +310,7 @@ export class HrmController {
   ) {
     return this.hrmService.getLeaveBalances(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       employeeId,
       year ? Number(year) : undefined,
     );
@@ -324,7 +324,7 @@ export class HrmController {
   ) {
     return this.hrmService.getLeaveRequests(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       status,
       employeeId,
     );
@@ -335,8 +335,8 @@ export class HrmController {
   createLeaveRequest(@Request() req: any, @Body() dto: any) {
     return this.hrmService.createLeaveRequest(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       dto,
     );
   }
@@ -350,8 +350,8 @@ export class HrmController {
   ) {
     return this.hrmService.updateLeaveRequestStatus(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       id,
       dto,
     );
@@ -362,7 +362,7 @@ export class HrmController {
   getSalaryComponents(@Request() req: any) {
     return this.hrmService.getSalaryComponents(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
     );
   }
 
@@ -371,7 +371,7 @@ export class HrmController {
   assignEmployeeSalaryComponent(@Request() req: any, @Body() dto: any) {
     return this.hrmService.assignEmployeeSalaryComponent(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       dto,
     );
   }
@@ -384,7 +384,7 @@ export class HrmController {
   ) {
     return this.hrmService.getSalaryAdvances(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       status,
       employeeId,
     );
@@ -395,7 +395,7 @@ export class HrmController {
   createSalaryAdvance(@Request() req: any, @Body() dto: any) {
     return this.hrmService.createSalaryAdvance(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       dto,
     );
   }
@@ -414,8 +414,8 @@ export class HrmController {
   ) {
     return this.hrmService.updateSalaryAdvanceStatus(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       id,
       dto,
     );
@@ -427,7 +427,7 @@ export class HrmController {
   getPayrollSettings(@Request() req: any) {
     return this.hrmService.getPayrollSettings(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
     );
   }
 
@@ -436,7 +436,7 @@ export class HrmController {
   updatePayrollSettings(@Request() req: any, @Body() dto: any) {
     return this.hrmService.updatePayrollSettings(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       dto,
     );
   }
@@ -446,7 +446,7 @@ export class HrmController {
   getPayrollRuns(@Request() req: any) {
     return this.hrmService.getPayrollRuns(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
     );
   }
 
@@ -464,8 +464,8 @@ export class HrmController {
   ) {
     return this.hrmService.generatePayrollRun(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       dto,
     );
   }
@@ -479,8 +479,8 @@ export class HrmController {
   ) {
     return this.hrmService.updatePayrollRunStatus(
       req.user.tenantId,
-      req.user.propertyId,
-      req.user.userId,
+      (req.user.propertyId || req.user.property?.id),
+      (req.user.id || req.user.userId),
       id,
       dto.status,
     );
@@ -491,7 +491,7 @@ export class HrmController {
   getPayslipById(@Request() req: any, @Param('id') id: string) {
     return this.hrmService.getPayslipById(
       req.user.tenantId,
-      req.user.propertyId,
+      (req.user.propertyId || req.user.property?.id),
       id,
     );
   }

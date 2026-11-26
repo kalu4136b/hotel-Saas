@@ -3,7 +3,6 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { DataSource, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import {
   IsNotEmpty,
   IsString,
@@ -18,6 +17,7 @@ import {
   BarStockAdjustment,
   BarAdjustmentType,
 } from '../entities/bar-stock-adjustment.entity';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
 
 export class CreateBarItemDto {
   @IsNotEmpty({ message: 'Liquor name is required' })
@@ -277,14 +277,18 @@ export class BulkStocktakeAuditDto {
 
 @Injectable()
 export class BarService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly tenantConn: TenantConnectionManager) {}
 
   async getItems(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     filters?: { category?: string; search?: string; lowStock?: boolean },
   ) {
-    const repo = this.dataSource.getRepository(BarItem);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(BarItem);
     const qb = repo
       .createQueryBuilder('item')
       .where('item.tenantId = :tenantId', { tenantId })
@@ -317,9 +321,7 @@ export class BarService {
         currentBottleRemainingMl: openMl,
         totalRemainingMl: totalMl,
         totalLiters: Math.round((totalMl / 1000) * 100) / 100,
-        estimatedTotalShots: Math.floor(
-          totalMl / (Number(item.standardPourMl) || 30),
-        ),
+        estimatedTotalShots: Math.floor(totalMl / (Number(item.standardPourMl) || 30)),
         isLowStock,
       };
     });
@@ -331,8 +333,12 @@ export class BarService {
     return results;
   }
 
-  async getItem(tenantId: string, propertyId: string, id: string) {
-    const item = await this.dataSource.getRepository(BarItem).findOne({
+  async getItem(rawTenantId: string, rawPropertyId: string, id: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const item = await ds.getRepository(BarItem).findOne({
       where: { id, tenantId, propertyId, isActive: true },
     });
     if (!item) {
@@ -341,19 +347,18 @@ export class BarService {
     return item;
   }
 
-  async createItem(
-    tenantId: string,
-    propertyId: string,
-    dto: CreateBarItemDto,
-  ) {
-    const repo = this.dataSource.getRepository(BarItem);
+  async createItem(rawTenantId: string, rawPropertyId: string, dto: CreateBarItemDto) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(BarItem);
     const bottleSize = Number(dto.bottleSizeMl) || 750;
     const initialBottles = Number(dto.fullBottlesStock) || 0;
 
     let openMl = Number(dto.currentBottleRemainingMl);
     let fullStock = initialBottles;
 
-    // If remaining open bottle ml not specified and bottles > 0, auto-uncork 1st bottle on speed rail
     if (isNaN(openMl) || openMl <= 0) {
       if (initialBottles > 0) {
         fullStock = initialBottles - 1;
@@ -384,12 +389,16 @@ export class BarService {
   }
 
   async updateItem(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     id: string,
     dto: Partial<CreateBarItemDto>,
   ) {
-    const repo = this.dataSource.getRepository(BarItem);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(BarItem);
     const item = await this.getItem(tenantId, propertyId, id);
 
     if (dto.name !== undefined) item.name = dto.name.trim();
@@ -399,35 +408,34 @@ export class BarService {
     if (dto.fullBottlesStock !== undefined) item.fullBottlesStock = Number(dto.fullBottlesStock);
     if (dto.currentBottleRemainingMl !== undefined)
       item.currentBottleRemainingMl = Number(dto.currentBottleRemainingMl);
-    if (dto.standardPourMl !== undefined)
-      item.standardPourMl = Number(dto.standardPourMl);
-    if (dto.costPerBottle !== undefined)
-      item.costPerBottle = Number(dto.costPerBottle);
-    if (dto.pricePerPour !== undefined)
-      item.pricePerPour = Number(dto.pricePerPour);
-    if (dto.pricePerBottle !== undefined)
-      item.pricePerBottle = Number(dto.pricePerBottle);
-    if (dto.parLevelBottles !== undefined)
-      item.parLevelBottles = Number(dto.parLevelBottles);
+    if (dto.standardPourMl !== undefined) item.standardPourMl = Number(dto.standardPourMl);
+    if (dto.costPerBottle !== undefined) item.costPerBottle = Number(dto.costPerBottle);
+    if (dto.pricePerPour !== undefined) item.pricePerPour = Number(dto.pricePerPour);
+    if (dto.pricePerBottle !== undefined) item.pricePerBottle = Number(dto.pricePerBottle);
+    if (dto.parLevelBottles !== undefined) item.parLevelBottles = Number(dto.parLevelBottles);
 
     return repo.save(item);
   }
 
-  async deleteItem(tenantId: string, propertyId: string, id: string) {
-    const repo = this.dataSource.getRepository(BarItem);
+  async deleteItem(rawTenantId: string, rawPropertyId: string, id: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(BarItem);
     const item = await this.getItem(tenantId, propertyId, id);
     item.isActive = false;
     await repo.save(item);
     return { success: true, message: `Bar item "${item.name}" deactivated.` };
   }
 
-  async quickPour(
-    tenantId: string,
-    propertyId: string,
-    dto: QuickPourDto,
-  ) {
-    const itemRepo = this.dataSource.getRepository(BarItem);
-    const logRepo = this.dataSource.getRepository(BarPourLog);
+  async quickPour(rawTenantId: string, rawPropertyId: string, dto: QuickPourDto) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const itemRepo = ds.getRepository(BarItem);
+    const logRepo = ds.getRepository(BarPourLog);
 
     const item = await this.getItem(tenantId, propertyId, dto.barItemId);
     const pourMl = Number(dto.millilitersPoured);
@@ -446,7 +454,6 @@ export class BarService {
       );
     }
 
-    // Deduct volume logic
     if (currentOpenMl >= pourMl) {
       currentOpenMl -= pourMl;
     } else {
@@ -460,7 +467,6 @@ export class BarService {
     item.fullBottlesStock = fullStock;
     await itemRepo.save(item);
 
-    // Cost & Sale calculation
     const costPerMl = (Number(item.costPerBottle) || 0) / bottleSize;
     const costAmount = Math.round(costPerMl * pourMl * 100) / 100;
 
@@ -501,12 +507,8 @@ export class BarService {
     };
   }
 
-  async logWastage(
-    tenantId: string,
-    propertyId: string,
-    dto: LogWastageDto,
-  ) {
-    const item = await this.getItem(tenantId, propertyId, dto.barItemId);
+  async logWastage(rawTenantId: string, rawPropertyId: string, dto: LogWastageDto) {
+    const item = await this.getItem(rawTenantId, rawPropertyId, dto.barItemId);
     const bottleSize = Number(item.bottleSizeMl) || 750;
 
     let totalWastedMl = Number(dto.millilitersWasted) || 0;
@@ -518,7 +520,7 @@ export class BarService {
       throw new BadRequestException('Please specify wasted milliliters or bottles');
     }
 
-    return this.quickPour(tenantId, propertyId, {
+    return this.quickPour(rawTenantId, rawPropertyId, {
       barItemId: dto.barItemId,
       millilitersPoured: totalWastedMl,
       servingsCount: 1,
@@ -530,12 +532,16 @@ export class BarService {
   }
 
   async restockBottles(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     id: string,
     dto: RestockBarItemDto,
   ) {
-    const repo = this.dataSource.getRepository(BarItem);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(BarItem);
     const item = await this.getItem(tenantId, propertyId, id);
 
     const qty = Number(dto.bottlesCount);
@@ -556,8 +562,12 @@ export class BarService {
     };
   }
 
-  async openBottle(tenantId: string, propertyId: string, id: string) {
-    const repo = this.dataSource.getRepository(BarItem);
+  async openBottle(rawTenantId: string, rawPropertyId: string, id: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const repo = ds.getRepository(BarItem);
     const item = await this.getItem(tenantId, propertyId, id);
 
     const fullStock = Number(item.fullBottlesStock) || 0;
@@ -569,8 +579,7 @@ export class BarService {
 
     const bottleSize = Number(item.bottleSizeMl) || 750;
     item.fullBottlesStock = fullStock - 1;
-    item.currentBottleRemainingMl =
-      (Number(item.currentBottleRemainingMl) || 0) + bottleSize;
+    item.currentBottleRemainingMl = (Number(item.currentBottleRemainingMl) || 0) + bottleSize;
 
     await repo.save(item);
     return {
@@ -581,8 +590,8 @@ export class BarService {
   }
 
   async getPourLogs(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     filters?: {
       pourType?: string;
       category?: string;
@@ -592,7 +601,11 @@ export class BarService {
       limit?: number;
     },
   ) {
-    const logRepo = this.dataSource.getRepository(BarPourLog);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const logRepo = ds.getRepository(BarPourLog);
     const qb = logRepo
       .createQueryBuilder('log')
       .where('log.tenantId = :tenantId', { tenantId })
@@ -637,12 +650,16 @@ export class BarService {
   }
 
   async getBarAnalyticsReport(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     startDate?: string,
     endDate?: string,
   ) {
-    const logRepo = this.dataSource.getRepository(BarPourLog);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const logRepo = ds.getRepository(BarPourLog);
     const qb = logRepo
       .createQueryBuilder('log')
       .where('log.tenantId = :tenantId', { tenantId })
@@ -653,7 +670,6 @@ export class BarService {
         startDate: new Date(startDate),
       });
     } else {
-      // Default: today
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       qb.andWhere('log.createdAt >= :today', { today });
@@ -708,7 +724,6 @@ export class BarService {
         wastageCost += cost;
       }
 
-      // Category breakdown
       const cat = log.category || 'OTHER';
       if (!categoryMap[cat]) {
         categoryMap[cat] = { category: cat, volumeMl: 0, servings: 0, sales: 0 };
@@ -719,7 +734,6 @@ export class BarService {
         categoryMap[cat].servings += s;
       }
 
-      // Beverage breakdown
       const bId = log.barItemId || log.barItemName;
       if (!itemMap[bId]) {
         itemMap[bId] = {
@@ -738,9 +752,7 @@ export class BarService {
       }
     }
 
-    const topBeverages = Object.values(itemMap).sort(
-      (a, b) => b.volumeMl - a.volumeMl,
-    );
+    const topBeverages = Object.values(itemMap).sort((a, b) => b.volumeMl - a.volumeMl);
 
     return {
       summary: {
@@ -754,22 +766,20 @@ export class BarService {
         totalServings,
         logCount: logs.length,
       },
-      categoryBreakdown: Object.values(categoryMap).sort(
-        (a, b) => b.sales - a.sales,
-      ),
+      categoryBreakdown: Object.values(categoryMap).sort((a, b) => b.sales - a.sales),
       topBeverages,
       logs,
     };
   }
 
   // ================= STOCK ADJUSTMENT & AUDIT =================
-  async adjustStock(
-    tenantId: string,
-    propertyId: string,
-    dto: AdjustBarStockDto,
-  ) {
-    const itemRepo = this.dataSource.getRepository(BarItem);
-    const adjRepo = this.dataSource.getRepository(BarStockAdjustment);
+  async adjustStock(rawTenantId: string, rawPropertyId: string, dto: AdjustBarStockDto) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const itemRepo = ds.getRepository(BarItem);
+    const adjRepo = ds.getRepository(BarStockAdjustment);
 
     const item = await this.getItem(tenantId, propertyId, dto.barItemId);
     const bottleSize = Number(item.bottleSizeMl) || 750;
@@ -791,7 +801,6 @@ export class BarService {
       targetOpen = Math.max(0, prevOpen + Number(dto.openMlDelta));
     }
 
-    // Clamp open ml to bottle size
     if (targetOpen > bottleSize) {
       const extraBottles = Math.floor(targetOpen / bottleSize);
       targetFull += extraBottles;
@@ -800,8 +809,7 @@ export class BarService {
 
     const fullDelta = targetFull - prevFull;
     const openDelta = Math.round((targetOpen - prevOpen) * 100) / 100;
-    const netVolumeDeltaMl =
-      Math.round((fullDelta * bottleSize + openDelta) * 100) / 100;
+    const netVolumeDeltaMl = Math.round((fullDelta * bottleSize + openDelta) * 100) / 100;
 
     const costPerMl = (Number(item.costPerBottle) || 0) / bottleSize;
     const costImpact = Math.round(netVolumeDeltaMl * costPerMl * 100) / 100;
@@ -841,10 +849,14 @@ export class BarService {
   }
 
   async bulkStocktakeAudit(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: BulkStocktakeAuditDto,
   ) {
+    const { tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
     const results: any[] = [];
     let variancesCount = 0;
     let totalCostImpact = 0;
@@ -884,8 +896,8 @@ export class BarService {
   }
 
   async getStockAdjustments(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     filters?: {
       adjustmentType?: string;
       barItemId?: string;
@@ -896,7 +908,11 @@ export class BarService {
       limit?: number;
     },
   ) {
-    const adjRepo = this.dataSource.getRepository(BarStockAdjustment);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const adjRepo = ds.getRepository(BarStockAdjustment);
     const qb = adjRepo
       .createQueryBuilder('adj')
       .where('adj.tenantId = :tenantId', { tenantId })
@@ -950,11 +966,11 @@ export class BarService {
 
   // ================= STOCK VALUATION REPORT =================
   async getBarStockValuationReport(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     category?: string,
   ) {
-    const items = await this.getItems(tenantId, propertyId, {
+    const items = await this.getItems(rawTenantId, rawPropertyId, {
       category: category && category !== 'ALL' ? category : undefined,
     });
 
@@ -988,8 +1004,7 @@ export class BarService {
 
       const costPerBottle = Number(item.costPerBottle) || 0;
       const cellarCost = Math.round(fullBottles * costPerBottle * 100) / 100;
-      const openCost =
-        Math.round((openMl / bottleSize) * costPerBottle * 100) / 100;
+      const openCost = Math.round((openMl / bottleSize) * costPerBottle * 100) / 100;
       const totalCost = Math.round((cellarCost + openCost) * 100) / 100;
 
       const standardPour = Number(item.standardPourMl) || 30;
@@ -997,13 +1012,10 @@ export class BarService {
       const pricePerPour = Number(item.pricePerPour) || 0;
       const potentialRetail = Math.round(totalShots * pricePerPour * 100) / 100;
 
-      const potentialProfit =
-        Math.round((potentialRetail - totalCost) * 100) / 100;
+      const potentialProfit = Math.round((potentialRetail - totalCost) * 100) / 100;
       const marginPercent =
         potentialRetail > 0
-          ? Math.round(
-              ((potentialRetail - totalCost) / potentialRetail) * 1000,
-            ) / 10
+          ? Math.round(((potentialRetail - totalCost) / potentialRetail) * 1000) / 10
           : 0;
 
       const parLevel = Number(item.parLevelBottles) || 2;
@@ -1011,8 +1023,7 @@ export class BarService {
       const reorderSuggestedBottles = isLowStock
         ? Math.max(0, Math.ceil(parLevel * 1.5) - fullBottles)
         : 0;
-      const reorderCost =
-        Math.round(reorderSuggestedBottles * costPerBottle * 100) / 100;
+      const reorderCost = Math.round(reorderSuggestedBottles * costPerBottle * 100) / 100;
 
       totalInventoryCostValue += totalCost;
       totalCellarCostValue += cellarCost;
@@ -1025,7 +1036,6 @@ export class BarService {
         totalReorderEstimatedCost += reorderCost;
       }
 
-      // Group by category
       const cat = item.category || 'OTHER';
       if (!categorySummaryMap[cat]) {
         categorySummaryMap[cat] = {
@@ -1044,9 +1054,7 @@ export class BarService {
       categorySummaryMap[cat].costValue =
         Math.round((categorySummaryMap[cat].costValue + totalCost) * 100) / 100;
       categorySummaryMap[cat].potentialRetail =
-        Math.round(
-          (categorySummaryMap[cat].potentialRetail + potentialRetail) * 100,
-        ) / 100;
+        Math.round((categorySummaryMap[cat].potentialRetail + potentialRetail) * 100) / 100;
 
       return {
         ...item,
@@ -1062,13 +1070,10 @@ export class BarService {
     });
 
     const totalPotentialProfit =
-      Math.round((totalPotentialRetailValue - totalInventoryCostValue) * 100) /
-      100;
+      Math.round((totalPotentialRetailValue - totalInventoryCostValue) * 100) / 100;
     const overallMargin =
       totalPotentialRetailValue > 0
-        ? Math.round(
-            (totalPotentialProfit / totalPotentialRetailValue) * 1000,
-          ) / 10
+        ? Math.round((totalPotentialProfit / totalPotentialRetailValue) * 1000) / 10
         : 0;
 
     return {
@@ -1076,16 +1081,14 @@ export class BarService {
         totalInventoryCostValue: Math.round(totalInventoryCostValue * 100) / 100,
         totalCellarCostValue: Math.round(totalCellarCostValue * 100) / 100,
         totalOpenCostValue: Math.round(totalOpenCostValue * 100) / 100,
-        totalPotentialRetailValue:
-          Math.round(totalPotentialRetailValue * 100) / 100,
+        totalPotentialRetailValue: Math.round(totalPotentialRetailValue * 100) / 100,
         totalPotentialGrossProfit: totalPotentialProfit,
         overallMarginPercent: overallMargin,
         totalLitersOnHand: Math.round(totalLitersOnHand * 100) / 100,
         totalFullBottles,
         totalItemsCount: items.length,
         lowStockCount,
-        totalReorderEstimatedCost:
-          Math.round(totalReorderEstimatedCost * 100) / 100,
+        totalReorderEstimatedCost: Math.round(totalReorderEstimatedCost * 100) / 100,
       },
       categoryBreakdown: Object.values(categorySummaryMap).sort(
         (a, b) => b.costValue - a.costValue,
@@ -1096,10 +1099,14 @@ export class BarService {
 
   // ================= DEPLETION VELOCITY & RUNWAY REPORT =================
   async getBarDepletionRunwayReport(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     daysPeriod: number = 30,
   ) {
+    const { tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
     const periodDays = Math.max(1, Math.min(365, Number(daysPeriod) || 30));
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);
@@ -1137,17 +1144,14 @@ export class BarService {
       const bottleSize = Number(item.bottleSizeMl) || 750;
       const totalAvailableMl = Number(item.totalRemainingMl) || 0;
 
-      const dailyBurnRateMl =
-        Math.round((stats.totalPouredMl / periodDays) * 100) / 100;
-      const dailyBurnBottles =
-        Math.round((dailyBurnRateMl / bottleSize) * 100) / 100;
+      const dailyBurnRateMl = Math.round((stats.totalPouredMl / periodDays) * 100) / 100;
+      const dailyBurnBottles = Math.round((dailyBurnRateMl / bottleSize) * 100) / 100;
 
       let daysRemaining: number | null = null;
       let status: 'CRITICAL' | 'LOW' | 'HEALTHY' | 'DORMANT' = 'HEALTHY';
 
       if (dailyBurnRateMl > 0) {
-        daysRemaining =
-          Math.round((totalAvailableMl / dailyBurnRateMl) * 10) / 10;
+        daysRemaining = Math.round((totalAvailableMl / dailyBurnRateMl) * 10) / 10;
         if (daysRemaining <= 3) {
           status = 'CRITICAL';
         } else if (daysRemaining <= 7) {
@@ -1189,11 +1193,8 @@ export class BarService {
     return {
       periodDays,
       totalItemsTracked: reportItems.length,
-      criticalItemsCount: reportItems.filter(
-        (i) => i.runwayStatus === 'CRITICAL',
-      ).length,
-      lowRunwayItemsCount: reportItems.filter((i) => i.runwayStatus === 'LOW')
-        .length,
+      criticalItemsCount: reportItems.filter((i) => i.runwayStatus === 'CRITICAL').length,
+      lowRunwayItemsCount: reportItems.filter((i) => i.runwayStatus === 'LOW').length,
       items: reportItems.sort((a, b) => {
         if (a.daysRemaining === null) return 1;
         if (b.daysRemaining === null) return -1;
@@ -1204,11 +1205,33 @@ export class BarService {
 
   // ================= SHRINKAGE & LOSS REPORT =================
   async getBarShrinkageReport(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     startDate?: string,
     endDate?: string,
   ) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+
+    const negQb = ds
+      .getRepository(BarStockAdjustment)
+      .createQueryBuilder('adj')
+      .where('adj.tenantId = :tenantId', { tenantId })
+      .andWhere('adj.propertyId = :propertyId', { propertyId })
+      .andWhere('adj.netVolumeDeltaMl < 0')
+      .orderBy('adj.createdAt', 'DESC');
+
+    if (startDate) {
+      negQb.andWhere('adj.createdAt >= :startDate', { startDate: new Date(startDate) });
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      negQb.andWhere('adj.createdAt <= :endDate', { endDate: end });
+    }
+
     const [wastageLogs, negativeAdjustments] = await Promise.all([
       this.getPourLogs(tenantId, propertyId, {
         pourType: PourType.WASTAGE,
@@ -1216,14 +1239,7 @@ export class BarService {
         endDate,
         limit: 1000,
       }),
-      this.dataSource
-        .getRepository(BarStockAdjustment)
-        .createQueryBuilder('adj')
-        .where('adj.tenantId = :tenantId', { tenantId })
-        .andWhere('adj.propertyId = :propertyId', { propertyId })
-        .andWhere('adj.netVolumeDeltaMl < 0')
-        .orderBy('adj.createdAt', 'DESC')
-        .getMany(),
+      negQb.getMany(),
     ]);
 
     let totalShrinkageVolumeMl = 0;
@@ -1239,7 +1255,6 @@ export class BarService {
 
     const incidents: any[] = [];
 
-    // From Wastage Pour Logs (spills, bar waste)
     for (const log of wastageLogs) {
       const ml = Number(log.millilitersPoured) || 0;
       const cost = Number(log.costAmount) || 0;
@@ -1262,7 +1277,6 @@ export class BarService {
       });
     }
 
-    // From Negative Stock Adjustments (breakages, spoilage, physical audits)
     for (const adj of negativeAdjustments) {
       const absMl = Math.abs(Number(adj.netVolumeDeltaMl) || 0);
       const absCost = Math.abs(Number(adj.costImpact) || 0);
@@ -1295,15 +1309,13 @@ export class BarService {
     }
 
     incidents.sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
 
     return {
       summary: {
         totalShrinkageVolumeMl: Math.round(totalShrinkageVolumeMl * 100) / 100,
-        totalShrinkageLiters:
-          Math.round((totalShrinkageVolumeMl / 1000) * 100) / 100,
+        totalShrinkageLiters: Math.round((totalShrinkageVolumeMl / 1000) * 100) / 100,
         totalShrinkageCost: Math.round(totalShrinkageCost * 100) / 100,
         breakageCost: Math.round(breakageCost * 100) / 100,
         breakageMl: Math.round(breakageMl * 100) / 100,
@@ -1321,11 +1333,15 @@ export class BarService {
 
   // ================= UNIFIED BAR LEDGER =================
   async getUnifiedStockLedger(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     barItemId?: string,
     limit: number = 100,
   ) {
+    const { tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
     const [logs, adjustments] = await Promise.all([
       this.getPourLogs(tenantId, propertyId, {
         limit: 500,
@@ -1377,8 +1393,7 @@ export class BarService {
     }
 
     events.sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
 
     return events.slice(0, limit);

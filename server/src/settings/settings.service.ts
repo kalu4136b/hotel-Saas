@@ -4,14 +4,14 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Property } from '../entities/property.entity';
 import { User, UserRole } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { TenantCacheService } from '../tenancy/tenant-cache.service';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
+import { RedisService } from '../redis/redis.service';
 import {
-  SYSTEM_PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
   resolveUserPermissions,
 } from '../auth/permissions';
@@ -19,13 +19,18 @@ import {
 @Injectable()
 export class SettingsService {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly tenantConn: TenantConnectionManager,
     private readonly tenantCache: TenantCacheService,
+    private readonly redis: RedisService,
   ) {}
 
   // 1. Get Property Settings
-  async getProperty(tenantId: string, propertyId: string) {
-    const property = await this.dataSource.getRepository(Property).findOne({
+  async getProperty(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const property = await ds.getRepository(Property).findOne({
       where: { id: propertyId, tenantId },
     });
     if (!property) throw new NotFoundException('Property not found');
@@ -34,8 +39,8 @@ export class SettingsService {
 
   // 2. Update Property Settings
   async updateProperty(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       name?: string;
       address?: string;
@@ -47,7 +52,10 @@ export class SettingsService {
     },
     userId: string,
   ) {
-    const propRepo = this.dataSource.getRepository(Property);
+    const { ds, tenantId, propertyId, isDedicated } =
+      await this.tenantConn.resolveTenantScope(rawTenantId, rawPropertyId);
+
+    const propRepo = ds.getRepository(Property);
     const property = await propRepo.findOne({
       where: { id: propertyId, tenantId },
     });
@@ -63,11 +71,16 @@ export class SettingsService {
 
     const updated = await propRepo.save(property);
 
+    // Mirror property metadata to master catalog for global auth/tenant resolution if dedicated
+    if (isDedicated) {
+      await this.tenantConn.getMasterDataSource().getRepository(Property).save(updated);
+    }
+
     // Invalidate tenant & property config cache in Redis
     await this.tenantCache.invalidateTenant(tenantId);
 
-    // Audit log
-    await this.dataSource.getRepository(AuditLog).save({
+    // Audit log inside tenant's isolated DataSource
+    await ds.getRepository(AuditLog).save({
       tenantId,
       propertyId,
       userId,
@@ -81,8 +94,9 @@ export class SettingsService {
   }
 
   // 3. Get Staff Members
-  async getUsers(tenantId: string) {
-    const users = await this.dataSource.getRepository(User).find({
+  async getUsers(rawTenantId: string) {
+    const { ds, tenantId } = await this.tenantConn.getDataSourceForTenant(rawTenantId);
+    const users = await ds.getRepository(User).find({
       where: { tenantId },
       select: {
         id: true,
@@ -107,8 +121,8 @@ export class SettingsService {
 
   // 4. Create Staff Member
   async createUser(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     dto: {
       fullName: string;
       username: string;
@@ -120,18 +134,32 @@ export class SettingsService {
     },
     adminUserId: string,
   ) {
-    const userRepo = this.dataSource.getRepository(User);
+    const { ds, tenantId, propertyId, isDedicated } =
+      await this.tenantConn.resolveTenantScope(rawTenantId, rawPropertyId);
 
     if (dto.role === UserRole.SUPER_ADMIN) {
       throw new ForbiddenException('Cannot assign platform SUPER_ADMIN role to tenant staff');
     }
 
-    const existing = await userRepo.findOne({
-      where: [{ email: dto.email.toLowerCase() }, { username: dto.username.toLowerCase() }],
+    const masterUserRepo = this.tenantConn.getMasterDataSource().getRepository(User);
+    const tenantUserRepo = ds.getRepository(User);
+
+    // Check global login uniqueness across master auth directory AND tenant DB
+    const cleanEmail = dto.email.toLowerCase().trim();
+    const cleanUsername = dto.username.toLowerCase().trim();
+
+    const existingMaster = await masterUserRepo.findOne({
+      where: [{ email: cleanEmail }, { username: cleanUsername }],
     });
+    const existingTenant = isDedicated
+      ? await tenantUserRepo.findOne({
+          where: [{ email: cleanEmail }, { username: cleanUsername }],
+        })
+      : null;
+    const existing = existingMaster || existingTenant;
 
     if (existing) {
-      if (existing.email.toLowerCase() === dto.email.toLowerCase()) {
+      if (existing.email.toLowerCase() === cleanEmail) {
         throw new ConflictException('An account with this email already exists');
       }
       throw new ConflictException('This username is already taken');
@@ -145,23 +173,28 @@ export class SettingsService {
         ? dto.permissions
         : DEFAULT_ROLE_PERMISSIONS[dto.role] || [];
 
-    const newUser = userRepo.create({
+    // Save in master auth directory (for global /api/auth/login routing)
+    const masterUser = masterUserRepo.create({
       tenantId,
       propertyId,
       fullName: dto.fullName.trim(),
-      username: dto.username.toLowerCase().trim(),
-      email: dto.email.toLowerCase().trim(),
+      username: cleanUsername,
+      email: cleanEmail,
       phone: dto.phone || undefined,
       passwordHash,
       role: dto.role,
       permissions,
       isActive: true,
     });
+    const saved = await masterUserRepo.save(masterUser);
 
-    const saved = await userRepo.save(newUser);
+    // Mirror identical UUID record into dedicated DB if DEDICATED
+    if (isDedicated) {
+      await tenantUserRepo.save(saved);
+    }
 
-    // Audit log
-    await this.dataSource.getRepository(AuditLog).save({
+    // Audit log inside tenant's isolated DataSource
+    await ds.getRepository(AuditLog).save({
       tenantId,
       propertyId,
       userId: adminUserId,
@@ -192,10 +225,13 @@ export class SettingsService {
       permissions?: string[];
       password?: string;
     },
-    tenantId: string,
+    rawTenantId: string,
     adminUserId: string,
   ) {
-    const userRepo = this.dataSource.getRepository(User);
+    const { ds, tenantId, isDedicated } =
+      await this.tenantConn.getDataSourceForTenant(rawTenantId);
+
+    const userRepo = ds.getRepository(User);
     const user = await userRepo.findOne({ where: { id: userId, tenantId } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -222,8 +258,13 @@ export class SettingsService {
 
     const saved = await userRepo.save(user);
 
+    if (isDedicated) {
+      await this.tenantConn.getMasterDataSource().getRepository(User).save(saved);
+    }
+    await this.redis.del(`auth:session:${userId}`);
+
     // Audit log
-    await this.dataSource.getRepository(AuditLog).save({
+    await ds.getRepository(AuditLog).save({
       tenantId,
       propertyId: user.propertyId,
       userId: adminUserId,
@@ -245,12 +286,20 @@ export class SettingsService {
   }
 
   // 5. Toggle Staff Active Status
-  async toggleUserStatus(userId: string, isActive: boolean, tenantId: string, adminUserId: string) {
+  async toggleUserStatus(
+    userId: string,
+    isActive: boolean,
+    rawTenantId: string,
+    adminUserId: string,
+  ) {
     if (userId === adminUserId) {
       throw new ForbiddenException('You cannot deactivate your own administrative account');
     }
 
-    const userRepo = this.dataSource.getRepository(User);
+    const { ds, tenantId, isDedicated } =
+      await this.tenantConn.getDataSourceForTenant(rawTenantId);
+
+    const userRepo = ds.getRepository(User);
     const user = await userRepo.findOne({ where: { id: userId, tenantId } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -258,14 +307,23 @@ export class SettingsService {
     if (!isActive) {
       user.tokenVersion = (user.tokenVersion || 0) + 1;
     }
-    await userRepo.save(user);
+    const saved = await userRepo.save(user);
+
+    if (isDedicated) {
+      await this.tenantConn.getMasterDataSource().getRepository(User).save(saved);
+    }
+    await this.redis.del(`auth:session:${userId}`);
 
     return { id: user.id, isActive: user.isActive };
   }
 
   // 6. Audit Logs
-  async getAuditLogs(tenantId: string, propertyId: string) {
-    return this.dataSource.getRepository(AuditLog).find({
+  async getAuditLogs(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return ds.getRepository(AuditLog).find({
       where: { tenantId, propertyId },
       order: { createdAt: 'DESC' },
       take: 50,

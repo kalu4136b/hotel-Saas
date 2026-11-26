@@ -1,17 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
 import { Order, OrderStatus } from '../entities/order.entity';
-import { Payment, PaymentMethod, PaymentStatus } from '../entities/payment.entity';
-import { DiningTable, TableStatus } from '../entities/dining-table.entity';
+import { Payment, PaymentStatus } from '../entities/payment.entity';
+import { DiningTable } from '../entities/dining-table.entity';
 import { KOT, KOTStatus } from '../entities/kot.entity';
-import { Product } from '../entities/product.entity';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly tenantConn: TenantConnectionManager) {}
 
-  async getStats(tenantId: string, propertyId: string) {
-    if (!tenantId) {
+  async getStats(rawTenantId: string, rawPropertyId: string) {
+    if (!rawTenantId) {
       return {
         revenue: { todayTotal: 0, cashSales: 0, cardSales: 0, transactionCount: 0 },
         orders: { todayTotal: 0, completed: 0, active: 0, cancelled: 0 },
@@ -20,10 +19,15 @@ export class DashboardService {
       };
     }
 
-    const orderRepo = this.dataSource.getRepository(Order);
-    const paymentRepo = this.dataSource.getRepository(Payment);
-    const tableRepo = this.dataSource.getRepository(DiningTable);
-    const kotRepo = this.dataSource.getRepository(KOT);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+
+    const orderRepo = ds.getRepository(Order);
+    const paymentRepo = ds.getRepository(Payment);
+    const tableRepo = ds.getRepository(DiningTable);
+    const kotRepo = ds.getRepository(KOT);
 
     // 1. Live Payments Today (Real SQL Aggregation)
     const paymentStats = await paymentRepo
@@ -111,10 +115,14 @@ export class DashboardService {
     };
   }
 
-  async getRecentOrders(tenantId: string, propertyId: string) {
-    if (!tenantId) return [];
+  async getRecentOrders(rawTenantId: string, rawPropertyId: string) {
+    if (!rawTenantId) return [];
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
 
-    const orders = await this.dataSource.getRepository(Order).find({
+    const orders = await ds.getRepository(Order).find({
       where: { tenantId, propertyId },
       relations: { items: true },
       order: { createdAt: 'DESC' },
@@ -124,10 +132,14 @@ export class DashboardService {
     return orders;
   }
 
-  async getTopProducts(tenantId: string, propertyId: string) {
-    if (!tenantId) return [];
+  async getTopProducts(rawTenantId: string, rawPropertyId: string) {
+    if (!rawTenantId) return [];
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
 
-    const topProducts = await this.dataSource
+    const topProducts = await ds
       .createQueryBuilder()
       .select('oi.productName', 'name')
       .addSelect('SUM(oi.quantity)', 'unitsSold')
@@ -149,10 +161,14 @@ export class DashboardService {
     }));
   }
 
-  async getLiveTables(tenantId: string, propertyId: string) {
-    if (!tenantId) return [];
+  async getLiveTables(rawTenantId: string, rawPropertyId: string) {
+    if (!rawTenantId) return [];
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
 
-    return this.dataSource.getRepository(DiningTable).find({
+    return ds.getRepository(DiningTable).find({
       where: { tenantId, propertyId, isActive: true },
       order: { tableNumber: 'ASC' },
     });

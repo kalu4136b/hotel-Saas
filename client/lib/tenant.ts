@@ -56,10 +56,15 @@ export function getTenantSlugFromHost(): string | null {
     return null;
   }
 
-  // Subdomain on domain: e.g. "grandpalace.hotelia.tenura.tech" (>= 3 parts)
+  // Subdomain on domain: e.g. "grandpalace.hotelia.tenura.tech"
+  // Note: "hotelia.tenura.tech" itself is the platform root portal, NOT a tenant subdomain.
+  if (host === 'hotelia.tenura.tech' || host.endsWith('.tenura.tech') && parts.length === 3 && parts[0] === 'hotelia') {
+    return null;
+  }
+
   if (parts.length >= 3) {
     const sub = parts[0];
-    if (sub !== 'www' && sub !== 'app' && sub !== 'api' && sub !== 'admin') {
+    if (sub !== 'www' && sub !== 'app' && sub !== 'api' && sub !== 'admin' && sub !== 'hotelia') {
       return sub;
     }
   }

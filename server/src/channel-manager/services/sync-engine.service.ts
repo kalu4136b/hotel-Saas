@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DataSource, In, LessThanOrEqual } from 'typeorm';
+import { In, LessThanOrEqual } from 'typeorm';
 import {
   ChannelConnection,
   ChannelConnectionStatus,
@@ -28,6 +28,7 @@ import { AgodaAdapter } from '../adapters/agoda.adapter';
 import { AirbnbAdapter } from '../adapters/airbnb.adapter';
 import { TripadvisorAdapter } from '../adapters/tripadvisor.adapter';
 import { ICalAdapter } from '../adapters/ical.adapter';
+import { TenantConnectionManager } from '../../database/tenant-connection-manager.service';
 
 @Injectable()
 export class SyncEngineService {
@@ -36,7 +37,7 @@ export class SyncEngineService {
   private isProcessing = false;
 
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly tenantConn: TenantConnectionManager,
     private readonly encryptionService: ChannelEncryptionService,
     private readonly availabilityCalcService: AvailabilityCalculationService,
     private readonly pricingEngineService: PricingEngineService,
@@ -54,7 +55,7 @@ export class SyncEngineService {
     this.adapters.set('TRIPADVISOR', tripadvisorAdapter);
     this.adapters.set('ICAL', icalAdapter);
 
-    // Periodically process queue every 30 seconds
+    // Periodically process queue every 30 seconds across shared + dedicated tenant DBs
     setInterval(() => {
       this.processNextBatch().catch((err) =>
         this.logger.error('Error in sync engine background loop', err),
@@ -70,13 +71,17 @@ export class SyncEngineService {
    * Enqueue a new sync job
    */
   async enqueueJob(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     connectionId: string,
     jobType: SyncJobType,
     payload?: any,
   ): Promise<ChannelSyncJob> {
-    const jobRepo = this.dataSource.getRepository(ChannelSyncJob);
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    const jobRepo = ds.getRepository(ChannelSyncJob);
     const job = jobRepo.create({
       tenantId,
       propertyId,
@@ -92,7 +97,7 @@ export class SyncEngineService {
 
     // Process immediately in background without blocking caller
     setImmediate(() => {
-      this.processJob(saved.id).catch((err) =>
+      this.processJob(tenantId, saved.id).catch((err) =>
         this.logger.error(`Error executing job ${saved.id}`, err),
       );
     });
@@ -101,15 +106,16 @@ export class SyncEngineService {
   }
 
   /**
-   * Process a single job by ID
+   * Process a single job by tenantId & ID
    */
-  async processJob(jobId: string): Promise<boolean> {
-    const jobRepo = this.dataSource.getRepository(ChannelSyncJob);
-    const connRepo = this.dataSource.getRepository(ChannelConnection);
-    const logRepo = this.dataSource.getRepository(ChannelSyncLog);
+  async processJob(rawTenantId: string, jobId: string): Promise<boolean> {
+    const { ds, tenantId } = await this.tenantConn.getDataSourceForTenant(rawTenantId);
+    const jobRepo = ds.getRepository(ChannelSyncJob);
+    const connRepo = ds.getRepository(ChannelConnection);
+    const logRepo = ds.getRepository(ChannelSyncLog);
 
     const job = await jobRepo.findOne({
-      where: { id: jobId },
+      where: { id: jobId, tenantId },
       relations: { connection: true },
     });
 
@@ -134,7 +140,6 @@ export class SyncEngineService {
     };
 
     try {
-      // Decrypt credentials
       const credentials = connection.encryptedCredentials
         ? this.encryptionService.decryptObject(connection.encryptedCredentials) || {}
         : {};
@@ -144,11 +149,9 @@ export class SyncEngineService {
         job.jobType === SyncJobType.AVAILABILITY_PUSH ||
         job.jobType === SyncJobType.FULL_SYNC
       ) {
-        const roomMappings = await this.dataSource
-          .getRepository(ChannelRoomMapping)
-          .find({
-            where: { connectionId: connection.id, isActive: true },
-          });
+        const roomMappings = await ds.getRepository(ChannelRoomMapping).find({
+          where: { connectionId: connection.id, isActive: true },
+        });
 
         const grid = await this.availabilityCalcService.getAvailabilityGrid(
           job.tenantId,
@@ -180,17 +183,13 @@ export class SyncEngineService {
         (job.jobType === SyncJobType.RATE_PUSH || job.jobType === SyncJobType.FULL_SYNC) &&
         adapter.capabilities.supportsRatePush
       ) {
-        const ratePlanMappings = await this.dataSource
-          .getRepository(ChannelRatePlanMapping)
-          .find({
-            where: { connectionId: connection.id, isActive: true },
-          });
+        const ratePlanMappings = await ds.getRepository(ChannelRatePlanMapping).find({
+          where: { connectionId: connection.id, isActive: true },
+        });
 
-        const roomMappings = await this.dataSource
-          .getRepository(ChannelRoomMapping)
-          .find({
-            where: { connectionId: connection.id, isActive: true },
-          });
+        const roomMappings = await ds.getRepository(ChannelRoomMapping).find({
+          where: { connectionId: connection.id, isActive: true },
+        });
 
         const grid = await this.availabilityCalcService.getAvailabilityGrid(
           job.tenantId,
@@ -205,6 +204,7 @@ export class SyncEngineService {
 
           for (const rpm of ratePlanMappings) {
             const calculated = await this.pricingEngineService.calculateExternalRate(
+              job.tenantId,
               connection.id,
               item.roomTypeId,
               item.basePrice,
@@ -244,7 +244,6 @@ export class SyncEngineService {
 
       const durationMs = Date.now() - startTime;
 
-      // Handle Outcome
       if (syncResult.success) {
         job.status = SyncJobStatus.COMPLETED;
         job.completedAt = new Date();
@@ -293,7 +292,6 @@ export class SyncEngineService {
         connection.status = ChannelConnectionStatus.SYNC_FAILED;
       } else {
         job.status = SyncJobStatus.PENDING;
-        // Exponential backoff: 1m, 5m, 15m, 60m
         const backoffMinutes = [1, 5, 15, 60][Math.min(job.attemptCount - 1, 3)];
         job.nextRunAt = new Date(Date.now() + backoffMinutes * 60 * 1000);
         connection.syncHealth = SyncHealth.WARNING;
@@ -327,25 +325,30 @@ export class SyncEngineService {
   }
 
   /**
-   * Process next batch of pending jobs
+   * Process next batch of pending jobs across shared and dedicated tenant DBs
    */
   async processNextBatch(): Promise<void> {
     if (this.isProcessing) return;
     this.isProcessing = true;
 
     try {
-      const jobRepo = this.dataSource.getRepository(ChannelSyncJob);
-      const pendingJobs = await jobRepo.find({
-        where: {
-          status: In([SyncJobStatus.PENDING]),
-          nextRunAt: LessThanOrEqual(new Date()),
-        },
-        take: 10,
-        order: { nextRunAt: 'ASC' },
-      });
+      const sources = await this.tenantConn.getAllActiveDataSources();
+      for (const ds of sources) {
+        const jobRepo = ds.getRepository(ChannelSyncJob);
+        const pendingJobs = await jobRepo.find({
+          where: {
+            status: In([SyncJobStatus.PENDING]),
+            nextRunAt: LessThanOrEqual(new Date()),
+          },
+          take: 10,
+          order: { nextRunAt: 'ASC' },
+        });
 
-      for (const job of pendingJobs) {
-        await this.processJob(job.id);
+        for (const job of pendingJobs) {
+          if (job.tenantId) {
+            await this.processJob(job.tenantId, job.id);
+          }
+        }
       }
     } finally {
       this.isProcessing = false;
@@ -355,15 +358,16 @@ export class SyncEngineService {
   /**
    * Manually trigger a retry for a specific failed job
    */
-  async retryJob(jobId: string): Promise<boolean> {
-    const jobRepo = this.dataSource.getRepository(ChannelSyncJob);
-    const job = await jobRepo.findOne({ where: { id: jobId } });
+  async retryJob(rawTenantId: string, jobId: string): Promise<boolean> {
+    const { ds, tenantId } = await this.tenantConn.getDataSourceForTenant(rawTenantId);
+    const jobRepo = ds.getRepository(ChannelSyncJob);
+    const job = await jobRepo.findOne({ where: { id: jobId, tenantId } });
     if (!job) return false;
 
     job.status = SyncJobStatus.PENDING;
     job.nextRunAt = new Date();
     await jobRepo.save(job);
 
-    return this.processJob(job.id);
+    return this.processJob(tenantId, job.id);
   }
 }

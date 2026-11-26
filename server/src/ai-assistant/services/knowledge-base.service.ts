@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { DataSource } from 'typeorm';
 import { AiKnowledgeDocument } from '../../entities/ai-knowledge-document.entity';
+import { TenantConnectionManager } from '../../database/tenant-connection-manager.service';
 
 export interface KnowledgeMatch {
   title: string;
@@ -154,7 +154,7 @@ export class KnowledgeBaseService implements OnModuleInit {
     },
   ];
 
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly tenantConn: TenantConnectionManager) {}
 
   async onModuleInit() {
     await this.seedKnowledgeBaseIfEmpty();
@@ -165,8 +165,8 @@ export class KnowledgeBaseService implements OnModuleInit {
    */
   async seedKnowledgeBaseIfEmpty() {
     try {
-      const repo = this.dataSource.getRepository(AiKnowledgeDocument);
-      const count = await repo.count();
+      const repo = this.tenantConn.getMasterDataSource().getRepository(AiKnowledgeDocument);
+      const count = await repo.count({ where: { isSystem: true } });
       if (count === 0) {
         for (const doc of this.defaultDocuments) {
           await repo.save(
@@ -192,6 +192,7 @@ export class KnowledgeBaseService implements OnModuleInit {
   async searchKnowledgeBase(
     query: string,
     categoryFilter?: string,
+    tenantId?: string,
   ): Promise<KnowledgeMatch[]> {
     const qLower = query.toLowerCase();
     const queryTokens = qLower
@@ -199,8 +200,32 @@ export class KnowledgeBaseService implements OnModuleInit {
       .split(/\s+/)
       .filter((t) => t.length > 2);
 
-    const repo = this.dataSource.getRepository(AiKnowledgeDocument);
-    const docs = await repo.find();
+    const masterDs = this.tenantConn.getMasterDataSource();
+    const systemDocs = await masterDs
+      .getRepository(AiKnowledgeDocument)
+      .find({ where: { isSystem: true } });
+
+    const docMap = new Map<string, AiKnowledgeDocument>();
+    for (const d of systemDocs) {
+      docMap.set(d.id, d);
+    }
+
+    if (tenantId) {
+      try {
+        const { ds, tenantId: validTenantId } =
+          await this.tenantConn.getDataSourceForTenant(tenantId);
+        const tenantDocs = await ds.getRepository(AiKnowledgeDocument).find({
+          where: { tenantId: validTenantId },
+        });
+        for (const d of tenantDocs) {
+          docMap.set(d.id, d);
+        }
+      } catch {
+        // Ignore if tenant lacks custom knowledge docs
+      }
+    }
+
+    const docs = Array.from(docMap.values());
 
     const matches: KnowledgeMatch[] = [];
 

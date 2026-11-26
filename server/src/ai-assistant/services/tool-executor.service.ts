@@ -3,7 +3,6 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { DataSource, Between } from 'typeorm';
 import { PmsService } from '../../pms/pms.service';
 import { InventoryService } from '../../inventory/inventory.service';
 import { BarService } from '../../bar/bar.service';
@@ -15,11 +14,11 @@ import {
   Reservation,
   RoomStatus,
   CleanlinessStatus,
-  RoomType,
   AiToolAuditLog,
   Supplier,
   UserRole,
 } from '../../entities';
+import { TenantConnectionManager } from '../../database/tenant-connection-manager.service';
 
 export interface ToolExecutionUser {
   id: string;
@@ -42,7 +41,7 @@ export interface ToolExecutionResult {
 @Injectable()
 export class ToolExecutorService {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly tenantConn: TenantConnectionManager,
     private readonly pmsService: PmsService,
     private readonly inventoryService: InventoryService,
     private readonly barService: BarService,
@@ -60,6 +59,10 @@ export class ToolExecutorService {
     user: ToolExecutionUser,
     isConfirmed: boolean = false,
   ): Promise<ToolExecutionResult> {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      user.tenantId,
+      user.propertyId,
+    );
     const startTime = Date.now();
     let resultData: any = null;
     let summary = '';
@@ -70,7 +73,7 @@ export class ToolExecutorService {
       switch (toolName) {
         // ================= PMS / HOUSEKEEPING =================
         case 'get_available_rooms': {
-          const rooms = await this.pmsService.getRooms(user.tenantId, user.propertyId);
+          const rooms = await this.pmsService.getRooms(tenantId, propertyId);
           let filtered = rooms.filter((r) => r.status === RoomStatus.AVAILABLE);
           if (params.cleanlinessStatus) {
             filtered = filtered.filter(
@@ -95,12 +98,12 @@ export class ToolExecutorService {
         }
 
         case 'get_room_status': {
-          const roomRepo = this.dataSource.getRepository(Room);
+          const roomRepo = ds.getRepository(Room);
           const room = await roomRepo.findOne({
             where: {
               roomNumber: String(params.roomNumber).trim(),
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
             },
             relations: { roomType: true },
           });
@@ -109,13 +112,12 @@ export class ToolExecutorService {
             throw new NotFoundException(`Room #${params.roomNumber} not found.`);
           }
 
-          // Check if there is an active reservation
-          const resRepo = this.dataSource.getRepository(Reservation);
+          const resRepo = ds.getRepository(Reservation);
           const activeRes = await resRepo.findOne({
             where: {
               roomId: room.id,
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
               status: 'CHECKED_IN' as any,
             },
             relations: { guest: true },
@@ -140,10 +142,10 @@ export class ToolExecutorService {
 
         case 'get_today_arrivals': {
           const targetDate = params.date || new Date().toISOString().slice(0, 10);
-          const reservations = await this.dataSource.getRepository(Reservation).find({
+          const reservations = await ds.getRepository(Reservation).find({
             where: {
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
               checkInDate: targetDate,
             },
             relations: { guest: true, roomType: true, room: true },
@@ -166,10 +168,10 @@ export class ToolExecutorService {
 
         case 'get_today_departures': {
           const targetDate = params.date || new Date().toISOString().slice(0, 10);
-          const reservations = await this.dataSource.getRepository(Reservation).find({
+          const reservations = await ds.getRepository(Reservation).find({
             where: {
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
               checkOutDate: targetDate,
             },
             relations: { guest: true, room: true },
@@ -189,14 +191,14 @@ export class ToolExecutorService {
 
         case 'get_guest_reservation': {
           const q = String(params.search).trim();
-          const reservations = await this.dataSource
+          const reservations = await ds
             .getRepository(Reservation)
             .createQueryBuilder('res')
             .leftJoinAndSelect('res.guest', 'guest')
             .leftJoinAndSelect('res.roomType', 'roomType')
             .leftJoinAndSelect('res.room', 'room')
-            .where('res.tenantId = :tenantId', { tenantId: user.tenantId })
-            .andWhere('res.propertyId = :propertyId', { propertyId: user.propertyId })
+            .where('res.tenantId = :tenantId', { tenantId })
+            .andWhere('res.propertyId = :propertyId', { propertyId })
             .andWhere(
               '(res.reservationNumber LIKE :q OR guest.fullName LIKE :q OR guest.phone LIKE :q)',
               { q: `%${q}%` },
@@ -225,19 +227,19 @@ export class ToolExecutorService {
         case 'get_guest_folio': {
           let resId = params.reservationId;
           if (!resId && params.roomNumber) {
-            const room = await this.dataSource.getRepository(Room).findOne({
+            const room = await ds.getRepository(Room).findOne({
               where: {
                 roomNumber: String(params.roomNumber).trim(),
-                tenantId: user.tenantId,
-                propertyId: user.propertyId,
+                tenantId,
+                propertyId,
               },
             });
             if (room) {
-              const res = await this.dataSource.getRepository(Reservation).findOne({
+              const res = await ds.getRepository(Reservation).findOne({
                 where: {
                   roomId: room.id,
-                  tenantId: user.tenantId,
-                  propertyId: user.propertyId,
+                  tenantId,
+                  propertyId,
                   status: 'CHECKED_IN' as any,
                 },
               });
@@ -249,7 +251,7 @@ export class ToolExecutorService {
             throw new BadRequestException('Reservation ID or active Room Number is required.');
           }
 
-          const folio = await this.pmsService.getFolio(user.tenantId, user.propertyId, resId);
+          const folio = await this.pmsService.getFolio(tenantId, propertyId, resId);
           resultData = {
             id: folio.id,
             reservationNumber: folio.reservation?.reservationNumber,
@@ -268,40 +270,43 @@ export class ToolExecutorService {
         }
 
         case 'update_room_cleanliness': {
-          const room = await this.dataSource.getRepository(Room).findOne({
+          const room = await ds.getRepository(Room).findOne({
             where: {
               roomNumber: String(params.roomNumber).trim(),
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
             },
           });
           if (!room) throw new NotFoundException(`Room #${params.roomNumber} not found.`);
 
           const updated = await this.pmsService.updateCleanliness(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             room.id,
             params.status as CleanlinessStatus,
           );
 
-          resultData = { roomNumber: updated.roomNumber, cleanlinessStatus: updated.cleanlinessStatus };
+          resultData = {
+            roomNumber: updated.roomNumber,
+            cleanlinessStatus: updated.cleanlinessStatus,
+          };
           summary = `Successfully updated Room ${updated.roomNumber} cleanliness status to ${updated.cleanlinessStatus}.`;
           break;
         }
 
         case 'update_room_occupancy': {
-          const room = await this.dataSource.getRepository(Room).findOne({
+          const room = await ds.getRepository(Room).findOne({
             where: {
               roomNumber: String(params.roomNumber).trim(),
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
             },
           });
           if (!room) throw new NotFoundException(`Room #${params.roomNumber} not found.`);
 
           const updated = await this.pmsService.updateOccupancyStatus(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             room.id,
             params.status as RoomStatus,
           );
@@ -314,8 +319,7 @@ export class ToolExecutorService {
         case 'create_reservation': {
           let roomTypeId = params.roomTypeId;
           if (!roomTypeId || roomTypeId.length < 10) {
-            // Find room type by name
-            const roomTypes = await this.pmsService.getRoomTypes(user.tenantId, user.propertyId);
+            const roomTypes = await this.pmsService.getRoomTypes(tenantId, propertyId);
             if (roomTypes.length > 0) {
               const matched = roomTypes.find((rt) =>
                 rt.name.toLowerCase().includes(String(params.roomTypeId || '').toLowerCase()),
@@ -326,19 +330,19 @@ export class ToolExecutorService {
 
           let roomId: string | undefined = undefined;
           if (params.roomNumber) {
-            const rm = await this.dataSource.getRepository(Room).findOne({
+            const rm = await ds.getRepository(Room).findOne({
               where: {
                 roomNumber: String(params.roomNumber).trim(),
-                tenantId: user.tenantId,
-                propertyId: user.propertyId,
+                tenantId,
+                propertyId,
               },
             });
             if (rm) roomId = rm.id;
           }
 
           const res = await this.pmsService.createReservation(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             {
               guestName: params.guestName,
               guestEmail: params.guestEmail,
@@ -364,11 +368,11 @@ export class ToolExecutorService {
         }
 
         case 'check_in_guest': {
-          let res = await this.dataSource.getRepository(Reservation).findOne({
+          const res = await ds.getRepository(Reservation).findOne({
             where: {
               reservationNumber: String(params.reservationNumber).trim(),
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
             },
             relations: { room: true },
           });
@@ -379,11 +383,11 @@ export class ToolExecutorService {
 
           let targetRoomId = res.roomId;
           if (params.roomNumber) {
-            const rm = await this.dataSource.getRepository(Room).findOne({
+            const rm = await ds.getRepository(Room).findOne({
               where: {
                 roomNumber: String(params.roomNumber).trim(),
-                tenantId: user.tenantId,
-                propertyId: user.propertyId,
+                tenantId,
+                propertyId,
               },
             });
             if (rm) targetRoomId = rm.id;
@@ -394,8 +398,8 @@ export class ToolExecutorService {
           }
 
           const checkInResult = await this.pmsService.checkIn(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             res.id,
             targetRoomId,
             user.id,
@@ -410,44 +414,45 @@ export class ToolExecutorService {
         }
 
         case 'check_out_guest': {
-          const room = await this.dataSource.getRepository(Room).findOne({
+          const room = await ds.getRepository(Room).findOne({
             where: {
               roomNumber: String(params.roomNumber).trim(),
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
             },
           });
 
           let res = null;
           if (room) {
-            res = await this.dataSource.getRepository(Reservation).findOne({
+            res = await ds.getRepository(Reservation).findOne({
               where: {
                 roomId: room.id,
-                tenantId: user.tenantId,
-                propertyId: user.propertyId,
+                tenantId,
+                propertyId,
                 status: 'CHECKED_IN' as any,
               },
             });
           }
 
           if (!res) {
-            // Check if roomNumber was passed as reservation code
-            res = await this.dataSource.getRepository(Reservation).findOne({
+            res = await ds.getRepository(Reservation).findOne({
               where: {
                 reservationNumber: String(params.roomNumber).trim(),
-                tenantId: user.tenantId,
-                propertyId: user.propertyId,
+                tenantId,
+                propertyId,
               },
             });
           }
 
           if (!res) {
-            throw new NotFoundException(`No active checked-in reservation found for ${params.roomNumber}.`);
+            throw new NotFoundException(
+              `No active checked-in reservation found for ${params.roomNumber}.`,
+            );
           }
 
           const checkoutResult = await this.pmsService.checkOut(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             res.id,
             user.id,
           );
@@ -458,28 +463,32 @@ export class ToolExecutorService {
         }
 
         case 'post_folio_charge': {
-          const room = await this.dataSource.getRepository(Room).findOne({
+          const room = await ds.getRepository(Room).findOne({
             where: {
               roomNumber: String(params.roomNumber).trim(),
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
             },
           });
           if (!room) throw new NotFoundException(`Room #${params.roomNumber} not found.`);
 
-          const res = await this.dataSource.getRepository(Reservation).findOne({
+          const res = await ds.getRepository(Reservation).findOne({
             where: {
               roomId: room.id,
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
               status: 'CHECKED_IN' as any,
             },
           });
-          if (!res) throw new NotFoundException(`No active checked-in reservation for Room #${params.roomNumber}.`);
+          if (!res) {
+            throw new NotFoundException(
+              `No active checked-in reservation for Room #${params.roomNumber}.`,
+            );
+          }
 
           const updatedFolio = await this.pmsService.postFolioCharge(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             res.id,
             {
               chargeType: params.chargeType,
@@ -494,28 +503,30 @@ export class ToolExecutorService {
         }
 
         case 'post_folio_payment': {
-          const room = await this.dataSource.getRepository(Room).findOne({
+          const room = await ds.getRepository(Room).findOne({
             where: {
               roomNumber: String(params.roomNumber).trim(),
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
             },
           });
           if (!room) throw new NotFoundException(`Room #${params.roomNumber} not found.`);
 
-          const res = await this.dataSource.getRepository(Reservation).findOne({
+          const res = await ds.getRepository(Reservation).findOne({
             where: {
               roomId: room.id,
-              tenantId: user.tenantId,
-              propertyId: user.propertyId,
+              tenantId,
+              propertyId,
               status: 'CHECKED_IN' as any,
             },
           });
-          if (!res) throw new NotFoundException(`No active reservation for Room #${params.roomNumber}.`);
+          if (!res) {
+            throw new NotFoundException(`No active reservation for Room #${params.roomNumber}.`);
+          }
 
           const updatedFolio = await this.pmsService.postFolioPayment(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             res.id,
             {
               amount: Number(params.amount),
@@ -531,11 +542,11 @@ export class ToolExecutorService {
         // ================= INVENTORY =================
         case 'get_low_stock_inventory': {
           const items = await this.inventoryService.getItems(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             params.category,
             undefined,
-            true, // lowStockOnly
+            true,
           );
 
           resultData = items.map((i) => ({
@@ -555,8 +566,8 @@ export class ToolExecutorService {
 
         case 'get_inventory_items': {
           const items = await this.inventoryService.getItems(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             params.category,
             params.search,
             false,
@@ -578,14 +589,16 @@ export class ToolExecutorService {
 
         case 'create_purchase_order': {
           let supplierId = params.supplierId;
-          const suppRepo = this.dataSource.getRepository(Supplier);
-          const supplier = await suppRepo.findOne({
-            where: { id: supplierId, tenantId: user.tenantId, propertyId: user.propertyId },
-          });
+          const suppRepo = ds.getRepository(Supplier);
+          const supplier = supplierId
+            ? await suppRepo.findOne({
+                where: { id: supplierId, tenantId, propertyId },
+              })
+            : null;
 
           if (!supplier) {
             const firstSupp = await suppRepo.findOne({
-              where: { tenantId: user.tenantId, propertyId: user.propertyId },
+              where: { tenantId, propertyId },
             });
             if (firstSupp) supplierId = firstSupp.id;
             else throw new NotFoundException('No valid supplier found to create purchase order.');
@@ -598,8 +611,8 @@ export class ToolExecutorService {
           }));
 
           const po = await this.inventoryService.createPurchaseOrder(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             {
               supplierId,
               expectedDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
@@ -616,7 +629,7 @@ export class ToolExecutorService {
 
         // ================= BAR =================
         case 'get_bar_stock_levels': {
-          const items = await this.barService.getItems(user.tenantId, user.propertyId, {
+          const items = await this.barService.getItems(tenantId, propertyId, {
             search: params.search,
             lowStock: params.lowStockOnly,
           });
@@ -638,16 +651,12 @@ export class ToolExecutorService {
         }
 
         case 'log_bar_wastage': {
-          const wastage = await this.barService.logWastage(
-            user.tenantId,
-            user.propertyId,
-            {
-              barItemId: params.barItemId,
-              millilitersWasted: Number(params.millilitersWasted),
-              reason: params.reason,
-              bartenderName: params.bartenderName || 'AI Assistant',
-            },
-          );
+          const wastage = await this.barService.logWastage(tenantId, propertyId, {
+            barItemId: params.barItemId,
+            millilitersWasted: Number(params.millilitersWasted),
+            reason: params.reason,
+            bartenderName: params.bartenderName || 'AI Assistant',
+          });
 
           resultData = wastage;
           summary = `Logged ${params.millilitersWasted}ml bar wastage. Reason: ${params.reason}.`;
@@ -657,8 +666,8 @@ export class ToolExecutorService {
         // ================= REPORTS & POS =================
         case 'get_daily_sales_summary': {
           const report = await this.reportsService.getDailySalesReport(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
             params.startDate,
             params.endDate,
           );
@@ -670,7 +679,7 @@ export class ToolExecutorService {
         }
 
         case 'get_pos_tables_status': {
-          const tables = await this.posService.getTables(user.tenantId, user.propertyId);
+          const tables = await this.posService.getTables(tenantId, propertyId);
           resultData = tables.map((t) => ({
             tableNumber: t.tableNumber,
             capacity: t.capacity,
@@ -686,8 +695,8 @@ export class ToolExecutorService {
         // ================= CHANNEL MANAGER =================
         case 'get_channel_sync_status': {
           const overview = await this.channelManagerService.getDashboardOverview(
-            user.tenantId,
-            user.propertyId,
+            tenantId,
+            propertyId,
           );
 
           resultData = overview;
@@ -705,12 +714,12 @@ export class ToolExecutorService {
           for (const ch of channelsToSync) {
             try {
               const job = await this.channelManagerService.triggerSync(
-                user.tenantId,
-                user.propertyId,
+                tenantId,
+                propertyId,
                 ch as any,
               );
               jobs.push(job);
-            } catch (syncErr: any) {
+            } catch {
               // Continue with remaining channels
             }
           }
@@ -763,15 +772,14 @@ export class ToolExecutorService {
 
     const executionTimeMs = Date.now() - startTime;
 
-    // Log to AiToolAuditLog
     try {
-      await this.dataSource.getRepository(AiToolAuditLog).save({
-        tenantId: user.tenantId,
-        propertyId: user.propertyId,
+      await ds.getRepository(AiToolAuditLog).save({
+        tenantId,
+        propertyId,
         userId: user.id,
         toolName,
         parameters: params,
-        isWrite: false, // Updated by caller if write
+        isWrite: false,
         confirmed: isConfirmed,
         status: success ? 'SUCCESS' : 'FAILED',
         resultSummary: summary,

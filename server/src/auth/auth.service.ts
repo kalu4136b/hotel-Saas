@@ -8,10 +8,12 @@ import { JwtService } from '@nestjs/jwt';
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
+import { Property } from '../entities/property.entity';
 import { TenantStatus } from '../entities/tenant.entity';
 import { User } from '../entities/user.entity';
 import { resolveUserPermissions } from './permissions';
 import { RedisService } from '../redis/redis.service';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
 
 interface LoginAttemptRecord {
   count: number;
@@ -31,6 +33,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly dataSource: DataSource,
     private readonly redis: RedisService,
+    private readonly tenantConn: TenantConnectionManager,
   ) {}
 
   private checkRateLimit(key: string): void {
@@ -106,6 +109,24 @@ export class AuthService {
     user.lastLoginAt = new Date();
     await userRepo.update(user.id, { lastLoginAt: user.lastLoginAt });
 
+    let activeProperty = user.property;
+    if (user.tenantId && user.tenant?.storageMode === 'DEDICATED') {
+      try {
+        const { ds, isDedicated } = await this.tenantConn.getDataSourceForTenant(user.tenantId);
+        if (isDedicated) {
+          await ds.getRepository(User).update(user.id, { lastLoginAt: user.lastLoginAt });
+          if (user.propertyId) {
+            const dedProp = await ds.getRepository(Property).findOne({
+              where: { id: user.propertyId, tenantId: user.tenantId },
+            });
+            if (dedProp) activeProperty = dedProp;
+          }
+        }
+      } catch {
+        // Non-blocking sync on login
+      }
+    }
+
     const permissions = resolveUserPermissions(user);
     const expiresIn = dto.rememberMe === false ? '8h' : '12h';
     const token = this.generateToken(user, user.tenantId, user.propertyId, permissions, expiresIn);
@@ -137,12 +158,12 @@ export class AuthService {
             expiresAt: user.tenant.expiresAt,
           }
         : null,
-      property: user.property
+      property: activeProperty
         ? {
-            id: user.property.id,
-            name: user.property.name,
-            currency: user.property.currency || 'LKR',
-            defaultTaxRate: user.property.defaultTaxRate || 10.0,
+            id: activeProperty.id,
+            name: activeProperty.name,
+            currency: activeProperty.currency || 'LKR',
+            defaultTaxRate: activeProperty.defaultTaxRate || 10.0,
           }
         : null,
     };
@@ -156,6 +177,21 @@ export class AuthService {
 
     if (!user) {
       throw new UnauthorizedException('User not found');
+    }
+
+    let activeProperty = user.property;
+    if (user.tenantId && user.tenant?.storageMode === 'DEDICATED' && user.propertyId) {
+      try {
+        const { ds, isDedicated } = await this.tenantConn.getDataSourceForTenant(user.tenantId);
+        if (isDedicated) {
+          const dedProp = await ds.getRepository(Property).findOne({
+            where: { id: user.propertyId, tenantId: user.tenantId },
+          });
+          if (dedProp) activeProperty = dedProp;
+        }
+      } catch {
+        // Fallback to master mirror property
+      }
     }
 
     const permissions = resolveUserPermissions(user);
@@ -172,12 +208,17 @@ export class AuthService {
         avatarUrl: user.avatarUrl,
       },
       tenant: user.tenant,
-      property: user.property,
+      property: activeProperty,
     };
   }
 
   async logout(userId: string) {
     if (userId) {
+      const user = await this.dataSource.getRepository(User).findOne({
+        where: { id: userId },
+        select: { id: true, tenantId: true },
+      });
+
       await Promise.all([
         this.dataSource
           .getRepository(User)
@@ -185,6 +226,17 @@ export class AuthService {
         this.redis.del(`auth:session:${userId}`),
         this.redis.incr(`auth:user:${userId}:tv`),
       ]);
+
+      if (user?.tenantId) {
+        try {
+          const { ds, isDedicated } = await this.tenantConn.getDataSourceForTenant(user.tenantId);
+          if (isDedicated) {
+            await ds.getRepository(User).increment({ id: userId }, 'tokenVersion', 1);
+          }
+        } catch {
+          // Ignore dedicated sync error on logout
+        }
+      }
     }
     return {
       success: true,

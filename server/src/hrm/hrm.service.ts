@@ -4,8 +4,8 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Between, In, IsNull } from 'typeorm';
+import { DataSource, Between, In, IsNull } from 'typeorm';
+import { TenantConnectionManager } from '../database/tenant-connection-manager.service';
 import {
   HrmDepartment,
   HrmDesignation,
@@ -32,7 +32,6 @@ import {
   DepartmentStatus,
   EmploymentType,
   EmployeeStatus,
-  Gender,
   ShiftType,
   AttendanceStatus,
   AttendanceSource,
@@ -58,61 +57,53 @@ import {
 
 @Injectable()
 export class HrmService {
-  constructor(
-    @InjectRepository(HrmDepartment)
-    private readonly deptRepo: Repository<HrmDepartment>,
-    @InjectRepository(HrmDesignation)
-    private readonly desigRepo: Repository<HrmDesignation>,
-    @InjectRepository(HrmEmployee)
-    private readonly empRepo: Repository<HrmEmployee>,
-    @InjectRepository(HrmEmployeeDocument)
-    private readonly docRepo: Repository<HrmEmployeeDocument>,
-    @InjectRepository(HrmShiftTemplate)
-    private readonly shiftRepo: Repository<HrmShiftTemplate>,
-    @InjectRepository(HrmShiftSegment)
-    private readonly segmentRepo: Repository<HrmShiftSegment>,
-    @InjectRepository(HrmRosterAssignment)
-    private readonly rosterRepo: Repository<HrmRosterAssignment>,
-    @InjectRepository(HrmAttendance)
-    private readonly attendanceRepo: Repository<HrmAttendance>,
-    @InjectRepository(HrmLeaveType)
-    private readonly leaveTypeRepo: Repository<HrmLeaveType>,
-    @InjectRepository(HrmLeaveBalance)
-    private readonly leaveBalanceRepo: Repository<HrmLeaveBalance>,
-    @InjectRepository(HrmLeaveBalanceTransaction)
-    private readonly leaveTxRepo: Repository<HrmLeaveBalanceTransaction>,
-    @InjectRepository(HrmLeaveRequest)
-    private readonly leaveRequestRepo: Repository<HrmLeaveRequest>,
-    @InjectRepository(HrmSalaryComponent)
-    private readonly salaryCompRepo: Repository<HrmSalaryComponent>,
-    @InjectRepository(HrmEmployeeSalaryComponent)
-    private readonly empSalaryCompRepo: Repository<HrmEmployeeSalaryComponent>,
-    @InjectRepository(HrmSalaryAdvance)
-    private readonly advanceRepo: Repository<HrmSalaryAdvance>,
-    @InjectRepository(HrmPayrollSettings)
-    private readonly payrollSettingsRepo: Repository<HrmPayrollSettings>,
-    @InjectRepository(HrmPayrollRun)
-    private readonly payrollRunRepo: Repository<HrmPayrollRun>,
-    @InjectRepository(HrmPayslip)
-    private readonly payslipRepo: Repository<HrmPayslip>,
-    @InjectRepository(HrmPayslipItem)
-    private readonly payslipItemRepo: Repository<HrmPayslipItem>,
-    @InjectRepository(User)
-    private readonly userRepo: Repository<User>,
-    @InjectRepository(Bill)
-    private readonly billRepo: Repository<Bill>,
-    @InjectRepository(AuditLog)
-    private readonly auditRepo: Repository<AuditLog>,
-    private readonly dataSource: DataSource,
-  ) {}
+  constructor(private readonly tenantConn: TenantConnectionManager) {}
 
   private todayStr(): string {
     return new Date().toISOString().slice(0, 10);
   }
 
+  /**
+   * Resolves the tenant-isolated DataSource (dedicated DB for DEDICATED tenants, shared DB for SHARED)
+   * and validates non-empty tenantId & propertyId for strict DB, table, and column isolation.
+   */
+  private async getRepos(rawTenantId: string, rawPropertyId: string) {
+    const { ds, tenantId, propertyId } = await this.tenantConn.resolveTenantScope(
+      rawTenantId,
+      rawPropertyId,
+    );
+    return {
+      ds,
+      tenantId,
+      propertyId,
+      deptRepo: ds.getRepository(HrmDepartment),
+      desigRepo: ds.getRepository(HrmDesignation),
+      empRepo: ds.getRepository(HrmEmployee),
+      docRepo: ds.getRepository(HrmEmployeeDocument),
+      shiftRepo: ds.getRepository(HrmShiftTemplate),
+      segmentRepo: ds.getRepository(HrmShiftSegment),
+      rosterRepo: ds.getRepository(HrmRosterAssignment),
+      attendanceRepo: ds.getRepository(HrmAttendance),
+      leaveTypeRepo: ds.getRepository(HrmLeaveType),
+      leaveBalanceRepo: ds.getRepository(HrmLeaveBalance),
+      leaveTxRepo: ds.getRepository(HrmLeaveBalanceTransaction),
+      leaveRequestRepo: ds.getRepository(HrmLeaveRequest),
+      salaryCompRepo: ds.getRepository(HrmSalaryComponent),
+      empSalaryCompRepo: ds.getRepository(HrmEmployeeSalaryComponent),
+      advanceRepo: ds.getRepository(HrmSalaryAdvance),
+      payrollSettingsRepo: ds.getRepository(HrmPayrollSettings),
+      payrollRunRepo: ds.getRepository(HrmPayrollRun),
+      payslipRepo: ds.getRepository(HrmPayslip),
+      payslipItemRepo: ds.getRepository(HrmPayslipItem),
+      userRepo: ds.getRepository(User),
+      billRepo: ds.getRepository(Bill),
+      auditRepo: ds.getRepository(AuditLog),
+    };
+  }
+
   private async logAudit(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     actorUserId: string | undefined,
     action: string,
     entityType: string,
@@ -121,9 +112,10 @@ export class HrmService {
     newValue?: any,
   ) {
     try {
-      const log = this.auditRepo.create({
-        tenantId,
-        propertyId,
+      const r = await this.getRepos(rawTenantId, rawPropertyId);
+      const log = r.auditRepo.create({
+        tenantId: r.tenantId,
+        propertyId: r.propertyId,
         userId: actorUserId || undefined,
         action,
         entity: entityType,
@@ -133,26 +125,35 @@ export class HrmService {
           newValue: newValue ?? null,
         }),
       });
-      await this.auditRepo.save(log);
+      await r.auditRepo.save(log);
     } catch {
       // Non-blocking audit log write
     }
   }
 
   // ============================================================================
-  // 1. DEFAULT SEEDING & OVERVIEW DASHBOARD
+  // 1. DEFAULT REFERENCE CONFIGURATION & OVERVIEW DASHBOARD
   // ============================================================================
 
-  async ensurePropertyInitialized(tenantId: string, propertyId: string) {
-    const deptCount = await this.deptRepo.count({
-      where: { tenantId, propertyId },
+  async ensurePropertyInitialized(rawTenantId: string, rawPropertyId: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const deptCount = await r.deptRepo.count({
+      where: { tenantId: r.tenantId, propertyId: r.propertyId },
     });
     if (deptCount === 0) {
-      await this.seedDefaults(tenantId, propertyId);
+      await this.seedDefaults(r.tenantId, r.propertyId);
     }
   }
 
-  async seedDefaults(tenantId: string, propertyId: string) {
+  /**
+   * Initializes standard hospitality structural metadata (departments, designations,
+   * shifts, leave types, salary components, payroll settings) strictly inside the
+   * tenant's own database. NEVER seeds fake or demo employees into tenant accounts.
+   */
+  async seedDefaults(rawTenantId: string, rawPropertyId: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+
     // 1. Default Departments
     const defaultDepts = [
       { code: 'FD', name: 'Front Desk', description: 'Guest check-in, concierge, and reception operations' },
@@ -167,12 +168,12 @@ export class HrmService {
 
     const savedDepts: Record<string, HrmDepartment> = {};
     for (const d of defaultDepts) {
-      let existing = await this.deptRepo.findOne({
+      let existing = await r.deptRepo.findOne({
         where: { tenantId, propertyId, code: d.code },
       });
       if (!existing) {
-        existing = await this.deptRepo.save(
-          this.deptRepo.create({
+        existing = await r.deptRepo.save(
+          r.deptRepo.create({
             tenantId,
             propertyId,
             code: d.code,
@@ -204,16 +205,15 @@ export class HrmService {
       { dept: 'SEC', code: 'SECO', name: 'Security Officer' },
     ];
 
-    const savedDesigs: Record<string, HrmDesignation> = {};
     for (const des of defaultDesignations) {
       const dept = savedDepts[des.dept];
       if (!dept) continue;
-      let existing = await this.desigRepo.findOne({
+      const existing = await r.desigRepo.findOne({
         where: { tenantId, propertyId, code: des.code },
       });
       if (!existing) {
-        existing = await this.desigRepo.save(
-          this.desigRepo.create({
+        await r.desigRepo.save(
+          r.desigRepo.create({
             tenantId,
             propertyId,
             departmentId: dept.id,
@@ -223,16 +223,15 @@ export class HrmService {
           }),
         );
       }
-      savedDesigs[des.code] = existing;
     }
 
     // 3. Default Shift Templates & Split Shift Segments
-    const shiftCount = await this.shiftRepo.count({
+    const shiftCount = await r.shiftRepo.count({
       where: { tenantId, propertyId },
     });
     if (shiftCount === 0) {
-      await this.shiftRepo.save(
-        this.shiftRepo.create({
+      await r.shiftRepo.save(
+        r.shiftRepo.create({
           tenantId,
           propertyId,
           name: 'Morning Shift (06:00 - 14:00)',
@@ -247,8 +246,8 @@ export class HrmService {
           description: 'Standard morning hotel & breakfast shift',
         }),
       );
-      await this.shiftRepo.save(
-        this.shiftRepo.create({
+      await r.shiftRepo.save(
+        r.shiftRepo.create({
           tenantId,
           propertyId,
           name: 'Evening Shift (14:00 - 22:00)',
@@ -263,8 +262,8 @@ export class HrmService {
           description: 'Afternoon check-in and dinner service shift',
         }),
       );
-      await this.shiftRepo.save(
-        this.shiftRepo.create({
+      await r.shiftRepo.save(
+        r.shiftRepo.create({
           tenantId,
           propertyId,
           name: 'Night Audit Shift (22:00 - 06:00)',
@@ -279,8 +278,8 @@ export class HrmService {
           description: 'Overnight front desk audit and security shift',
         }),
       );
-      const splitShift = await this.shiftRepo.save(
-        this.shiftRepo.create({
+      const splitShift = await r.shiftRepo.save(
+        r.shiftRepo.create({
           tenantId,
           propertyId,
           name: 'F&B Split Shift (07:00-11:00 & 17:00-21:00)',
@@ -295,8 +294,8 @@ export class HrmService {
           description: 'Split dining shift covering breakfast and dinner peak hours',
         }),
       );
-      await this.segmentRepo.save([
-        this.segmentRepo.create({
+      await r.segmentRepo.save([
+        r.segmentRepo.create({
           tenantId,
           propertyId,
           shiftTemplateId: splitShift.id,
@@ -305,7 +304,7 @@ export class HrmService {
           endTime: '11:00',
           breakDurationMinutes: 0,
         }),
-        this.segmentRepo.create({
+        r.segmentRepo.create({
           tenantId,
           propertyId,
           shiftTemplateId: splitShift.id,
@@ -326,12 +325,12 @@ export class HrmService {
       { code: 'COMP', name: 'Compensatory Off (Poya / Public Holiday)', leaveType: LeaveType.COMPENSATORY, annualAllocation: 12, carryForwardAllowed: true, maximumCarryForward: 5, paidLeave: true },
     ];
     for (const lt of leaveTypes) {
-      const exists = await this.leaveTypeRepo.findOne({
+      const exists = await r.leaveTypeRepo.findOne({
         where: { tenantId, propertyId, code: lt.code },
       });
       if (!exists) {
-        await this.leaveTypeRepo.save(
-          this.leaveTypeRepo.create({
+        await r.leaveTypeRepo.save(
+          r.leaveTypeRepo.create({
             tenantId,
             propertyId,
             ...lt,
@@ -352,12 +351,12 @@ export class HrmService {
       { code: 'DED_UNIFORM', name: 'Uniform / Locker Deduction', itemType: PayrollItemType.OTHER_DEDUCTION, defaultAmount: 1000, isTaxable: false, isRecurring: false },
     ];
     for (const comp of defaultComponents) {
-      const exists = await this.salaryCompRepo.findOne({
+      const exists = await r.salaryCompRepo.findOne({
         where: { tenantId, propertyId, code: comp.code },
       });
       if (!exists) {
-        await this.salaryCompRepo.save(
-          this.salaryCompRepo.create({
+        await r.salaryCompRepo.save(
+          r.salaryCompRepo.create({
             tenantId,
             propertyId,
             ...comp,
@@ -369,12 +368,12 @@ export class HrmService {
     }
 
     // 6. Default Payroll Settings
-    let settings = await this.payrollSettingsRepo.findOne({
+    const settings = await r.payrollSettingsRepo.findOne({
       where: { tenantId, propertyId },
     });
     if (!settings) {
-      settings = await this.payrollSettingsRepo.save(
-        this.payrollSettingsRepo.create({
+      await r.payrollSettingsRepo.save(
+        r.payrollSettingsRepo.create({
           tenantId,
           propertyId,
           currency: 'LKR',
@@ -399,140 +398,12 @@ export class HrmService {
       );
     }
 
-    // 7. Seed Starter Employees if none exist
-    const empCount = await this.empRepo.count({
-      where: { tenantId, propertyId, deletedAt: IsNull() },
-    });
-    if (empCount === 0) {
-      const starterEmployees = [
-        {
-          employeeCode: 'EMP-001',
-          firstName: 'Kasun',
-          lastName: 'Perera',
-          gender: Gender.MALE,
-          email: 'kasun.perera@ninth.hotel',
-          phone: '+94 77 234 5678',
-          nicNumber: '199014502345',
-          deptCode: 'FD',
-          desigCode: 'FOS',
-          employmentType: EmploymentType.FULL_TIME,
-          basicSalary: 85000,
-          bankName: 'Commercial Bank of Ceylon',
-          bankBranch: 'Colombo 03',
-          bankAccountNumber: '8001234567',
-          joinDate: '2024-03-01',
-        },
-        {
-          employeeCode: 'EMP-002',
-          firstName: 'Nimali',
-          lastName: 'Fernando',
-          gender: Gender.FEMALE,
-          email: 'nimali.hk@ninth.hotel',
-          phone: '+94 71 876 5432',
-          nicNumber: '199362409812',
-          deptCode: 'HK',
-          desigCode: 'HKS',
-          employmentType: EmploymentType.FULL_TIME,
-          basicSalary: 72000,
-          bankName: 'Sampath Bank',
-          bankBranch: 'Kollupitiya',
-          bankAccountNumber: '1029384756',
-          joinDate: '2024-05-15',
-        },
-        {
-          employeeCode: 'EMP-003',
-          firstName: 'Chef Rohan',
-          lastName: 'De Silva',
-          gender: Gender.MALE,
-          email: 'rohan.chef@ninth.hotel',
-          phone: '+94 77 998 1122',
-          nicNumber: '198621104433',
-          deptCode: 'KIT',
-          desigCode: 'EXCH',
-          employmentType: EmploymentType.FULL_TIME,
-          basicSalary: 145000,
-          bankName: 'Hatton National Bank',
-          bankBranch: 'Cinnamon Gardens',
-          bankAccountNumber: '0030918273',
-          joinDate: '2023-11-10',
-        },
-        {
-          employeeCode: 'EMP-004',
-          firstName: 'Dinesh',
-          lastName: 'jayawardena',
-          gender: Gender.MALE,
-          email: 'dinesh.bar@ninth.hotel',
-          phone: '+94 76 334 5566',
-          nicNumber: '199530107788',
-          deptCode: 'BAR',
-          desigCode: 'BRT',
-          employmentType: EmploymentType.FULL_TIME,
-          basicSalary: 78000,
-          bankName: 'Bank of Ceylon',
-          bankBranch: 'Galle Face',
-          bankAccountNumber: '7483920192',
-          joinDate: '2024-07-01',
-        },
-        {
-          employeeCode: 'EMP-005',
-          firstName: 'Tharushi',
-          lastName: 'Wijesinghe',
-          gender: Gender.FEMALE,
-          email: 'tharushi.fd@ninth.hotel',
-          phone: '+94 70 445 6677',
-          nicNumber: '199871203344',
-          deptCode: 'FD',
-          desigCode: 'REC',
-          employmentType: EmploymentType.FULL_TIME,
-          basicSalary: 62000,
-          bankName: 'Nations Trust Bank',
-          bankBranch: 'Union Place',
-          bankAccountNumber: '2004958671',
-          joinDate: '2025-01-15',
-        },
-      ];
-
-      for (const s of starterEmployees) {
-        const dept = savedDepts[s.deptCode];
-        const desig = savedDesigs[s.desigCode];
-        if (!dept || !desig) continue;
-        const emp = await this.empRepo.save(
-          this.empRepo.create({
-            tenantId,
-            propertyId,
-            employeeCode: s.employeeCode,
-            firstName: s.firstName,
-            lastName: s.lastName,
-            fullName: `${s.firstName} ${s.lastName}`,
-            gender: s.gender,
-            nationality: 'Sri Lankan',
-            email: s.email,
-            phone: s.phone,
-            nicNumber: encryptSensitiveField(s.nicNumber),
-            departmentId: dept.id,
-            designationId: desig.id,
-            employmentType: s.employmentType,
-            employeeStatus: EmployeeStatus.ACTIVE,
-            joinDate: s.joinDate,
-            basicSalary: s.basicSalary,
-            salaryCurrency: 'LKR',
-            payrollEligible: true,
-            serviceChargeEligible: true,
-            overtimeEligible: true,
-            bankName: s.bankName,
-            bankBranch: s.bankBranch,
-            bankAccountName: `${s.firstName} ${s.lastName}`,
-            bankAccountNumber: encryptSensitiveField(s.bankAccountNumber),
-          }),
-        );
-        await this.initializeEmployeeLeaveBalances(tenantId, propertyId, emp.id);
-      }
-    }
-
     return { initialized: true };
   }
 
-  async getOverview(tenantId: string, propertyId: string) {
+  async getOverview(rawTenantId: string, rawPropertyId: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
     const today = this.todayStr();
 
@@ -545,28 +416,28 @@ export class HrmService {
       pendingAdvances,
       recentPayrollRuns,
     ] = await Promise.all([
-      this.empRepo.find({
+      r.empRepo.find({
         where: { tenantId, propertyId, deletedAt: IsNull() },
         relations: { department: true, designation: true },
       }),
-      this.deptRepo.find({
+      r.deptRepo.find({
         where: { tenantId, propertyId },
         order: { name: 'ASC' },
       }),
-      this.attendanceRepo.find({
+      r.attendanceRepo.find({
         where: { tenantId, propertyId, attendanceDate: today },
       }),
-      this.rosterRepo.find({
+      r.rosterRepo.find({
         where: { tenantId, propertyId, dutyDate: today },
         relations: { employee: true, shiftTemplate: true, department: true },
       }),
-      this.leaveRequestRepo.count({
+      r.leaveRequestRepo.count({
         where: { tenantId, propertyId, status: LeaveRequestStatus.PENDING },
       }),
-      this.advanceRepo.count({
+      r.advanceRepo.count({
         where: { tenantId, propertyId, status: SalaryAdvanceStatus.PENDING },
       }),
-      this.payrollRunRepo.find({
+      r.payrollRunRepo.find({
         where: { tenantId, propertyId },
         order: { payPeriodYear: 'DESC', payPeriodMonth: 'DESC' },
         take: 3,
@@ -630,17 +501,19 @@ export class HrmService {
   // 2. DEPARTMENTS & DESIGNATIONS
   // ============================================================================
 
-  async getDepartments(tenantId: string, propertyId: string) {
+  async getDepartments(rawTenantId: string, rawPropertyId: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
     const [depts, employees, designations] = await Promise.all([
-      this.deptRepo.find({
+      r.deptRepo.find({
         where: { tenantId, propertyId },
         order: { name: 'ASC' },
       }),
-      this.empRepo.find({
+      r.empRepo.find({
         where: { tenantId, propertyId, deletedAt: IsNull() },
       }),
-      this.desigRepo.find({
+      r.desigRepo.find({
         where: { tenantId, propertyId },
         order: { name: 'ASC' },
       }),
@@ -653,18 +526,20 @@ export class HrmService {
     }));
   }
 
-  async createDepartment(tenantId: string, propertyId: string, dto: any) {
+  async createDepartment(rawTenantId: string, rawPropertyId: string, dto: any) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     const code = (dto.code || '').trim().toUpperCase();
     if (!code || !dto.name?.trim()) {
       throw new BadRequestException('Department name and code are required');
     }
-    const existing = await this.deptRepo.findOne({
+    const existing = await r.deptRepo.findOne({
       where: { tenantId, propertyId, code },
     });
     if (existing) {
       throw new ConflictException(`Department code "${code}" already exists`);
     }
-    const dept = this.deptRepo.create({
+    const dept = r.deptRepo.create({
       tenantId,
       propertyId,
       name: dto.name.trim(),
@@ -673,16 +548,17 @@ export class HrmService {
       status: dto.status || DepartmentStatus.ACTIVE,
       managerEmployeeId: dto.managerEmployeeId || null,
     });
-    return this.deptRepo.save(dept);
+    return r.deptRepo.save(dept);
   }
 
   async updateDepartment(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     id: string,
     dto: any,
   ) {
-    const dept = await this.deptRepo.findOne({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const dept = await r.deptRepo.findOne({
       where: { id, tenantId, propertyId },
     });
     if (!dept) throw new NotFoundException('Department not found');
@@ -694,16 +570,18 @@ export class HrmService {
     if (dto.managerEmployeeId !== undefined) {
       dept.managerEmployeeId = dto.managerEmployeeId || null;
     }
-    return this.deptRepo.save(dept);
+    return r.deptRepo.save(dept);
   }
 
-  async deleteDepartment(tenantId: string, propertyId: string, id: string) {
-    const dept = await this.deptRepo.findOne({
+  async deleteDepartment(rawTenantId: string, rawPropertyId: string, id: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const dept = await r.deptRepo.findOne({
       where: { id, tenantId, propertyId },
     });
     if (!dept) throw new NotFoundException('Department not found');
 
-    const empCount = await this.empRepo.count({
+    const empCount = await r.empRepo.count({
       where: { tenantId, propertyId, departmentId: id },
     });
     if (empCount > 0) {
@@ -711,40 +589,44 @@ export class HrmService {
         `Cannot delete department "${dept.name}" because ${empCount} employee record(s) reference it. Mark it INACTIVE instead.`,
       );
     }
-    await this.desigRepo.delete({ tenantId, propertyId, departmentId: id });
-    await this.deptRepo.remove(dept);
+    await r.desigRepo.delete({ tenantId, propertyId, departmentId: id });
+    await r.deptRepo.remove(dept);
     return { deleted: true };
   }
 
-  async getDesignations(tenantId: string, propertyId: string) {
+  async getDesignations(rawTenantId: string, rawPropertyId: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
-    return this.desigRepo.find({
+    return r.desigRepo.find({
       where: { tenantId, propertyId },
       relations: { department: true },
       order: { name: 'ASC' },
     });
   }
 
-  async createDesignation(tenantId: string, propertyId: string, dto: any) {
+  async createDesignation(rawTenantId: string, rawPropertyId: string, dto: any) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     const code = (dto.code || '').trim().toUpperCase();
     if (!code || !dto.name?.trim() || !dto.departmentId) {
       throw new BadRequestException(
         'Designation name, code, and departmentId are required',
       );
     }
-    const dept = await this.deptRepo.findOne({
+    const dept = await r.deptRepo.findOne({
       where: { id: dto.departmentId, tenantId, propertyId },
     });
     if (!dept) throw new NotFoundException('Department not found');
 
-    const existing = await this.desigRepo.findOne({
+    const existing = await r.desigRepo.findOne({
       where: { tenantId, propertyId, code },
     });
     if (existing) {
       throw new ConflictException(`Designation code "${code}" already exists`);
     }
-    return this.desigRepo.save(
-      this.desigRepo.create({
+    return r.desigRepo.save(
+      r.desigRepo.create({
         tenantId,
         propertyId,
         departmentId: dept.id,
@@ -782,10 +664,12 @@ export class HrmService {
   }
 
   async getEmployees(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     filters?: { departmentId?: string; status?: string; search?: string },
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
     const whereClause: any = {
       tenantId,
@@ -799,7 +683,7 @@ export class HrmService {
       whereClause.employeeStatus = filters.status;
     }
 
-    const employees = await this.empRepo.find({
+    const employees = await r.empRepo.find({
       where: whereClause,
       relations: { department: true, designation: true },
       order: { employeeCode: 'ASC' },
@@ -819,8 +703,10 @@ export class HrmService {
     return filtered.map((emp) => this.sanitizeEmployeeForList(emp));
   }
 
-  async getEmployeeById(tenantId: string, propertyId: string, id: string) {
-    const emp = await this.empRepo.findOne({
+  async getEmployeeById(rawTenantId: string, rawPropertyId: string, id: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const emp = await r.empRepo.findOne({
       where: { id, tenantId, propertyId, deletedAt: IsNull() },
       relations: { department: true, designation: true },
     });
@@ -828,11 +714,11 @@ export class HrmService {
 
     const [documents, leaveBalances, salaryComponents, salaryAdvances] =
       await Promise.all([
-        this.docRepo.find({
+        r.docRepo.find({
           where: { tenantId, propertyId, employeeId: id },
           order: { createdAt: 'DESC' },
         }),
-        this.leaveBalanceRepo.find({
+        r.leaveBalanceRepo.find({
           where: {
             tenantId,
             propertyId,
@@ -841,11 +727,11 @@ export class HrmService {
           },
           relations: { leaveType: true },
         }),
-        this.empSalaryCompRepo.find({
+        r.empSalaryCompRepo.find({
           where: { tenantId, propertyId, employeeId: id },
           relations: { salaryComponent: true },
         }),
-        this.advanceRepo.find({
+        r.advanceRepo.find({
           where: { tenantId, propertyId, employeeId: id },
           order: { createdAt: 'DESC' },
         }),
@@ -861,11 +747,12 @@ export class HrmService {
   }
 
   async createEmployee(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     actorUserId: string,
     dto: any,
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     if (!dto.firstName?.trim() || !dto.lastName?.trim()) {
       throw new BadRequestException('First name and last name are required');
     }
@@ -875,10 +762,10 @@ export class HrmService {
 
     // Validate department and designation ownership
     const [dept, desig] = await Promise.all([
-      this.deptRepo.findOne({
+      r.deptRepo.findOne({
         where: { id: dto.departmentId, tenantId, propertyId },
       }),
-      this.desigRepo.findOne({
+      r.desigRepo.findOne({
         where: { id: dto.designationId, tenantId, propertyId },
       }),
     ]);
@@ -887,7 +774,7 @@ export class HrmService {
 
     // Optional User link check
     if (dto.userId) {
-      const user = await this.userRepo.findOne({
+      const user = await r.userRepo.findOne({
         where: { id: dto.userId, tenantId },
       });
       if (!user) {
@@ -900,11 +787,11 @@ export class HrmService {
     // Generate or validate employee code
     let employeeCode = (dto.employeeCode || '').trim().toUpperCase();
     if (!employeeCode) {
-      const count = await this.empRepo.count({ where: { tenantId, propertyId } });
+      const count = await r.empRepo.count({ where: { tenantId, propertyId } });
       employeeCode = `EMP-${String(count + 1).padStart(3, '0')}`;
     }
 
-    const duplicate = await this.empRepo.findOne({
+    const duplicate = await r.empRepo.findOne({
       where: { tenantId, propertyId, employeeCode },
     });
     if (duplicate) {
@@ -915,7 +802,7 @@ export class HrmService {
 
     const firstName = dto.firstName.trim();
     const lastName = dto.lastName.trim();
-    const emp = this.empRepo.create({
+    const emp = r.empRepo.create({
       tenantId,
       propertyId,
       employeeCode,
@@ -959,7 +846,7 @@ export class HrmService {
       notes: dto.notes || null,
     });
 
-    const saved = await this.empRepo.save(emp);
+    const saved = await r.empRepo.save(emp);
     await this.initializeEmployeeLeaveBalances(tenantId, propertyId, saved.id);
     await this.logAudit(
       tenantId,
@@ -976,19 +863,20 @@ export class HrmService {
   }
 
   async updateEmployee(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     actorUserId: string,
     id: string,
     dto: any,
   ) {
-    const emp = await this.empRepo.findOne({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const emp = await r.empRepo.findOne({
       where: { id, tenantId, propertyId, deletedAt: IsNull() },
     });
     if (!emp) throw new NotFoundException('Employee not found');
 
     if (dto.userId) {
-      const user = await this.userRepo.findOne({
+      const user = await r.userRepo.findOne({
         where: { id: dto.userId, tenantId },
       });
       if (!user) {
@@ -1063,7 +951,7 @@ export class HrmService {
       emp.basicSalary = roundMoney(dto.basicSalary);
     }
 
-    const saved = await this.empRepo.save(emp);
+    const saved = await r.empRepo.save(emp);
     await this.logAudit(
       tenantId,
       propertyId,
@@ -1079,13 +967,14 @@ export class HrmService {
   }
 
   async addEmployeeDocument(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     actorUserId: string,
     employeeId: string,
     dto: any,
   ) {
-    const emp = await this.empRepo.findOne({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const emp = await r.empRepo.findOne({
       where: { id: employeeId, tenantId, propertyId, deletedAt: IsNull() },
     });
     if (!emp) throw new NotFoundException('Employee not found');
@@ -1094,7 +983,7 @@ export class HrmService {
       throw new BadRequestException('Document title and file name are required');
     }
 
-    const doc = this.docRepo.create({
+    const doc = r.docRepo.create({
       tenantId,
       propertyId,
       employeeId,
@@ -1108,21 +997,23 @@ export class HrmService {
       notes: dto.notes || null,
       uploadedBy: actorUserId,
     });
-    return this.docRepo.save(doc);
+    return r.docRepo.save(doc);
   }
 
   // ============================================================================
   // 4. SHIFT TEMPLATES & DUTY ROSTER SCHEDULING
   // ============================================================================
 
-  async getShiftTemplates(tenantId: string, propertyId: string) {
+  async getShiftTemplates(rawTenantId: string, rawPropertyId: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
     const [shifts, segments] = await Promise.all([
-      this.shiftRepo.find({
+      r.shiftRepo.find({
         where: { tenantId, propertyId },
         order: { startTime: 'ASC' },
       }),
-      this.segmentRepo.find({
+      r.segmentRepo.find({
         where: { tenantId, propertyId },
         order: { sequence: 'ASC' },
       }),
@@ -1134,14 +1025,16 @@ export class HrmService {
     }));
   }
 
-  async createShiftTemplate(tenantId: string, propertyId: string, dto: any) {
+  async createShiftTemplate(rawTenantId: string, rawPropertyId: string, dto: any) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     if (!dto.name?.trim() || !dto.startTime || !dto.endTime) {
       throw new BadRequestException(
         'Shift name, startTime, and endTime are required',
       );
     }
-    const shift = await this.shiftRepo.save(
-      this.shiftRepo.create({
+    const shift = await r.shiftRepo.save(
+      r.shiftRepo.create({
         tenantId,
         propertyId,
         name: dto.name.trim(),
@@ -1159,7 +1052,7 @@ export class HrmService {
 
     if (Array.isArray(dto.segments) && dto.segments.length > 0) {
       const segs = dto.segments.map((seg: any, idx: number) =>
-        this.segmentRepo.create({
+        r.segmentRepo.create({
           tenantId,
           propertyId,
           shiftTemplateId: shift.id,
@@ -1169,7 +1062,7 @@ export class HrmService {
           breakDurationMinutes: Number(seg.breakDurationMinutes || 0),
         }),
       );
-      await this.segmentRepo.save(segs);
+      await r.segmentRepo.save(segs);
     }
 
     return shift;
@@ -1190,12 +1083,13 @@ export class HrmService {
   }
 
   async getRoster(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     startDate?: string,
     endDate?: string,
     departmentId?: string,
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     const whereClause: any = { tenantId, propertyId };
     if (startDate && endDate) {
       whereClause.dutyDate = Between(startDate, endDate);
@@ -1206,7 +1100,7 @@ export class HrmService {
       whereClause.departmentId = departmentId;
     }
 
-    return this.rosterRepo.find({
+    return r.rosterRepo.find({
       where: whereClause,
       relations: { employee: true, department: true, shiftTemplate: true },
       order: { dutyDate: 'ASC', startDateTime: 'ASC' },
@@ -1214,11 +1108,12 @@ export class HrmService {
   }
 
   async createRosterAssignment(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     actorUserId: string,
     dto: any,
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     const { employeeId, shiftTemplateId, dutyDate } = dto;
     if (!employeeId || !shiftTemplateId || !dutyDate) {
       throw new BadRequestException(
@@ -1227,10 +1122,10 @@ export class HrmService {
     }
 
     const [emp, shift] = await Promise.all([
-      this.empRepo.findOne({
+      r.empRepo.findOne({
         where: { id: employeeId, tenantId, propertyId, deletedAt: IsNull() },
       }),
-      this.shiftRepo.findOne({
+      r.shiftRepo.findOne({
         where: { id: shiftTemplateId, tenantId, propertyId },
       }),
     ]);
@@ -1245,7 +1140,7 @@ export class HrmService {
     );
 
     // Check for overlapping shifts for this employee
-    const existingAssignments = await this.rosterRepo.find({
+    const existingAssignments = await r.rosterRepo.find({
       where: { tenantId, propertyId, employeeId },
     });
 
@@ -1262,7 +1157,7 @@ export class HrmService {
       }
     }
 
-    const assignment = this.rosterRepo.create({
+    const assignment = r.rosterRepo.create({
       tenantId,
       propertyId,
       employeeId: emp.id,
@@ -1277,16 +1172,17 @@ export class HrmService {
       publishedAt: dto.publishImmediately ? new Date() : null,
     });
 
-    return this.rosterRepo.save(assignment);
+    return r.rosterRepo.save(assignment);
   }
 
   async publishRoster(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     startDate: string,
     endDate: string,
   ) {
-    const drafts = await this.rosterRepo.find({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const drafts = await r.rosterRepo.find({
       where: {
         tenantId,
         propertyId,
@@ -1298,20 +1194,21 @@ export class HrmService {
       r.status = 'PUBLISHED';
       r.publishedAt = now;
     }
-    await this.rosterRepo.save(drafts);
+    await r.rosterRepo.save(drafts);
     return { publishedCount: drafts.length };
   }
 
   async deleteRosterAssignment(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     id: string,
   ) {
-    const assignment = await this.rosterRepo.findOne({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const assignment = await r.rosterRepo.findOne({
       where: { id, tenantId, propertyId },
     });
     if (!assignment) throw new NotFoundException('Roster assignment not found');
-    await this.rosterRepo.remove(assignment);
+    await r.rosterRepo.remove(assignment);
     return { deleted: true };
   }
 
@@ -1320,13 +1217,14 @@ export class HrmService {
   // ============================================================================
 
   async getAttendance(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     date?: string,
     startDate?: string,
     endDate?: string,
     employeeId?: string,
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     const whereClause: any = { tenantId, propertyId };
     if (startDate && endDate) {
       whereClause.attendanceDate = Between(startDate, endDate);
@@ -1337,7 +1235,7 @@ export class HrmService {
       whereClause.employeeId = employeeId;
     }
 
-    return this.attendanceRepo.find({
+    return r.attendanceRepo.find({
       where: whereClause,
       relations: {
         employee: {
@@ -1393,29 +1291,30 @@ export class HrmService {
   }
 
   async recordAttendance(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     actorUserId: string,
     dto: any,
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     const { employeeId, attendanceDate } = dto;
     const targetDate = attendanceDate || this.todayStr();
     if (!employeeId) {
       throw new BadRequestException('employeeId is required');
     }
 
-    const emp = await this.empRepo.findOne({
+    const emp = await r.empRepo.findOne({
       where: { id: employeeId, tenantId, propertyId, deletedAt: IsNull() },
     });
     if (!emp) throw new NotFoundException('Employee not found');
 
     // Find matching roster assignment for targetDate
-    const roster = await this.rosterRepo.findOne({
+    const roster = await r.rosterRepo.findOne({
       where: { tenantId, propertyId, employeeId, dutyDate: targetDate },
       relations: { shiftTemplate: true },
     });
 
-    const settings = await this.payrollSettingsRepo.findOne({
+    const settings = await r.payrollSettingsRepo.findOne({
       where: { tenantId, propertyId },
     });
     const graceMinutes = settings?.lateGracePeriodMinutes ?? 15;
@@ -1434,7 +1333,7 @@ export class HrmService {
       : new Date(`${targetDate}T17:00:00`);
 
     // Prevent duplicate active check-in session on the same day
-    const existingOpen = await this.attendanceRepo.findOne({
+    const existingOpen = await r.attendanceRepo.findOne({
       where: {
         tenantId,
         propertyId,
@@ -1467,7 +1366,7 @@ export class HrmService {
         : 0;
       if (!dto.status) existingOpen.status = metrics.status;
       if (dto.notes !== undefined) existingOpen.notes = dto.notes;
-      return this.attendanceRepo.save(existingOpen);
+      return r.attendanceRepo.save(existingOpen);
     }
 
     const metrics = this.calculateAttendanceMetrics(
@@ -1480,7 +1379,7 @@ export class HrmService {
       expectedMins,
     );
 
-    const record = this.attendanceRepo.create({
+    const record = r.attendanceRepo.create({
       tenantId,
       propertyId,
       employeeId,
@@ -1503,17 +1402,18 @@ export class HrmService {
       notes: dto.notes || null,
     });
 
-    return this.attendanceRepo.save(record);
+    return r.attendanceRepo.save(record);
   }
 
   async regularizeAttendance(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     actorUserId: string,
     id: string,
     dto: any,
   ) {
-    const record = await this.attendanceRepo.findOne({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const record = await r.attendanceRepo.findOne({
       where: { id, tenantId, propertyId },
       relations: { employee: true },
     });
@@ -1561,7 +1461,7 @@ export class HrmService {
     record.regularizedBy = actorUserId;
     record.regularizedAt = new Date();
 
-    const saved = await this.attendanceRepo.save(record);
+    const saved = await r.attendanceRepo.save(record);
     await this.logAudit(
       tenantId,
       propertyId,
@@ -1587,9 +1487,11 @@ export class HrmService {
   // 6. LEAVE TYPES, LEAVE BALANCES & LEAVE REQUEST WORKFLOW
   // ============================================================================
 
-  async getLeaveTypes(tenantId: string, propertyId: string) {
+  async getLeaveTypes(rawTenantId: string, rawPropertyId: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
-    return this.leaveTypeRepo.find({
+    return r.leaveTypeRepo.find({
       where: { tenantId, propertyId },
       order: { name: 'ASC' },
     });
@@ -1607,17 +1509,18 @@ export class HrmService {
   }
 
   async initializeEmployeeLeaveBalances(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     employeeId: string,
     year = new Date().getFullYear(),
   ) {
-    const leaveTypes = await this.leaveTypeRepo.find({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const leaveTypes = await r.leaveTypeRepo.find({
       where: { tenantId, propertyId, isActive: true },
     });
 
     for (const lt of leaveTypes) {
-      let bal = await this.leaveBalanceRepo.findOne({
+      let bal = await r.leaveBalanceRepo.findOne({
         where: {
           tenantId,
           propertyId,
@@ -1627,7 +1530,7 @@ export class HrmService {
         },
       });
       if (!bal) {
-        bal = this.leaveBalanceRepo.create({
+        bal = r.leaveBalanceRepo.create({
           tenantId,
           propertyId,
           employeeId,
@@ -1641,9 +1544,9 @@ export class HrmService {
           adjustedDays: 0,
           availableDays: Number(lt.annualAllocation || 0),
         });
-        const savedBal = await this.leaveBalanceRepo.save(bal);
-        await this.leaveTxRepo.save(
-          this.leaveTxRepo.create({
+        const savedBal = await r.leaveBalanceRepo.save(bal);
+        await r.leaveTxRepo.save(
+          r.leaveTxRepo.create({
             tenantId,
             propertyId,
             employeeId,
@@ -1658,17 +1561,18 @@ export class HrmService {
   }
 
   async getLeaveBalances(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     employeeId?: string,
     year = new Date().getFullYear(),
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
     const whereClause: any = { tenantId, propertyId, leaveYear: year };
     if (employeeId && employeeId !== 'ALL') {
       whereClause.employeeId = employeeId;
     }
-    return this.leaveBalanceRepo.find({
+    return r.leaveBalanceRepo.find({
       where: whereClause,
       relations: { employee: true, leaveType: true },
       order: { createdAt: 'ASC' },
@@ -1676,11 +1580,12 @@ export class HrmService {
   }
 
   async getLeaveRequests(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     status?: string,
     employeeId?: string,
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     const whereClause: any = { tenantId, propertyId };
     if (status && status !== 'ALL') {
       whereClause.status = status;
@@ -1688,7 +1593,7 @@ export class HrmService {
     if (employeeId && employeeId !== 'ALL') {
       whereClause.employeeId = employeeId;
     }
-    return this.leaveRequestRepo.find({
+    return r.leaveRequestRepo.find({
       where: whereClause,
       relations: {
         employee: { department: true },
@@ -1699,11 +1604,12 @@ export class HrmService {
   }
 
   async createLeaveRequest(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     actorUserId: string,
     dto: any,
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     const { employeeId, leaveTypeId, startDate, endDate, isHalfDay } = dto;
     if (!employeeId || !leaveTypeId || !startDate || !endDate) {
       throw new BadRequestException(
@@ -1712,10 +1618,10 @@ export class HrmService {
     }
 
     const [emp, leaveType] = await Promise.all([
-      this.empRepo.findOne({
+      r.empRepo.findOne({
         where: { id: employeeId, tenantId, propertyId, deletedAt: IsNull() },
       }),
-      this.leaveTypeRepo.findOne({
+      r.leaveTypeRepo.findOne({
         where: { id: leaveTypeId, tenantId, propertyId },
       }),
     ]);
@@ -1736,7 +1642,7 @@ export class HrmService {
     }
 
     // Check overlapping approved/pending leave
-    const existingLeaves = await this.leaveRequestRepo.find({
+    const existingLeaves = await r.leaveRequestRepo.find({
       where: {
         tenantId,
         propertyId,
@@ -1760,7 +1666,7 @@ export class HrmService {
       leaveYear,
     );
 
-    const balance = await this.leaveBalanceRepo.findOne({
+    const balance = await r.leaveBalanceRepo.findOne({
       where: {
         tenantId,
         propertyId,
@@ -1781,8 +1687,8 @@ export class HrmService {
       );
     }
 
-    const reqRecord = await this.leaveRequestRepo.save(
-      this.leaveRequestRepo.create({
+    const reqRecord = await r.leaveRequestRepo.save(
+      r.leaveRequestRepo.create({
         tenantId,
         propertyId,
         employeeId,
@@ -1803,20 +1709,22 @@ export class HrmService {
         (Number(balance.pendingDays || 0) + totalDays).toFixed(2),
       );
       balance.availableDays = this.recomputeAvailableLeaveDays(balance);
-      await this.leaveBalanceRepo.save(balance);
+      await r.leaveBalanceRepo.save(balance);
     }
 
     return reqRecord;
   }
 
   async updateLeaveRequestStatus(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string,
+    rawPropertyId: string,
     actorUserId: string,
     id: string,
     dto: { status: LeaveRequestStatus; rejectionReason?: string },
   ) {
-    const leaveReq = await this.leaveRequestRepo.findOne({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const leaveReq = await r.leaveRequestRepo.findOne({
       where: { id, tenantId, propertyId },
       relations: { leaveType: true, employee: true },
     });
@@ -1828,7 +1736,7 @@ export class HrmService {
     }
 
     const leaveYear = new Date(leaveReq.startDate).getFullYear();
-    const balance = await this.leaveBalanceRepo.findOne({
+    const balance = await r.leaveBalanceRepo.findOne({
       where: {
         tenantId,
         propertyId,
@@ -1854,10 +1762,10 @@ export class HrmService {
           (Number(balance.usedDays || 0) + days).toFixed(2),
         );
         balance.availableDays = this.recomputeAvailableLeaveDays(balance);
-        await this.leaveBalanceRepo.save(balance);
+        await r.leaveBalanceRepo.save(balance);
 
-        await this.leaveTxRepo.save(
-          this.leaveTxRepo.create({
+        await r.leaveTxRepo.save(
+          r.leaveTxRepo.create({
             tenantId,
             propertyId,
             employeeId: leaveReq.employeeId,
@@ -1885,42 +1793,45 @@ export class HrmService {
           Number((Number(balance.pendingDays || 0) - days).toFixed(2)),
         );
         balance.availableDays = this.recomputeAvailableLeaveDays(balance);
-        await this.leaveBalanceRepo.save(balance);
+        await r.leaveBalanceRepo.save(balance);
       }
     }
 
-    return this.leaveRequestRepo.save(leaveReq);
+    return r.leaveRequestRepo.save(leaveReq);
   }
 
   // ============================================================================
   // 7. SALARY ADVANCES & RECURRING ALLOWANCES
   // ============================================================================
 
-  async getSalaryComponents(tenantId: string, propertyId: string) {
+  async getSalaryComponents(rawTenantId: string, rawPropertyId: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
-    return this.salaryCompRepo.find({
+    return r.salaryCompRepo.find({
       where: { tenantId, propertyId },
       order: { name: 'ASC' },
     });
   }
 
   async assignEmployeeSalaryComponent(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     dto: any,
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     const [emp, comp] = await Promise.all([
-      this.empRepo.findOne({
+      r.empRepo.findOne({
         where: { id: dto.employeeId, tenantId, propertyId },
       }),
-      this.salaryCompRepo.findOne({
+      r.salaryCompRepo.findOne({
         where: { id: dto.salaryComponentId, tenantId, propertyId },
       }),
     ]);
     if (!emp) throw new NotFoundException('Employee not found');
     if (!comp) throw new NotFoundException('Salary component not found');
 
-    const record = this.empSalaryCompRepo.create({
+    const record = r.empSalaryCompRepo.create({
       tenantId,
       propertyId,
       employeeId: emp.id,
@@ -1930,15 +1841,16 @@ export class HrmService {
       effectiveFrom: dto.effectiveFrom || this.todayStr(),
       effectiveTo: dto.effectiveTo || null,
     });
-    return this.empSalaryCompRepo.save(record);
+    return r.empSalaryCompRepo.save(record);
   }
 
   async getSalaryAdvances(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     status?: string,
     employeeId?: string,
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     const whereClause: any = { tenantId, propertyId };
     if (status && status !== 'ALL') {
       whereClause.status = status;
@@ -1946,7 +1858,7 @@ export class HrmService {
     if (employeeId && employeeId !== 'ALL') {
       whereClause.employeeId = employeeId;
     }
-    return this.advanceRepo.find({
+    return r.advanceRepo.find({
       where: whereClause,
       relations: {
         employee: { department: true },
@@ -1956,11 +1868,12 @@ export class HrmService {
   }
 
   async createSalaryAdvance(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     dto: any,
   ) {
-    const emp = await this.empRepo.findOne({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const emp = await r.empRepo.findOne({
       where: { id: dto.employeeId, tenantId, propertyId, deletedAt: IsNull() },
     });
     if (!emp) throw new NotFoundException('Employee not found');
@@ -1971,8 +1884,8 @@ export class HrmService {
     }
     const repaymentAmount = roundMoney(dto.repaymentAmount || requestedAmount);
 
-    return this.advanceRepo.save(
-      this.advanceRepo.create({
+    return r.advanceRepo.save(
+      r.advanceRepo.create({
         tenantId,
         propertyId,
         employeeId: emp.id,
@@ -1988,8 +1901,7 @@ export class HrmService {
   }
 
   async updateSalaryAdvanceStatus(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     actorUserId: string,
     id: string,
     dto: {
@@ -1998,7 +1910,9 @@ export class HrmService {
       repaymentAmount?: number;
     },
   ) {
-    const adv = await this.advanceRepo.findOne({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const adv = await r.advanceRepo.findOne({
       where: { id, tenantId, propertyId },
     });
     if (!adv) throw new NotFoundException('Salary advance not found');
@@ -2023,23 +1937,27 @@ export class HrmService {
       adv.remainingAmount = 0;
     }
 
-    return this.advanceRepo.save(adv);
+    return r.advanceRepo.save(adv);
   }
 
   // ============================================================================
   // 8. PAYROLL SETTINGS, SERVICE CHARGE POOL & MONTHLY PAYROLL ENGINE
   // ============================================================================
 
-  async getPayrollSettings(tenantId: string, propertyId: string) {
+  async getPayrollSettings(rawTenantId: string, rawPropertyId: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
-    return this.payrollSettingsRepo.findOne({
+    return r.payrollSettingsRepo.findOne({
       where: { tenantId, propertyId },
     });
   }
 
-  async updatePayrollSettings(tenantId: string, propertyId: string, dto: any) {
+  async updatePayrollSettings(rawTenantId: string, rawPropertyId: string, dto: any) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
-    const settings = await this.payrollSettingsRepo.findOne({
+    const settings = await r.payrollSettingsRepo.findOne({
       where: { tenantId, propertyId },
     });
     if (!settings) throw new NotFoundException('Payroll settings not found');
@@ -2069,12 +1987,14 @@ export class HrmService {
         (settings as any)[f] = dto[f];
       }
     }
-    return this.payrollSettingsRepo.save(settings);
+    return r.payrollSettingsRepo.save(settings);
   }
 
-  async getPayrollRuns(tenantId: string, propertyId: string) {
+  async getPayrollRuns(rawTenantId: string, rawPropertyId: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
-    return this.payrollRunRepo.find({
+    return r.payrollRunRepo.find({
       where: { tenantId, propertyId },
       relations: {
         payslips: {
@@ -2088,8 +2008,10 @@ export class HrmService {
     });
   }
 
-  async getPayslipById(tenantId: string, propertyId: string, id: string) {
-    const slip = await this.payslipRepo.findOne({
+  async getPayslipById(rawTenantId: string, rawPropertyId: string, id: string) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const slip = await r.payslipRepo.findOne({
       where: { id, tenantId, propertyId },
       relations: {
         employee: {
@@ -2111,8 +2033,7 @@ export class HrmService {
   }
 
   async generatePayrollRun(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     actorUserId: string,
     dto: {
       payPeriodMonth: number;
@@ -2121,6 +2042,8 @@ export class HrmService {
       notes?: string;
     },
   ) {
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
     await this.ensurePropertyInitialized(tenantId, propertyId);
     const month = Number(dto.payPeriodMonth);
     const year = Number(dto.payPeriodYear);
@@ -2129,7 +2052,7 @@ export class HrmService {
     }
 
     // Check if an APPROVED or PAID payroll run already exists for this month
-    const existingRun = await this.payrollRunRepo.findOne({
+    const existingRun = await r.payrollRunRepo.findOne({
       where: {
         tenantId,
         propertyId,
@@ -2148,7 +2071,7 @@ export class HrmService {
 
     // If a DRAFT run exists for this month, remove it before regenerating
     if (existingRun) {
-      await this.payrollRunRepo.remove(existingRun);
+      await r.payrollRunRepo.remove(existingRun);
     }
 
     const settings = await this.getPayrollSettings(tenantId, propertyId);
@@ -2163,7 +2086,7 @@ export class HrmService {
     const lastDay = new Date(year, month, 0).getDate();
     const periodEndDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-    const employees = await this.empRepo.find({
+    const employees = await r.empRepo.find({
       where: {
         tenantId,
         propertyId,
@@ -2190,7 +2113,7 @@ export class HrmService {
       serviceChargePoolTotal = roundMoney(dto.manualServiceChargePool);
     } else if (settings?.serviceChargeEnabled) {
       // Aggregate settled POS bills in period
-      const bills = await this.billRepo.find({
+      const bills = await r.billRepo.find({
         where: { tenantId, propertyId },
       });
       const periodStartMs = new Date(`${periodStartDate}T00:00:00`).getTime();
@@ -2226,14 +2149,14 @@ export class HrmService {
 
     const [monthAttendances, monthLeaves, empComponents, activeAdvances] =
       await Promise.all([
-        this.attendanceRepo.find({
+        r.attendanceRepo.find({
           where: {
             tenantId,
             propertyId,
             attendanceDate: Between(periodStartDate, periodEndDate),
           },
         }),
-        this.leaveRequestRepo.find({
+        r.leaveRequestRepo.find({
           where: {
             tenantId,
             propertyId,
@@ -2241,11 +2164,11 @@ export class HrmService {
           },
           relations: { leaveType: true },
         }),
-        this.empSalaryCompRepo.find({
+        r.empSalaryCompRepo.find({
           where: { tenantId, propertyId },
           relations: { salaryComponent: true },
         }),
-        this.advanceRepo.find({
+        r.advanceRepo.find({
           where: {
             tenantId,
             propertyId,
@@ -2258,8 +2181,8 @@ export class HrmService {
       ]);
 
     const runCode = `PR-${year}${String(month).padStart(2, '0')}`;
-    const run = await this.payrollRunRepo.save(
-      this.payrollRunRepo.create({
+    const run = await r.payrollRunRepo.save(
+      r.payrollRunRepo.create({
         tenantId,
         propertyId,
         runCode,
@@ -2503,8 +2426,8 @@ export class HrmService {
       const totalDeductions = fromCents(totalDeductionsCents);
       const netPay = fromCents(netPayCents);
 
-      const payslip = await this.payslipRepo.save(
-        this.payslipRepo.create({
+      const payslip = await r.payslipRepo.save(
+        r.payslipRepo.create({
           tenantId,
           propertyId,
           payrollRunId: run.id,
@@ -2536,9 +2459,9 @@ export class HrmService {
         }),
       );
 
-      await this.payslipItemRepo.save(
+      await r.payslipItemRepo.save(
         slipItems.map((si) =>
-          this.payslipItemRepo.create({
+          r.payslipItemRepo.create({
             ...si,
             payslipId: payslip.id,
           }),
@@ -2566,8 +2489,8 @@ export class HrmService {
     run.totalEmployerEtf = fromCents(sumEmployerEtfCents);
     run.totalNetPay = fromCents(sumNetCents);
 
-    await this.payrollRunRepo.save(run);
-    return this.payrollRunRepo.findOne({
+    await r.payrollRunRepo.save(run);
+    return r.payrollRunRepo.findOne({
       where: { id: run.id, tenantId, propertyId },
       relations: {
         payslips: {
@@ -2581,13 +2504,14 @@ export class HrmService {
   }
 
   async updatePayrollRunStatus(
-    tenantId: string,
-    propertyId: string,
+    rawTenantId: string, rawPropertyId: string,
     actorUserId: string,
     id: string,
     status: PayrollStatus,
   ) {
-    const run = await this.payrollRunRepo.findOne({
+    const r = await this.getRepos(rawTenantId, rawPropertyId);
+    const { tenantId, propertyId } = r;
+    const run = await r.payrollRunRepo.findOne({
       where: { id, tenantId, propertyId },
       relations: { payslips: true },
     });
@@ -2597,7 +2521,7 @@ export class HrmService {
       throw new BadRequestException('Paid payroll run is locked and cannot be modified');
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    return r.ds.transaction(async (manager) => {
       run.status = status;
       if (status === PayrollStatus.APPROVED) {
         run.approvedBy = actorUserId;
